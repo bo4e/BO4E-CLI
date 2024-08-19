@@ -1,10 +1,10 @@
 [project]
-name = "your-favourite-package-name"
-description = "Description of your package"
+name = "bo4e-cli"
+description = "CLI for developers. It contains many useful features when working on using BO4E in your own projects."
 license = { text = "MIT" }
 requires-python = ">=3.11"
-authors = [{ name = "your name", email = "your@email.address" }]
-keywords = ["your", "important", "keywords"]
+authors = [{ name = "Leon Haffmans", email = "leon.haffmans@hochfrequenz.de" }]
+keywords = ["bo4e", "cli", "development", "tools"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -20,8 +20,8 @@ dependencies = []     # add all the dependencies here
 dynamic = ["readme", "version"]
 
 [project.urls]
-Changelog = "https://github.com/Hochfrequenz/python_template_repository/releases"
-Homepage = "https://github.com/Hochfrequenz/python_template_repository"
+Changelog = "https://github.com/bo4e/BO4E-CLI/releases"
+Homepage = "https://github.com/bo4e/BO4E-CLI"
 
 [tool.black]
 line-length = 120
@@ -52,7 +52,7 @@ fragments = [{ path = "README.md" }]
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "src/_your_package_version.py"
+version-file = "src/_bo4e_cli_version.py"
 template = '''
 version = "{version}"
 '''
