@@ -1,3 +1,7 @@
+"""
+This module contains the command to pull the BO4E-schemas from the BO4E-Schemas repository.
+"""
+
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -40,7 +44,7 @@ def pull(
     ] = None,
 ):
     """
-    Pull all BO4E-JSON-schemas of a specific version.
+    Pull all [#8cc04d]BO[/][#617d8b]4E[/]-JSON-schemas of a specific version.
 
     Beside the json-files a .version file will be created in utf-8 format at root of the output directory.
     This file is needed for other commands.

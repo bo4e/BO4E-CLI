@@ -1,3 +1,7 @@
+"""
+This module contains the generate command.
+"""
+
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -34,7 +38,8 @@ def generate(
     ] = True,
 ):
     """
-    Generate the BO4E models from the JSON-schemas in the input directory and save them in the output directory.
+    Generate the [#8cc04d]BO[/][#617d8b]4E[/] models from the JSON-schemas in the input directory and save them in the
+    output directory.
 
     Several output types are available, see --output-type.
     """

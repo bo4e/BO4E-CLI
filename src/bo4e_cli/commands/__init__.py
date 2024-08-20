@@ -1,4 +1,8 @@
-from .diff import sub_app_diff
+"""
+This package contains the commands for the bo4e-cli.
+"""
+
+from .diff import diff_matrix, diff_schemas, diff_version_bump_type, sub_app_diff
 from .edit import edit
 from .entry import app
 from .generate import generate

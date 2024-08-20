@@ -1,3 +1,7 @@
+"""
+This module contains the command for editing JSON-schemas.
+"""
+
 from pathlib import Path
 from typing import Annotated, Optional
 

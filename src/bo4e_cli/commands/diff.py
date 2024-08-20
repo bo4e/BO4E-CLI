@@ -1,3 +1,7 @@
+"""
+Contains all commands for comparing JSON-schemas of different BO4E versions.
+"""
+
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -5,7 +9,7 @@ from typing import Annotated
 import typer
 
 sub_app_diff = typer.Typer(
-    help="Command group for comparing JSON-schemas of different BO4E versions. "
+    help="Command group for comparing JSON-schemas of different [#8cc04d]BO[/][#617d8b]4E[/] versions. "
     "See 'diff --help' for more information."
 )
 
