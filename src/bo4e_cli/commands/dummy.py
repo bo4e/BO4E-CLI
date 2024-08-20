@@ -3,6 +3,7 @@ Contains a dummy function to prevent linter errors while only introducing the CL
 When filled with logic, this file can be removed.
 """
 
+# pylint: disable=redefined-builtin
 from rich import print
 
 
