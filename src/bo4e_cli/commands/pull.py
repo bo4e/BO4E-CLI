@@ -43,7 +43,7 @@ def pull(
             envvar="GITHUB_ACCESS_TOKEN",
         ),
     ] = None,
-):
+) -> None:
     """
     Pull all [#8cc04d]BO[/][#617d8b]4E[/]-JSON-schemas of a specific version.
 

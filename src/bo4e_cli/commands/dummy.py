@@ -3,11 +3,13 @@ Contains a dummy function to prevent linter errors while only introducing the CL
 When filled with logic, this file can be removed.
 """
 
+from typing import Any
+
 # pylint: disable=redefined-builtin
 from rich import print
 
 
-def dummy(*args, **kwargs):
+def dummy(*args: Any, **kwargs: Any) -> None:
     """
     Dummy function to prevent linter errors.
     """

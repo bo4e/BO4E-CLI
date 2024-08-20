@@ -5,3 +5,5 @@ For more information see 'bo4e --help' or visit [GitHub](https://github.com/bo4e
 """
 
 from bo4e_cli.commands.entry import app
+
+__all__ = ["app"]

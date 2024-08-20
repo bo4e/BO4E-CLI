@@ -34,7 +34,7 @@ def edit(
         ),
     ] = True,
     clear_output: Annotated[bool, typer.Option(help="Clear the output directory before saving the schemas.")] = True,
-):
+) -> None:
     """
     Edit the JSON-schemas in the input directory and save the edited schemas to the output directory.
 

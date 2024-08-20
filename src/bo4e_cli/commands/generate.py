@@ -37,7 +37,7 @@ def generate(
     clear_output: Annotated[
         bool, typer.Option(help="Clear the output directory before saving the generated code.")
     ] = True,
-):
+) -> None:
     """
     Generate the [#8cc04d]BO[/][#617d8b]4E[/] models from the JSON-schemas in the input directory and save them in the
     output directory.

@@ -33,7 +33,7 @@ def diff_schemas(
     output_file: Annotated[
         Path, typer.Option("--output", "-o", help="The JSON-file to save the differences to.", show_default=False)
     ],
-):
+) -> None:
     """
     Compare the JSON-schemas in the two input directories and save the differences to the output file (JSON).
 
@@ -76,7 +76,7 @@ def diff_matrix(
             "If disabled, text will be used instead to indicate the type of change.",
         ),
     ] = False,
-):
+) -> None:
     """
     Create a difference matrix from the diff-files created by the 'diff schemas' command.
 
@@ -93,7 +93,7 @@ def diff_matrix(
 def diff_version_bump_type(
     *,
     diff_file: Annotated[Path, typer.Argument(show_default=False)],
-):
+) -> None:
     """
     Determine the release bump type according to a diff file created by 'diff schemas'.
     Prints 'functional' or 'technical' to stdout.
