@@ -7,6 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
+from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.commands.entry import app
 
 
@@ -40,4 +41,10 @@ def edit(
     The schemas in the input directory won't be changed. If no configuration file is provided, the schemas will be
     copied to the output directory unchanged.
     """
-    pass
+    dummy(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        config=config,
+        set_default_version=set_default_version,
+        clear_output=clear_output,
+    )

@@ -7,6 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
+from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.commands.entry import app
 
 
@@ -49,4 +50,10 @@ def pull(
     Beside the json-files a .version file will be created in utf-8 format at root of the output directory.
     This file is needed for other commands.
     """
-    pass
+    dummy(
+        output_dir=output_dir,
+        version_tag=version_tag,
+        update_refs=update_refs,
+        clear_output=clear_output,
+        token=token,
+    )

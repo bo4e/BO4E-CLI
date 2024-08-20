@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 
+from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.commands.entry import app
 
 
@@ -43,4 +44,4 @@ def generate(
 
     Several output types are available, see --output-type.
     """
-    pass
+    dummy(input_dir=input_dir, output_dir=output_dir, output_type=output_type, clear_output=clear_output)

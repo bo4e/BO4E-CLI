@@ -8,6 +8,8 @@ from typing import Annotated
 
 import typer
 
+from bo4e_cli.commands.dummy import dummy
+
 sub_app_diff = typer.Typer(
     help="Command group for comparing JSON-schemas of different [#8cc04d]BO[/][#617d8b]4E[/] versions. "
     "See 'diff --help' for more information."
@@ -38,7 +40,7 @@ def diff_schemas(
     The output file will contain the differences in JSON-format. It will also contain information about the
     compared versions.
     """
-    pass
+    dummy(input_dir_base=input_dir_base, input_dir_comp=input_dir_comp, output_file=output_file)
 
 
 @sub_app_diff.command("matrix")
@@ -84,7 +86,7 @@ def diff_matrix(
 
     The rows will represent each model such that each cell indicates how the model has changed between the two versions.
     """
-    pass
+    dummy(input_diff_files=input_diff_files, output_file=output_file, output_type=output_type, emotes=emotes)
 
 
 @sub_app_diff.command("bump")
@@ -98,4 +100,4 @@ def diff_version_bump_type(
 
     The version tags inside the diff file are ignored. The bump type will be determined using the list of changes.
     """
-    pass
+    dummy(diff_file=diff_file)
