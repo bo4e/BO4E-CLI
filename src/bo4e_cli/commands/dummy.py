@@ -3,13 +3,13 @@ Contains a dummy function to prevent linter errors while only introducing the CL
 When filled with logic, this file can be removed.
 """
 
-import typer
+from rich import print
 
 
 def dummy(*args, **kwargs):
     """
     Dummy function to prevent linter errors.
     """
-    typer.echo("This is a dummy function to prevent linter errors.")
-    typer.echo(f"Arguments: {args}")
-    typer.echo(f"Keyword arguments: {kwargs}")
+    print("[red]This is a dummy function to prevent linter errors.[/]")
+    print(f"Arguments: {args}")
+    print(f"Keyword arguments: {kwargs}")
