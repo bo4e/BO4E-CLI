@@ -9,12 +9,16 @@ from bo4e_cli.commands.entry import app
 @app.command()
 def pull(
     *,
-    output_dir: Annotated[Path, typer.Option(help="The directory to save the JSON-schemas to.", show_default=False)],
+    output_dir: Annotated[
+        Path, typer.Option("--output", "-o", help="The directory to save the JSON-schemas to.", show_default=False)
+    ],
     version_tag: Annotated[
         str,
         typer.Option(
+            "--version-tag",
+            "-t",
             help="The BO4E-version tag to pull the data for. "
-            "They will be pulled from https://github.com/bo4e/BO4E-Schemas."
+            "They will be pulled from https://github.com/bo4e/BO4E-Schemas.",
         ),
     ] = "latest",
     update_refs: Annotated[
@@ -37,6 +41,7 @@ def pull(
 ):
     """
     Pull all BO4E-JSON-schemas of a specific version.
+
     Beside the json-files a .version file will be created in utf-8 format at root of the output directory.
     This file is needed for other commands.
     """
