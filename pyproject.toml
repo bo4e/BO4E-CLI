@@ -16,12 +16,17 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = []     # add all the dependencies here
+dependencies = [
+    "typer",
+]     # add all the dependencies here
 dynamic = ["readme", "version"]
 
 [project.urls]
 Changelog = "https://github.com/bo4e/BO4E-CLI/releases"
 Homepage = "https://github.com/bo4e/BO4E-CLI"
+
+[project.scripts]
+bo4e = "bo4e_cli.__main__"
 
 [tool.black]
 line-length = 120
