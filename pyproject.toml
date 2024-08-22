@@ -18,6 +18,9 @@ classifiers = [
 ]
 dependencies = [
     "typer",
+    "PyGithub",
+    "pydantic",
+    "httpx",
 ]     # add all the dependencies here
 dynamic = ["readme", "version"]
 
