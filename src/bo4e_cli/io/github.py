@@ -10,9 +10,13 @@ import httpx
 from github import Github
 from github.Auth import Token
 from github.Repository import Repository
-from rich import print
 
-from bo4e_cli.models.github import SchemaInFileTree, SchemaTree
+# pylint: disable=redefined-builtin
+from rich import print
+from rich.progress import track
+
+from bo4e_cli.models.github import SchemaMeta, Schemas, SchemaTree
+from bo4e_cli.models.schema import SchemaRootType
 
 OWNER = "bo4e"
 REPO = "BO4E-Schemas"
@@ -38,7 +42,7 @@ def resolve_latest_version(token: str | None) -> str:
     return latest_release
 
 
-def get_schema_tree(version: str, token: str | None) -> SchemaTree:
+def get_schemas_meta_from_gh(version: str, token: str | None) -> Schemas:
     """
     Query the github tree api for a specific package and version.
     """
@@ -46,7 +50,7 @@ def get_schema_tree(version: str, token: str | None) -> SchemaTree:
     repo = get_source_repo(token)
     release = repo.get_release(version)
     tree = repo.get_git_tree(release.target_commitish, recursive=True)
-    schema_tree = SchemaTree()
+    schemas = Schemas()
 
     for tree_element in tree.tree:
         if not tree_element.path.startswith("src/bo4e_schemas"):
@@ -61,17 +65,16 @@ def get_schema_tree(version: str, token: str | None) -> SchemaTree:
         for file_or_dir in contents:
             if file_or_dir.name.endswith(".json"):
                 relative_path = Path(file_or_dir.path).relative_to("src/bo4e_schemas").with_suffix("")
-                schema = SchemaInFileTree(
+                schema = SchemaMeta(
                     name=file_or_dir.name,
-                    path=file_or_dir.path,
-                    module_path=relative_path.parts,
-                    download_url=file_or_dir.download_url,
+                    module=relative_path.parts,
+                    src=file_or_dir.download_url,
                 )
-                schema_tree[str(relative_path)] = schema
-    return schema_tree
+                schemas.add(schema)
+    return schemas
 
 
-async def download(schema: SchemaInFileTree, client: httpx.AsyncClient, token: str | None) -> str:
+async def download(schema: SchemaMeta, client: httpx.AsyncClient, token: str | None) -> str:
     """
     Download the schema file.
     """
@@ -79,33 +82,32 @@ async def download(schema: SchemaInFileTree, client: httpx.AsyncClient, token: s
         headers = {"Authorization": f"Bearer {token}"}
     else:
         headers = None
-    response = await client.get(schema.download_url, timeout=TIMEOUT, headers=headers)
+    response = await client.get(schema.src_url, timeout=TIMEOUT, headers=headers)
     response.encoding = "utf-8"
 
     if response.status_code != 200:
-        raise ValueError(f"Could not download schema from {schema.download_url}: {response.text}")
-    print("Downloaded %s from %s", schema.name, schema.download_url)
+        raise ValueError(f"Could not download schema from {schema.src_url}: {response.text}")
     return response.text
 
 
-async def download_schemas(output_dir: Path, version: str, token: str | None) -> None:
+async def download_schemas(output_dir: Path, version: str, token: str | None) -> Schemas:
     """
     Download all schemas.
     """
-    if version == "latest":
-        version = resolve_latest_version(token)
-    schema_tree = get_schema_tree(version, token)
+    schemas = get_schemas_meta_from_gh(version, token)
     async with httpx.AsyncClient() as client:
-        async with asyncio.TaskGroup() as group:
 
-            async def download_and_save(schema: SchemaInFileTree):
-                schema_text = await download(schema, client, token)
-                (output_dir / Path(*schema.module_path).with_suffix("json")).write_text(schema_text, encoding="utf-8")
+        async def download_and_save(schema: SchemaMeta):
+            schema_text = await download(schema, client, token)
+            print("Downloaded %s from %s", schema.name, schema.src_url)
+            schema.schema_parsed = SchemaRootType.model_validate_json(schema_text)
 
-            for schema in schema_tree.all_files():
-                group.create_task(download_and_save(schema))
+        tasks = {download_and_save(schema) for schema in schemas}
+        for task in track(asyncio.as_completed(tasks), description="Downloading schemas...", total=len(schemas)):
+            await task
 
-    print(f"All schemas have been downloaded to {output_dir}")
-    version_file = output_dir / ".version"
-    version_file.write_text(version, encoding="utf-8")
-    print(f"Version {version} written to {version_file}")
+    # print(f"All schemas have been downloaded to {output_dir}")
+    # version_file = output_dir / ".version"
+    # version_file.write_text(version, encoding="utf-8")
+    # print(f"Version {version} written to {version_file}")
+    return schemas

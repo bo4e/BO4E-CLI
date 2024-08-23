@@ -2,13 +2,20 @@
 This module contains the command to pull the BO4E-schemas from the BO4E-Schemas repository.
 """
 
+import asyncio
 from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
 
-from bo4e_cli.commands.dummy import dummy
+# pylint: disable=redefined-builtin
+from rich import print
+
 from bo4e_cli.commands.entry import app
+from bo4e_cli.io.cleanse import clear_dir_if_needed
+from bo4e_cli.io.github import download_schemas, resolve_latest_version
+from bo4e_cli.io.schemas import write_schemas
+from bo4e_cli.transform.update_refs import update_references_all_schemas
 
 
 @app.command()
@@ -50,10 +57,11 @@ def pull(
     Beside the json-files a .version file will be created in utf-8 format at root of the output directory.
     This file is needed for other commands.
     """
-    dummy(
-        output_dir=output_dir,
-        version_tag=version_tag,
-        update_refs=update_refs,
-        clear_output=clear_output,
-        token=token,
-    )
+    if clear_output:
+        clear_dir_if_needed(output_dir)
+    if version_tag == "latest":
+        version_tag = resolve_latest_version(token)
+    schemas = asyncio.run(download_schemas(output_dir=output_dir, version=version_tag, token=token))
+    if update_refs:
+        update_references_all_schemas(schemas, version_tag)
+    write_schemas(schemas, output_dir)
