@@ -22,7 +22,10 @@ from bo4e_cli.transform.update_refs import update_references_all_schemas
 def pull(
     *,
     output_dir: Annotated[
-        Path, typer.Option("--output", "-o", help="The directory to save the JSON-schemas to.", show_default=False)
+        Path,
+        typer.Option(
+            "--output", "-o", help="The directory to save the JSON-schemas to.", show_default=False, resolve_path=True
+        ),
     ],
     version_tag: Annotated[
         str,
