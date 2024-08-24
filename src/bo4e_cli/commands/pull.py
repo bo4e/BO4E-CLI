@@ -60,11 +60,14 @@ def pull(
     Beside the json-files a .version file will be created in utf-8 format at root of the output directory.
     This file is needed for other commands.
     """
+    if token is not None:
+        print("Using GitHub Access Token for authentication.")
     if clear_output:
         clear_dir_if_needed(output_dir)
     if version_tag == "latest":
         version_tag = resolve_latest_version(token)
-    schemas = asyncio.run(download_schemas(output_dir=output_dir, version=version_tag, token=token))
+
+    schemas = asyncio.run(download_schemas(version=version_tag, token=token))
     if update_refs:
         update_references_all_schemas(schemas, version_tag)
     write_schemas(schemas, output_dir)

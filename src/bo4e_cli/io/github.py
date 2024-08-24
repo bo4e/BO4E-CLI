@@ -5,6 +5,7 @@ This module provides functions to interact with the GitHub API.
 import asyncio
 from functools import lru_cache
 from pathlib import Path
+from typing import Callable
 
 import httpx
 from github import Github
@@ -13,9 +14,18 @@ from github.Repository import Repository
 
 # pylint: disable=redefined-builtin
 from rich import print
-from rich.progress import track
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+    track,
+)
 
-from bo4e_cli.models.github import SchemaMeta, Schemas, SchemaTree
+from bo4e_cli.models.github import SchemaMeta, Schemas
 from bo4e_cli.models.schema import SchemaRootType
 
 OWNER = "bo4e"
@@ -39,6 +49,7 @@ def resolve_latest_version(token: str | None) -> str:
     """
     repo = get_source_repo(token)
     latest_release = repo.get_latest_release().title
+    print(f"Latest release is {latest_release}")
     return latest_release
 
 
@@ -66,7 +77,7 @@ def get_schemas_meta_from_gh(version: str, token: str | None) -> Schemas:
             if file_or_dir.name.endswith(".json"):
                 relative_path = Path(file_or_dir.path).relative_to("src/bo4e_schemas").with_suffix("")
                 schema = SchemaMeta(
-                    name=file_or_dir.name,
+                    name=relative_path.name,
                     module=relative_path.parts,
                     src=file_or_dir.download_url,
                 )
@@ -82,32 +93,58 @@ async def download(schema: SchemaMeta, client: httpx.AsyncClient, token: str | N
         headers = {"Authorization": f"Bearer {token}"}
     else:
         headers = None
-    response = await client.get(schema.src_url, timeout=TIMEOUT, headers=headers)
-    response.encoding = "utf-8"
+    try:
+        response = await client.get(str(schema.src_url), timeout=TIMEOUT, headers=headers)
+        response.encoding = "utf-8"
 
-    if response.status_code != 200:
-        raise ValueError(f"Could not download schema from {schema.src_url}: {response.text}")
-    return response.text
+        if response.status_code != 200:
+            raise ValueError(f"Could not download schema from {schema.src_url}: {response.text}")
+        return response.text
+    except Exception as e:
+        raise ValueError(f"Could not download schema from {schema.src_url}: {e}") from e
 
 
-async def download_schemas(output_dir: Path, version: str, token: str | None) -> Schemas:
+async def download_schemas(
+    version: str, token: str | None, callback: Callable[[SchemaMeta], None] | None = None
+) -> Schemas:
     """
     Download all schemas.
     """
     schemas = get_schemas_meta_from_gh(version, token)
-    async with httpx.AsyncClient() as client:
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=None),
+        "[progress.percentage]{task.percentage:>3.1f}%",
+        "•",
+        TaskProgressColumn(show_speed=True),
+        "•",
+        TimeRemainingColumn(),
+    )
 
-        async def download_and_save(schema: SchemaMeta):
-            schema_text = await download(schema, client, token)
-            print("Downloaded %s from %s", schema.name, schema.src_url)
-            schema.schema_parsed = SchemaRootType.model_validate_json(schema_text)
+    with progress:
+        async with httpx.AsyncClient(
+            transport=httpx.AsyncHTTPTransport(
+                limits=httpx.Limits(max_connections=50, max_keepalive_connections=10, keepalive_expiry=10),
+                retries=5,
+            ),
+        ) as client:
+            task_id_download = progress.add_task("Downloading schemas...", total=len(schemas))
+            if callback is not None:
+                task_id_process = progress.add_task("Processing schemas...", total=len(schemas))
+            # semaphore = asyncio.Semaphore(10)
 
-        tasks = {download_and_save(schema) for schema in schemas}
-        for task in track(asyncio.as_completed(tasks), description="Downloading schemas...", total=len(schemas)):
-            await task
+            async def download_and_save(schema: SchemaMeta) -> None:
+                # async with semaphore:
+                schema_text = await download(schema, client, token)
+                progress.update(task_id_download, advance=1, description=f"Downloaded {schema.name}")
+                # print("Downloaded %s from %s", schema.name, schema.src_url)
+                schema.set_schema_text(schema_text)
+                if callback is not None:
+                    callback(schema)
+                    progress.update(task_id_process, advance=1, description=f"Processed {schema.name}")
 
-    # print(f"All schemas have been downloaded to {output_dir}")
-    # version_file = output_dir / ".version"
-    # version_file.write_text(version, encoding="utf-8")
-    # print(f"Version {version} written to {version_file}")
+            tasks = {download_and_save(schema) for schema in schemas}
+            await asyncio.gather(*tasks)
+            await asyncio.sleep(1)
+
     return schemas

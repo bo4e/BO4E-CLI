@@ -35,7 +35,7 @@ def update_reference(
     schema_cls_namespace = schemas.search_index_by_cls_name
     match = REF_ONLINE_REGEX.search(field.ref)
     if match is not None:
-        print("Matched online reference: %s", field.ref)
+        # print("Matched online reference: %s", field.ref)
         if match.group("version") != version:
             raise ValueError(
                 "Version mismatch: References across different versions of BO4E are not allowed. "
@@ -48,7 +48,7 @@ def update_reference(
     else:
         match = REF_DEFS_REGEX.search(field.ref)
         if match is not None:
-            print("Matched reference to definitions: %s", field.ref)
+            # print("Matched reference to definitions: %s", field.ref)
             if match.group("model") not in schema_cls_namespace:
                 raise ValueError(
                     f"Could not find schema for reference {field.ref} in namespace "
@@ -66,7 +66,7 @@ def update_reference(
             break
 
     field.ref = relative_ref
-    print("Updated reference %s to %s", field.ref, relative_ref)
+    # print("Updated reference %s to %s", field.ref, relative_ref)
 
 
 def update_references(schema: SchemaMeta, schemas: Schemas, version: str) -> None:
@@ -102,7 +102,7 @@ def update_references(schema: SchemaMeta, schemas: Schemas, version: str) -> Non
     def iter_array(_object: Array) -> None:
         update_or_iter(_object.items)
 
-    update_or_iter(schema.schema_parsed)
+    update_or_iter(schema.get_schema_parsed())
 
 
 def update_references_all_schemas(schemas: Schemas, version: str) -> None:

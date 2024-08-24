@@ -3,11 +3,10 @@ This module contains the models for the GitHub API queries.
 """
 
 from pathlib import Path
-from types import MappingProxyType
 from typing import (
+    AbstractSet,
     Annotated,
     Callable,
-    Dict,
     Hashable,
     ItemsView,
     Iterable,
@@ -16,14 +15,14 @@ from typing import (
     Mapping,
     Set,
     TypeVar,
-    Union,
     ValuesView,
 )
 
 from _weakrefset import WeakSet
-from pydantic import BaseModel, Field, HttpUrl, RootModel, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, RootModel, TypeAdapter, computed_field
 
 from bo4e_cli.models.schema import SchemaRootType
+from bo4e_cli.models.weakref import WeakCollection
 
 
 class SchemaMeta(BaseModel):
@@ -31,11 +30,13 @@ class SchemaMeta(BaseModel):
     A schema in the file tree returned by the GitHub API. Only contains the relevant information.
     """
 
+    model_config = ConfigDict(frozen=True)
+
     name: str
     """ E.g. 'Marktlokation' """
     module: tuple[str, ...]
     """ E.g. ('bo', 'Marktlokation') or ('ZusatzAttribut',) """
-    src: Path | HttpUrl
+    src: HttpUrl | Path
     """ Either an online URL or a local file path """
 
     _schema: SchemaRootType | str | None = None
@@ -44,11 +45,11 @@ class SchemaMeta(BaseModel):
     @property
     def relative_path(self) -> Path:
         """E.g. 'bo/Marktlokation.json' or 'ZusatzAttribut.json'"""
-        return Path(*self.module).with_suffix("json")
+        return Path(*self.module).with_suffix(".json")
 
     @property
     def src_url(self) -> HttpUrl:
-        if not isinstance(self.src, HttpUrl):
+        if isinstance(self.src, Path):
             raise ValueError("The source is not an online URL.")
         return self.src
 
@@ -58,47 +59,45 @@ class SchemaMeta(BaseModel):
             raise ValueError("The source is not a local file path.")
         return self.src
 
-    @property
-    def schema_parsed(self) -> SchemaRootType:
+    def get_schema_parsed(self) -> SchemaRootType:
         if self._schema is None:
             raise ValueError("The schema has not been loaded yet. Set `schema_parsed` or `schema_text` first.")
         if isinstance(self._schema, str):
-            self._schema = SchemaRootType.model_validate_json(self._schema_text)
+            self._schema = TypeAdapter(SchemaRootType).validate_json(self._schema)
         return self._schema
 
-    @schema_parsed.setter
-    def schema_parsed(self, value: SchemaRootType):
+    def set_schema_parsed(self, value: SchemaRootType) -> None:
         self._schema = value
 
-    @schema_parsed.deleter
-    def schema_parsed(self):
+    def del_schema_parsed(self) -> None:
         self._schema = None
 
-    @property
-    def schema_text(self) -> str:
+    def get_schema_text(self) -> str:
         if self._schema is None:
-            raise ValueError("The schema has not been loaded yet. Set `schema_parsed` or `schema_text` first.")
+            raise ValueError("The schema has not been loaded yet. Call `set_schema_parsed` or `set_schema_text` first.")
         if isinstance(self._schema, SchemaRootType):
             return self._schema.model_dump_json(indent=2, exclude_unset=True, by_alias=True)
         return self._schema
 
-    @schema_text.setter
-    def schema_text(self, value: str):
+    def set_schema_text(self, value: str) -> None:
         if isinstance(self._schema, SchemaRootType):
             raise ValueError(
                 "The schema has already been parsed. If you are sure you want to delete possible changes "
-                "to the parsed schema, delete `schema_parsed` first."
+                "to the parsed schema, call `del_schema_parsed` first."
             )
         self._schema = value
 
+    def __repr__(self) -> str:
+        return f"SchemaMeta(name={self.name}, module={self.module}, src={self.src})"
 
-T = TypeVar("T", bound=Hashable)
+
+T = TypeVar("T", bound=Hashable, covariant=True)
 
 
-class Schemas(RootModel[set[SchemaMeta]], Set[SchemaMeta]):
+class Schemas(RootModel[set[SchemaMeta]]):
     root: Annotated[set[SchemaMeta], Field(default_factory=set)]
 
-    _search_indices: WeakSet["SearchIndex[str]"] = WeakSet()
+    _search_indices: WeakCollection["SearchIndex[Hashable]"] = WeakCollection()
 
     @property
     def search_index_by_cls_name(self) -> "SearchIndex[str]":
@@ -185,6 +184,11 @@ class Schemas(RootModel[set[SchemaMeta]], Set[SchemaMeta]):
 
 
 class SearchIndex(Mapping[T, SchemaMeta]):
+    """
+    SearchIndex is covariant in T since it is a read-only mapping (view) on the underlying schemas.
+    For more understanding see e.g. https://stackoverflow.com/a/62863366/21303427
+    """
+
     def __init__(self, schemas: Schemas, key_func: Callable[[SchemaMeta], T]):
         self._schemas = schemas
         self._schemas_updated = False
@@ -245,95 +249,3 @@ class SearchIndex(Mapping[T, SchemaMeta]):
 
     def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
-
-
-class SchemaTree(RootModel, Dict[str, Union["SchemaTree", SchemaMeta]]):
-    """
-    This model represents a file tree of `SchemaInFileTree` objects.
-    You can use path indices to access the tree. The class will handle those paths and splits them
-    into separate indices.
-    """
-
-    root: Annotated[dict[str, Union["SchemaTree", SchemaMeta]], Field(default_factory=dict)]
-    _namespace_index: Annotated[dict[str, SchemaMeta], Field(default_factory=dict)]
-
-    @model_validator(mode="after")
-    def init_namespace_index(self):
-        self._namespace_index = {}
-        for schema_meta in self.all_files():
-            if schema_meta.name in self._namespace_index:
-                raise ValueError(f"Duplicate schema name: {schema_meta.name}")
-            self._namespace_index[schema_meta.name] = schema_meta
-
-    @staticmethod
-    def resolve_path(path: str) -> list[str]:
-        """
-        Splits a path into its parts.
-        """
-        return path.split("/")
-
-    def __setitem__(self, key, value):
-        if not isinstance(value, SchemaMeta):
-            raise ValueError("Only SchemaInFileTree objects are allowed in the tree.")
-        if value.name in self._namespace_index:
-            raise ValueError(f"Duplicate schema name: {value.name}")
-        parts = self.resolve_path(key)
-        current = self.root
-        for part in parts[:-1]:
-            try:
-                current = current[part]
-            except KeyError:
-                current[part] = self.__class__()
-                current = current[part]
-        current[parts[-1]] = value
-        self._namespace_index[value.name] = value
-
-    def __getitem__(self, key):
-        parts = self.resolve_path(key)
-        current = self.root
-        for part in parts:
-            try:
-                current = current[part]
-            except KeyError:
-                current[part] = self.__class__()
-                current = current[part]
-        return current
-
-    def __contains__(self, path):
-        parts = self.resolve_path(path)
-        current = self.root
-        for part in parts:
-            if part not in current:
-                return False
-            current = current[part]
-        return True
-
-    def __iter__(self):
-        return iter(self.root)
-
-    def __len__(self):
-        return len(self.root)
-
-    def keys(self) -> KeysView[str]:
-        """Get all keys of the root."""
-        return self.root.keys()
-
-    def values(self) -> ValuesView[Union["SchemaTree", SchemaMeta]]:
-        """Get all values of the root."""
-        return self.root.values()
-
-    def items(self) -> ItemsView[str, Union["SchemaTree", SchemaMeta]]:
-        """Get all items of the root."""
-        return self.root.items()
-
-    def all_files(self) -> Iterable[SchemaMeta]:
-        """Get all files in the schema tree."""
-        for value in self.values():
-            if isinstance(value, SchemaMeta):
-                yield value
-            else:
-                yield from value.all_files()
-
-    @property
-    def namespace(self) -> MappingProxyType[str, SchemaMeta]:
-        return MappingProxyType(self._namespace_index)
