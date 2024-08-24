@@ -49,15 +49,22 @@ def resolve_latest_version(token: str | None) -> str:
     """
     repo = get_source_repo(token)
     latest_release = repo.get_latest_release().title
-    print(f"Latest release is {latest_release}")
     return latest_release
+
+
+def get_versions(token: str | None) -> list[str]:
+    """
+    Resolve the latest BO4E version from the github api.
+    """
+    repo = get_source_repo(token)
+    releases = repo.get_releases()
+    return [release.title for release in releases]
 
 
 def get_schemas_meta_from_gh(version: str, token: str | None) -> Schemas:
     """
     Query the github tree api for a specific package and version.
     """
-    print(f"Querying GitHub tree for version {version}")
     repo = get_source_repo(token)
     release = repo.get_release(version)
     tree = repo.get_git_tree(release.target_commitish, recursive=True)
@@ -110,6 +117,7 @@ async def download_schemas(
     """
     Download all schemas.
     """
+    print(f"Querying GitHub tree for version {version}")
     schemas = get_schemas_meta_from_gh(version, token)
     progress = Progress(
         TextColumn("[progress.description]{task.description}"),
@@ -131,13 +139,10 @@ async def download_schemas(
             task_id_download = progress.add_task("Downloading schemas...", total=len(schemas))
             if callback is not None:
                 task_id_process = progress.add_task("Processing schemas...", total=len(schemas))
-            # semaphore = asyncio.Semaphore(10)
 
             async def download_and_save(schema: SchemaMeta) -> None:
-                # async with semaphore:
                 schema_text = await download(schema, client, token)
                 progress.update(task_id_download, advance=1, description=f"Downloaded {schema.name}")
-                # print("Downloaded %s from %s", schema.name, schema.src_url)
                 schema.set_schema_text(schema_text)
                 if callback is not None:
                     callback(schema)

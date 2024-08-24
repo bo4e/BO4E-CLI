@@ -11,6 +11,7 @@ import typer
 # pylint: disable=redefined-builtin
 from rich import print
 
+from bo4e_cli.commands.autocompletion import version_autocompletion
 from bo4e_cli.commands.entry import app
 from bo4e_cli.io.cleanse import clear_dir_if_needed
 from bo4e_cli.io.github import download_schemas, resolve_latest_version
@@ -34,6 +35,7 @@ def pull(
             "-t",
             help="The BO4E-version tag to pull the data for. "
             "They will be pulled from https://github.com/bo4e/BO4E-Schemas.",
+            autocompletion=version_autocompletion,
         ),
     ] = "latest",
     update_refs: Annotated[
@@ -49,7 +51,8 @@ def pull(
         typer.Option(
             help="A GitHub Access token to authenticate with the GitHub API. "
             "Use this if you have problems with the rate limit. "
-            "Alternatively, you can set the environment variable GITHUB_ACCESS_TOKEN.",
+            "It is encouraged to set the environment variable GITHUB_ACCESS_TOKEN instead to prevent"
+            "accidentally storing your token into the shell history.",
             envvar="GITHUB_ACCESS_TOKEN",
         ),
     ] = None,
@@ -66,6 +69,7 @@ def pull(
         clear_dir_if_needed(output_dir)
     if version_tag == "latest":
         version_tag = resolve_latest_version(token)
+        print(f"Latest release is {version_tag}")
 
     schemas = asyncio.run(download_schemas(version=version_tag, token=token))
     if update_refs:
