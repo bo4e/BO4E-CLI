@@ -15,19 +15,9 @@ from github.Repository import Repository
 
 # pylint: disable=redefined-builtin
 from rich import print
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    Progress,
-    TaskProgressColumn,
-    TextColumn,
-    TimeRemainingColumn,
-    TransferSpeedColumn,
-    track,
-)
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
-from bo4e_cli.models.schema import SchemaRootType
 
 OWNER = "bo4e"
 REPO = "BO4E-Schemas"

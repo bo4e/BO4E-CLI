@@ -18,8 +18,7 @@ from typing import (
     ValuesView,
 )
 
-from _weakrefset import WeakSet
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, RootModel, TypeAdapter, computed_field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, computed_field
 
 from bo4e_cli.models.schema import SchemaRootType
 from bo4e_cli.models.weakref import WeakCollection
