@@ -10,4 +10,5 @@ app = typer.Typer(
     "For more information see '--help' or visit "
     "[link=https://github.com/bo4e/BO4E-CLI?tab=readme-ov-file#bo4e-cli]GitHub[/].",
     rich_markup_mode="rich",
+    no_args_is_help=True,
 )
