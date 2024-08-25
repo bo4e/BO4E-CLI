@@ -117,16 +117,13 @@ async def download_schemas(
     """
     Download all schemas.
     """
-    print(f"Querying GitHub tree for version {version}")
+    print(f"Querying GitHub tree for version [bold #8cc04d]{version}[/]")
     schemas = get_schemas_meta_from_gh(version, token)
     progress = Progress(
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
-        "[progress.percentage]{task.percentage:>3.1f}%",
-        "•",
+        BarColumn(),
         TaskProgressColumn(show_speed=True),
-        "•",
-        TimeRemainingColumn(),
+        TimeRemainingColumn(elapsed_when_finished=True),
     )
 
     with progress:
@@ -142,7 +139,7 @@ async def download_schemas(
 
             async def download_and_save(schema: SchemaMeta) -> None:
                 schema_text = await download(schema, client, token)
-                progress.update(task_id_download, advance=1, description=f"Downloaded {schema.name}")
+                progress.update(task_id_download, advance=1)
                 schema.set_schema_text(schema_text)
                 if callback is not None:
                     callback(schema)
