@@ -76,5 +76,5 @@ def pull(
 
     schemas = asyncio.run(download_schemas(version=version_tag, token=token))
     if update_refs:
-        update_references_all_schemas(schemas, version_tag)
+        update_references_all_schemas(schemas)
     write_schemas(schemas, output_dir)
