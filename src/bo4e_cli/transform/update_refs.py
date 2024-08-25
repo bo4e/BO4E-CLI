@@ -5,7 +5,7 @@ from rich import print
 from rich.progress import track
 
 from bo4e_cli.io.github import OWNER, REPO
-from bo4e_cli.models.github import SchemaMeta, Schemas
+from bo4e_cli.models.meta import SchemaMeta, Schemas
 from bo4e_cli.models.schema import AllOf, AnyOf, Array, Object, Reference, SchemaRootType, SchemaType
 
 # GH_VERSION_REGEX = re.compile(r"^v(\d+\.\d+\.\d+)(-rc\d+)?$")

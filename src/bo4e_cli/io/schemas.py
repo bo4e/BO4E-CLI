@@ -1,8 +1,11 @@
+"""
+This module provides functions to read and write the schemas to and from a directory.
+"""
 from pathlib import Path
 
 from rich.progress import track
 
-from bo4e_cli.models.github import SchemaMeta, Schemas
+from bo4e_cli.models.meta import SchemaMeta, Schemas
 
 
 def write_schemas(schemas: Schemas, output_dir: Path) -> None:

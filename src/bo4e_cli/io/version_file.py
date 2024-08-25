@@ -1,3 +1,6 @@
+"""
+This module provides functions to create and read the version file.
+"""
 from pathlib import Path
 
 

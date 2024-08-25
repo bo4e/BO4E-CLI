@@ -3,6 +3,7 @@ This module provides functions to interact with the GitHub API.
 """
 
 import asyncio
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable
@@ -25,7 +26,7 @@ from rich.progress import (
     track,
 )
 
-from bo4e_cli.models.github import SchemaMeta, Schemas
+from bo4e_cli.models.meta import SchemaMeta, Schemas
 from bo4e_cli.models.schema import SchemaRootType
 
 OWNER = "bo4e"
@@ -54,16 +55,18 @@ def resolve_latest_version(token: str | None) -> str:
 
 def get_versions(token: str | None) -> list[str]:
     """
-    Resolve the latest BO4E version from the github api.
+    Get all BO4E versions matching the new versioning schema (e.g. v202401.0.1-rc8) from the github api.
     """
+    regex = re.compile(r"^v\d{6}\.\d+\.\d+(?:-rc\d*)?$")
     repo = get_source_repo(token)
     releases = repo.get_releases()
-    return [release.title for release in releases]
+    return [release.title for release in releases if regex.fullmatch(release.title) is not None]
 
 
 def get_schemas_meta_from_gh(version: str, token: str | None) -> Schemas:
     """
     Query the github tree api for a specific package and version.
+    Returns metadata of all BO4E schemas.
     """
     repo = get_source_repo(token)
     release = repo.get_release(version)
@@ -95,6 +98,7 @@ def get_schemas_meta_from_gh(version: str, token: str | None) -> Schemas:
 async def download(schema: SchemaMeta, client: httpx.AsyncClient, token: str | None) -> str:
     """
     Download the schema file.
+    Assumes that the schemas 'src' is a URL (an error will be raised otherwise).
     """
     if token is not None:
         headers = {"Authorization": f"Bearer {token}"}
@@ -115,7 +119,8 @@ async def download_schemas(
     version: str, token: str | None, callback: Callable[[SchemaMeta], None] | None = None
 ) -> Schemas:
     """
-    Download all schemas.
+    Download all schemas. Also prints some output to track the progress.
+    A callback can be provided to process the schemas after downloading (to use the power of async).
     """
     print(f"Querying GitHub tree for version [bold #8cc04d]{version}[/]")
     schemas = get_schemas_meta_from_gh(version, token)
