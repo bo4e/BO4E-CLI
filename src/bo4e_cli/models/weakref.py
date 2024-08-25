@@ -1,3 +1,6 @@
+"""
+This module provides a collection that holds weak references to its elements.
+"""
 import weakref
 from typing import Collection, Iterator, TypeVar
 
@@ -5,6 +8,10 @@ T = TypeVar("T")  # invariant because collection is mutable
 
 
 class WeakCollection(Collection[T]):
+    """
+    A mutable collection that holds weak references to its elements.
+    """
+
     def __init__(self, init_collection: Collection[T] | None = None):
         self._elements: list[weakref.ReferenceType[T]] = []
         if init_collection is not None:

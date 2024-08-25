@@ -1,7 +1,7 @@
 """
 This module contains the models for the GitHub API queries.
 """
-
+import re
 from pathlib import Path
 from typing import (
     AbstractSet,
@@ -23,6 +23,42 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, RootModel, TypeAdapt
 
 from bo4e_cli.models.schema import SchemaRootType
 from bo4e_cli.models.weakref import WeakCollection
+
+REGEX_VERSION = re.compile(
+    r"^v(?P<major>\d{6})\."
+    r"(?P<functional>\d+)\."
+    r"(?P<technical>\d+)"
+    r"(?:-(?P<candidate>rc\d*))?"
+    r"(?:\+dev(?P<commit>\w+))?$"
+)
+
+
+class Version(BaseModel):
+    """
+    A version of the BO4E-Schemas.
+    """
+
+    major: int
+    functional: int
+    technical: int
+    candidate: str | None
+    commit: str | None
+
+    @classmethod
+    def from_str(cls, version: str) -> "Version":
+        match = REGEX_VERSION.match(version)
+        if match is None:
+            raise ValueError(f"Invalid version: {version}")
+        return cls(**match.groupdict())
+
+    def is_release_candidate(self) -> bool:
+        return self.candidate is not None
+
+    def is_local_commit(self) -> bool:
+        return self.commit is not None
+
+    def __str__(self) -> str:
+        return f"v{self.major}{self.functional}{self.technical}{self.candidate or ''}{self.commit or ''}"
 
 
 class SchemaMeta(BaseModel):
@@ -94,8 +130,9 @@ class SchemaMeta(BaseModel):
 T = TypeVar("T", bound=Hashable, covariant=True)
 
 
-class Schemas(RootModel[set[SchemaMeta]]):
-    root: Annotated[set[SchemaMeta], Field(default_factory=set)]
+class Schemas(BaseModel):
+    schemas: Annotated[set[SchemaMeta], Field(default_factory=set)]
+    version: Version
 
     _search_indices: WeakCollection["SearchIndex[Hashable]"] = WeakCollection()
 
@@ -123,63 +160,63 @@ class Schemas(RootModel[set[SchemaMeta]]):
 
     # ****************** Functions to mimic a set ******************
     def __contains__(self, item: object) -> bool:
-        return self.root.__contains__(item)
+        return self.schemas.__contains__(item)
 
     def __iter__(self) -> Iterator[SchemaMeta]:
-        return self.root.__iter__()
+        return self.schemas.__iter__()
 
     def __len__(self) -> int:
-        return self.root.__len__()
+        return self.schemas.__len__()
 
     def __le__(self, other: AbstractSet[object]) -> bool:
-        return self.root.__le__(other)
+        return self.schemas.__le__(other)
 
     def __lt__(self, other: AbstractSet[object]) -> bool:
-        return self.root.__lt__(other)
+        return self.schemas.__lt__(other)
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Schemas) and self.root.__eq__(other.root)
+        return isinstance(other, Schemas) and self.schemas.__eq__(other.schemas)
 
     def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
 
     def __gt__(self, other: AbstractSet[object]) -> bool:
-        return self.root.__gt__(other)
+        return self.schemas.__gt__(other)
 
     def __ge__(self, other: AbstractSet[object]) -> bool:
-        return self.root.__ge__(other)
+        return self.schemas.__ge__(other)
 
     def __and__(self, other: AbstractSet[object]) -> Set[SchemaMeta]:
-        return self.root.__and__(other)
+        return self.schemas.__and__(other)
 
     def __or__(self, other: AbstractSet[T]) -> Set[SchemaMeta | T]:
-        return self.root.__or__(other)
+        return self.schemas.__or__(other)
 
     def __sub__(self, other: AbstractSet[SchemaMeta | None]) -> Set[SchemaMeta]:
-        return self.root.__sub__(other)
+        return self.schemas.__sub__(other)
 
     def __xor__(self, other: AbstractSet[T]) -> Set[SchemaMeta | T]:
-        return self.root.__xor__(other)
+        return self.schemas.__xor__(other)
 
     def isdisjoint(self, other: Iterable[object]) -> bool:
-        return self.root.isdisjoint(other)
+        return self.schemas.isdisjoint(other)
 
     def add(self, item: SchemaMeta) -> None:
-        prev_len = len(self.root)  # To prevent double contain check. This should be faster.
-        self.root.add(item)
-        if len(self.root) != prev_len:
+        prev_len = len(self.schemas)  # To prevent double contain check. This should be faster.
+        self.schemas.add(item)
+        if len(self.schemas) != prev_len:
             self._flag_search_indices()
 
     def update(self, *items_iters: Iterable[SchemaMeta]) -> None:
-        prev_len = len(self.root)  # To prevent double contain check. This should be faster.
-        self.root.update(*items_iters)
-        if len(self.root) != prev_len:
+        prev_len = len(self.schemas)  # To prevent double contain check. This should be faster.
+        self.schemas.update(*items_iters)
+        if len(self.schemas) != prev_len:
             self._flag_search_indices()
 
     def remove(self, item: SchemaMeta) -> None:
-        prev_len = len(self.root)  # To prevent double contain check. This should be faster.
-        self.root.remove(item)
-        if len(self.root) != prev_len:
+        prev_len = len(self.schemas)  # To prevent double contain check. This should be faster.
+        self.schemas.remove(item)
+        if len(self.schemas) != prev_len:
             self._flag_search_indices()
 
 

@@ -181,7 +181,7 @@ class Reference(TypeBase):
 
 
 SchemaType = Union[
-    Object, StrEnum, Array, AnyOf, AllOf, String, Decimal, Integer, Number, Boolean, Null, Reference, Any
+    Object, StrEnum, Array, AnyOf, AllOf, Decimal, String, Integer, Number, Boolean, Null, Reference, Any
 ]
 SchemaClassType = Union[Object, StrEnum]
 SchemaRootType = Union[SchemaRootObject, SchemaRootStrEnum]

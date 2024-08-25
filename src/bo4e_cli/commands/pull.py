@@ -13,9 +13,11 @@ from rich import print
 
 from bo4e_cli.commands.autocompletion import version_autocompletion
 from bo4e_cli.commands.entry import app
+from bo4e_cli.commands.parser import parse_version
 from bo4e_cli.io.cleanse import clear_dir_if_needed
 from bo4e_cli.io.github import download_schemas, resolve_latest_version
 from bo4e_cli.io.schemas import write_schemas
+from bo4e_cli.models.meta import Version
 from bo4e_cli.transform.update_refs import update_references_all_schemas
 
 
@@ -29,13 +31,14 @@ def pull(
         ),
     ],
     version_tag: Annotated[
-        str,
+        Version,
         typer.Option(
             "--version-tag",
             "-t",
             help="The BO4E-version tag to pull the data for. "
             "They will be pulled from https://github.com/bo4e/BO4E-Schemas.",
             autocompletion=version_autocompletion,
+            parser=parse_version,
         ),
     ] = "latest",
     update_refs: Annotated[

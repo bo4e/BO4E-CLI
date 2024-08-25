@@ -1,3 +1,7 @@
+"""
+This module contains autocompletion functions for the CLI.
+"""
+
 import os
 from typing import Iterable
 
@@ -16,7 +20,8 @@ def version_autocompletion(ctx: typer.Context) -> Iterable[str]:
     token = ctx.params.get("token", None)
     if token is None:
         token = os.environ.get("GITHUB_ACCESS_TOKEN", None)
-    releases = get_versions(token=token)
-    for release in releases:
-        if release.startswith(incomplete_value):
-            yield release
+
+    for release in get_versions(token=token):
+        version = str(release)
+        if version.startswith(incomplete_value):
+            yield version

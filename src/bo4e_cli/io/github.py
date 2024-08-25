@@ -26,7 +26,7 @@ from rich.progress import (
     track,
 )
 
-from bo4e_cli.models.meta import SchemaMeta, Schemas
+from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
 from bo4e_cli.models.schema import SchemaRootType
 
 OWNER = "bo4e"
@@ -44,34 +44,34 @@ def get_source_repo(token: str | None) -> Repository:
     return Github().get_repo(f"{OWNER}/{REPO}")
 
 
-def resolve_latest_version(token: str | None) -> str:
+def resolve_latest_version(token: str | None) -> Version:
     """
     Resolve the latest BO4E version from the github api.
     """
     repo = get_source_repo(token)
     latest_release = repo.get_latest_release().title
-    return latest_release
+    return Version.from_str(latest_release)
 
 
-def get_versions(token: str | None) -> list[str]:
+def get_versions(token: str | None) -> list[Version]:
     """
     Get all BO4E versions matching the new versioning schema (e.g. v202401.0.1-rc8) from the github api.
     """
     regex = re.compile(r"^v\d{6}\.\d+\.\d+(?:-rc\d*)?$")
     repo = get_source_repo(token)
     releases = repo.get_releases()
-    return [release.title for release in releases if regex.fullmatch(release.title) is not None]
+    return [Version.from_str(release.title) for release in releases if regex.fullmatch(release.title) is not None]
 
 
-def get_schemas_meta_from_gh(version: str, token: str | None) -> Schemas:
+def get_schemas_meta_from_gh(version: Version, token: str | None) -> Schemas:
     """
     Query the github tree api for a specific package and version.
     Returns metadata of all BO4E schemas.
     """
     repo = get_source_repo(token)
-    release = repo.get_release(version)
+    release = repo.get_release(str(version))
     tree = repo.get_git_tree(release.target_commitish, recursive=True)
-    schemas = Schemas()
+    schemas = Schemas(version=version)
 
     for tree_element in tree.tree:
         if not tree_element.path.startswith("src/bo4e_schemas"):
@@ -116,7 +116,7 @@ async def download(schema: SchemaMeta, client: httpx.AsyncClient, token: str | N
 
 
 async def download_schemas(
-    version: str, token: str | None, callback: Callable[[SchemaMeta], None] | None = None
+    version: Version, token: str | None, callback: Callable[[SchemaMeta], None] | None = None
 ) -> Schemas:
     """
     Download all schemas. Also prints some output to track the progress.
