@@ -70,9 +70,6 @@ def pull(
         print("Using GitHub Access Token for authentication.")
     if clear_output:
         clear_dir_if_needed(output_dir)
-    if version_tag == "latest":
-        version_tag = resolve_latest_version(token)
-        print(f"Latest release is [bold #8cc04d]{version_tag}[/]")
 
     schemas = asyncio.run(download_schemas(version=version_tag, token=token))
     if update_refs:

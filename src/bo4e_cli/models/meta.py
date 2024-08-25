@@ -27,7 +27,7 @@ REGEX_VERSION = re.compile(
     r"^v(?P<major>\d{6})\."
     r"(?P<functional>\d+)\."
     r"(?P<technical>\d+)"
-    r"(?:-(?P<candidate>rc\d*))?"
+    r"(?:-rc(?P<candidate>\d*))?"
     r"(?:\+dev(?P<commit>\w+))?$"
 )
 
@@ -40,7 +40,7 @@ class Version(BaseModel):
     major: int
     functional: int
     technical: int
-    candidate: str | None
+    candidate: int | None
     commit: str | None
 
     @classmethod
@@ -57,7 +57,12 @@ class Version(BaseModel):
         return self.commit is not None
 
     def __str__(self) -> str:
-        return f"v{self.major}{self.functional}{self.technical}{self.candidate or ''}{self.commit or ''}"
+        version = f"v{self.major}.{self.functional}.{self.technical}"
+        if self.candidate is not None:
+            version += f"-rc{self.candidate}"
+        if self.commit is not None:
+            version += f"+dev{self.commit}"
+        return version
 
 
 class SchemaMeta(BaseModel):
