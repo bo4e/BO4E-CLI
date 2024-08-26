@@ -29,7 +29,7 @@ def read_schemas(output_dir: Path) -> Schemas:
     all_files = list(output_dir.rglob("*.json"))
     for schema_path in track(all_files, description="Reading schemas...", total=len(all_files)):
         relative_path = schema_path.relative_to(output_dir).with_suffix("")
-        schema = SchemaMeta(name=schema_path.name, module=relative_path.parts)
+        schema = SchemaMeta(name=relative_path.name, module=relative_path.parts, src=schema_path)
         schema.set_schema_text(schema_path.read_text(encoding="utf-8"))
         schemas.add(schema)
     return schemas

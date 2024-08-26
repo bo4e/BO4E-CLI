@@ -134,14 +134,6 @@ class SchemaMeta(BaseModel):
             self._schema = TypeAdapter(SchemaRootType).validate_json(self._schema)
         return self._schema
 
-    def set_schema_parsed(self, value: SchemaRootType) -> None:
-        """Sets the parsed schema."""
-        self._schema = value
-
-    def del_schema_parsed(self) -> None:
-        """Deletes the parsed schema."""
-        self._schema = None
-
     def get_schema_text(self) -> str:
         """
         Returns the schema as a JSON string.
@@ -163,7 +155,7 @@ class SchemaMeta(BaseModel):
             )
         self._schema = value
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         return f"SchemaMeta(name={self.name}, module={self.module}, src={self.src})"
 
 
@@ -230,7 +222,9 @@ class Schemas(BaseModel):
         return self.schemas.__lt__(other)
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Schemas) and self.schemas.__eq__(other.schemas)
+        if isinstance(other, Schemas):
+            return self.schemas.__eq__(other.schemas) and self.version == other.version
+        return self.schemas.__eq__(other)
 
     def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
