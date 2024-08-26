@@ -1,6 +1,7 @@
 """
 This module contains the models for the GitHub API queries.
 """
+
 import re
 from pathlib import Path
 from typing import (
@@ -42,18 +43,28 @@ class Version(BaseModel):
     technical: int
     candidate: int | None
     commit: str | None
+    """
+    The commit hash.
+    When retrieving the version from a commit which has no tag on it, the version will have the commit hash
+    after the last version tag in the history.
+    """
 
     @classmethod
     def from_str(cls, version: str) -> "Version":
+        """
+        Parse a version string into a Version object e.g. 'v202401.0.1-rc8+dev12asdf34' or 'v202401.0.1'.
+        """
         match = REGEX_VERSION.match(version)
         if match is None:
             raise ValueError(f"Invalid version: {version}")
         return cls(**match.groupdict())
 
     def is_release_candidate(self) -> bool:
+        """Check if the version is a release candidate."""
         return self.candidate is not None
 
     def is_local_commit(self) -> bool:
+        """Check if the version is on a commit without a tag."""
         return self.commit is not None
 
     def __str__(self) -> str:
@@ -64,10 +75,17 @@ class Version(BaseModel):
             version += f"+dev{self.commit}"
         return version
 
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Version):
+            return super().__eq__(other)
+        if isinstance(other, str):
+            return str(self) == other
+        return NotImplemented
+
 
 class SchemaMeta(BaseModel):
     """
-    A schema in the file tree returned by the GitHub API. Only contains the relevant information.
+    This class represents a schema meta data object.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -89,17 +107,24 @@ class SchemaMeta(BaseModel):
 
     @property
     def src_url(self) -> HttpUrl:
+        """Returns the source as an online URL. Raises a ValueError if the source is not a URL."""
         if isinstance(self.src, Path):
             raise ValueError("The source is not an online URL.")
         return self.src
 
     @property
     def src_path(self) -> Path:
+        """Returns the source as a local file path. Raises a ValueError if the source is not a path."""
         if not isinstance(self.src, Path):
             raise ValueError("The source is not a local file path.")
         return self.src
 
     def get_schema_parsed(self) -> SchemaRootType:
+        """
+        Returns the parsed schema.
+        Raises a ValueError if the schema has not been loaded yet.
+        Automatically parses the schema if `set_schema_text` has been called before.
+        """
         if self._schema is None:
             raise ValueError("The schema has not been loaded yet. Set `schema_parsed` or `schema_text` first.")
         if isinstance(self._schema, str):
@@ -107,12 +132,19 @@ class SchemaMeta(BaseModel):
         return self._schema
 
     def set_schema_parsed(self, value: SchemaRootType) -> None:
+        """Sets the parsed schema."""
         self._schema = value
 
     def del_schema_parsed(self) -> None:
+        """Deletes the parsed schema."""
         self._schema = None
 
     def get_schema_text(self) -> str:
+        """
+        Returns the schema as a JSON string.
+        Raises a ValueError if the schema has not been loaded yet.
+        Always dumps the schema if `get_schema_parsed` has been called before.
+        """
         if self._schema is None:
             raise ValueError("The schema has not been loaded yet. Call `set_schema_parsed` or `set_schema_text` first.")
         if isinstance(self._schema, SchemaRootType):
@@ -120,6 +152,7 @@ class SchemaMeta(BaseModel):
         return self._schema
 
     def set_schema_text(self, value: str) -> None:
+        """Sets the schema as a JSON string."""
         if isinstance(self._schema, SchemaRootType):
             raise ValueError(
                 "The schema has already been parsed. If you are sure you want to delete possible changes "
@@ -135,30 +168,45 @@ T = TypeVar("T", bound=Hashable, covariant=True)
 
 
 class Schemas(BaseModel):
+    """
+    Models a set of schema metadata objects. Most of the set methods are available.
+    Also contains the version of the schemas.
+    You can retrieve different search indices for the schemas which always reflect the current state of the schemas.
+    Even if they were modified externally, the search indices will always be up-to-date.
+    The search indices are read-only mappings (views) on the underlying schemas.
+    """
+
     schemas: Annotated[set[SchemaMeta], Field(default_factory=set)]
     version: Version
 
     _search_indices: WeakCollection["SearchIndex[Hashable]"] = WeakCollection()
+    """
+    A collection of weak references to the search indices.
+    All created search indices will be saved in this collection as weak reference.
+    I.e. if there is no other hard reference to a search index, it will be garbage collected and automatically
+    removed from this collection.
+    """
 
     @property
     def search_index_by_cls_name(self) -> "SearchIndex[str]":
+        """Returns a search index with the schema names as key."""
         search_index = SearchIndex(self, key_func=lambda schema: schema.name)
         self._search_indices.add(search_index)
         return search_index
 
     @property
     def search_index_by_module(self) -> "SearchIndex[tuple[str, ...]]":
+        """Returns a search index with the schema modules (as tuple) as key."""
         search_index = SearchIndex(self, key_func=lambda schema: schema.module)
         self._search_indices.add(search_index)
         return search_index
 
-    @property
-    def search_index_by_src_path(self) -> "SearchIndex[Path]":
-        search_index = SearchIndex(self, key_func=lambda schema: schema.src_path)
-        self._search_indices.add(search_index)
-        return search_index
-
     def _flag_search_indices(self) -> None:
+        """
+        Flags all search indices to be updated.
+        They will be updated automatically on the next access.
+        This method will be called whenever schemas are added or removed.
+        """
         for index in self._search_indices:
             index._schemas_updated = True
 
@@ -203,21 +251,26 @@ class Schemas(BaseModel):
         return self.schemas.__xor__(other)
 
     def isdisjoint(self, other: Iterable[object]) -> bool:
+        """Return True if the set has no elements in common with other.
+        Sets are disjoint iff their intersection is the empty set."""
         return self.schemas.isdisjoint(other)
 
     def add(self, item: SchemaMeta) -> None:
+        """Add an element to this set."""
         prev_len = len(self.schemas)  # To prevent double contain check. This should be faster.
         self.schemas.add(item)
         if len(self.schemas) != prev_len:
             self._flag_search_indices()
 
     def update(self, *items_iters: Iterable[SchemaMeta]) -> None:
+        """Update this set with the union of sets as well as any other iterable items."""
         prev_len = len(self.schemas)  # To prevent double contain check. This should be faster.
         self.schemas.update(*items_iters)
         if len(self.schemas) != prev_len:
             self._flag_search_indices()
 
     def remove(self, item: SchemaMeta) -> None:
+        """Remove an element from this set; it must be a member."""
         prev_len = len(self.schemas)  # To prevent double contain check. This should be faster.
         self.schemas.remove(item)
         if len(self.schemas) != prev_len:
@@ -226,7 +279,9 @@ class Schemas(BaseModel):
 
 class SearchIndex(Mapping[T, SchemaMeta]):
     """
-    SearchIndex is covariant in T since it is a read-only mapping (view) on the underlying schemas.
+    This class is a (read-only) mapping view of an arbitrary key type T to schema metadata objects.
+    This view will always reflect the current state of the Schemas collection.
+    SearchIndex is covariant in T since it is read-only.
     For more understanding see e.g. https://stackoverflow.com/a/62863366/21303427
     """
 
@@ -238,6 +293,7 @@ class SearchIndex(Mapping[T, SchemaMeta]):
         self._build_index()
 
     def _build_index(self) -> None:
+        """(Re)build the index from the schemas"""
         self._index = {}
         for schema in self._schemas:
             key = self._key_func(schema)
@@ -246,6 +302,7 @@ class SearchIndex(Mapping[T, SchemaMeta]):
             self._index[key] = schema
 
     def _update_index_if_flagged(self) -> None:
+        """Update the index if the schemas were updated"""
         if self._schemas_updated:
             self._build_index()
             self._schemas_updated = False
@@ -267,17 +324,21 @@ class SearchIndex(Mapping[T, SchemaMeta]):
         return self._index.__contains__(other)
 
     def keys(self) -> KeysView[T]:
+        """Return a view of the keys of the mapping."""
         self._update_index_if_flagged()
         return self._index.keys()
 
     def items(self) -> ItemsView[T, SchemaMeta]:
+        """Return a view of the items of the mapping."""
         self._update_index_if_flagged()
         return self._index.items()
 
     def values(self) -> ValuesView[SchemaMeta]:
+        """Return a view of the values of the mapping."""
         return self._schemas
 
     def get(self, key: T, default: SchemaMeta | None = None) -> SchemaMeta | None:
+        """Return the value for key if key is in the dictionary, else default."""
         self._update_index_if_flagged()
         return self._index.get(key, default)
 

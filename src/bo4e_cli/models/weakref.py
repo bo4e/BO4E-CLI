@@ -1,6 +1,7 @@
 """
 This module provides a collection that holds weak references to its elements.
 """
+
 import weakref
 from typing import Collection, Iterator, TypeVar
 
@@ -10,6 +11,8 @@ T = TypeVar("T")  # invariant because collection is mutable
 class WeakCollection(Collection[T]):
     """
     A mutable collection that holds weak references to its elements.
+    I.e. if there is no other hard reference to an element, it will be garbage collected and automatically
+    removed from this collection.
     """
 
     def __init__(self, init_collection: Collection[T] | None = None):
