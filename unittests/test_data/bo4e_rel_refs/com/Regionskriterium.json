@@ -1,0 +1,86 @@
+{
+  "description": "Komponente zur Abbildung eines Regionskriteriums\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/Regionskriterium.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Regionskriterium JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Regionskriterium.json>`_",
+  "title": "Regionskriterium",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gueltigkeitstyp": {
+      "description": "Hier wird festgelegt, ob es sich um ein einschließendes oder ausschließendes Kriterium handelt.",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Gueltigkeitstyp.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "regionskriteriumtyp": {
+      "description": "Hier wird das Kriterium selbst angegeben, z.B. Bundesland.",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Regionskriteriumtyp.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "wert": {
+      "description": "Der Wert, den das Kriterium annehmen kann, z.B. NRW.\nIm Falle des Regionskriteriumstyp BUNDESWEIT spielt dieser Wert keine Rolle.",
+      "title": "Wert",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

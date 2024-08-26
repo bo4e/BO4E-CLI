@@ -1,0 +1,215 @@
+{
+  "description": "Preis für eine definierte Lieferung oder Leistung innerhalb eines Preisblattes\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/Preisposition.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Preisposition JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Preisposition.json>`_",
+  "title": "Preisposition",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bdewArtikelnummer": {
+      "description": "Eine vom BDEW standardisierte Bezeichnug für die abgerechnete Leistungserbringung;\nDiese Artikelnummer wird auch im Rechnungsteil der INVOIC verwendet.",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/BDEWArtikelnummer.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "berechnungsmethode": {
+      "description": "Das Modell, das der Preisbildung zugrunde liegt",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Kalkulationsmethode.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bezugsgroesse": {
+      "description": "Hier wird festgelegt, auf welche Bezugsgrösse sich der Preis bezieht, z.B. kWh oder Stück",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Mengeneinheit.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "freimengeBlindarbeit": {
+      "description": "Der Anteil der Menge der Blindarbeit in Prozent von der Wirkarbeit, für die keine Abrechnung erfolgt",
+      "title": "Freimengeblindarbeit",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "freimengeLeistungsfaktor": {
+      "description": "Der cos phi (Verhältnis Wirkleistung/Scheinleistung) aus dem die Freimenge für die Blindarbeit berechnet wird als\ntan phi (Verhältnis Blindleistung/Wirkleistung)",
+      "title": "Freimengeleistungsfaktor",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gruppenartikelId": {
+      "description": "Übergeordnete Gruppen-ID, die sich ggf. auf die Artikel-ID in der Preisstaffel bezieht",
+      "title": "Gruppenartikelid",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "leistungsbezeichnung": {
+      "description": "Bezeichnung für die in der Position abgebildete Leistungserbringung",
+      "title": "Leistungsbezeichnung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "leistungstyp": {
+      "description": "Standardisierte Bezeichnung für die abgerechnete Leistungserbringung",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Leistungstyp.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "preiseinheit": {
+      "description": "Festlegung, mit welcher Preiseinheit abgerechnet wird, z.B. Ct. oder €",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Waehrungseinheit.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "preisstaffeln": {
+      "description": "Preisstaffeln, die zu dieser Preisposition gehören",
+      "title": "Preisstaffeln",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "Preisstaffel.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tarifzeit": {
+      "description": "Festlegung, für welche Tarifzeit der Preis hier festgelegt ist",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Tarifzeit.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zeitbasis": {
+      "description": "Die Zeit(dauer) auf die sich der Preis bezieht.\nZ.B. ein Jahr für einen Leistungspreis der in €/kW/Jahr ausgegeben wird",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Mengeneinheit.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zonungsgroesse": {
+      "description": "Mit der Menge der hier angegebenen Größe wird die Staffelung/Zonung durchgeführt. Z.B. Vollbenutzungsstunden",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Bemessungsgroesse.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

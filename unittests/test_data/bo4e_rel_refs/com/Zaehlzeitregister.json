@@ -1,0 +1,88 @@
+{
+  "description": "Mit dieser Komponente werden Zählzeitregister modelliert. Ein Zählzeitregister beschreibt eine erweiterte Definition der Zählzeit\nin Bezug auf ein Register. Dabei werden alle Codes dazu vom Netzbetreiber vergeben.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/Zaehlzeitregister.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Zaehlzeitregister JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Zaehlzeitregister.json>`_",
+  "title": "Zaehlzeitregister",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istSchwachlastfaehig": {
+      "description": "Zählzeitregister",
+      "title": "Istschwachlastfaehig",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zaehlzeitDefinition": {
+      "description": "Zählzeitdefinition",
+      "title": "Zaehlzeitdefinition",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zaehlzeitRegister": {
+      "description": "Zählzeitdefinition",
+      "title": "Zaehlzeitregister",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

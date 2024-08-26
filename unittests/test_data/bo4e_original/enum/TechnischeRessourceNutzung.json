@@ -1,0 +1,10 @@
+{
+    "description": "Nutzung der technischen Ressource",
+    "enum": [
+        "STROMVERBRAUCHSART",
+        "STROMERZEUGUNGSART",
+        "SPEICHER"
+    ],
+    "title": "TechnischeRessourceNutzung",
+    "type": "string"
+}

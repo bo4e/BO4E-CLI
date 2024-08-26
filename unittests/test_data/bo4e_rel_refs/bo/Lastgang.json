@@ -1,0 +1,151 @@
+{
+  "description": "Modell zur Abbildung eines Lastganges;\nIn diesem Modell werden die Messwerte mit einem vollständigen Zeitintervall (zeit_intervall_laenge) angegeben und es bietet daher eine hohe Flexibilität in der Übertragung jeglicher zeitlich veränderlicher Messgrössen.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/bo/Lastgang.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Lastgang JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/Lastgang.json>`_",
+  "title": "Lastgang",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Hier können IDs anderer Systeme hinterlegt werden (z.B. eine SAP-GP-Nummer oder eine GUID)",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_typ": {
+      "description": "Angabe, ob es sich um einen Gas- oder Stromlastgang handelt",
+      "default": "LASTGANG",
+      "anyOf": [
+        {
+          "$ref": "../enum/Typ.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "marktlokation": {
+      "description": "Marktlokation, zu der der Lastgang gehört",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Marktlokation.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "messgroesse": {
+      "description": "Definition der gemessenen Größe anhand ihrer Einheit",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Mengeneinheit.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "messlokation": {
+      "description": "Marktlokation, zu der der Lastgang gehört",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Messlokation.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "obisKennzahl": {
+      "description": "Die OBIS-Kennzahl für den Wert, die festlegt, welche Größe mit dem Stand gemeldet wird, z.B. '1-0:1.8.1'",
+      "title": "Obiskennzahl",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sparte": {
+      "description": "Angabe, ob es sich um einen Gas- oder Stromlastgang handelt",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Sparte.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "version": {
+      "description": "Versionsnummer des Lastgangs",
+      "title": "Version",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "werte": {
+      "description": "Die im Lastgang enthaltenen Messwerte",
+      "title": "Werte",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../com/Zeitreihenwert.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zeitIntervallLaenge": {
+      "anyOf": [
+        {
+          "$ref": "../com/Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "required": [
+    "zeitIntervallLaenge"
+  ]
+}

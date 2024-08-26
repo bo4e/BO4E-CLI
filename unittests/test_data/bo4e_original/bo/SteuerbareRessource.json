@@ -1,0 +1,156 @@
+{
+    "additionalProperties": true,
+    "description": "Object containing information about a steuerbare Ressource\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/bo/SteuerbareRessource.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `SteuerbareRessource JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/SteuerbareRessource.json>`_",
+    "properties": {
+        "_id": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "description": "Hier können IDs anderer Systeme hinterlegt werden (z.B. eine SAP-GP-Nummer oder eine GUID)",
+            "title": " Id"
+        },
+        "_typ": {
+            "anyOf": [
+                {
+                    "$ref": "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/enum/Typ.json"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": "STEUERBARERESSOURCE",
+            "description": "Id der steuerbaren Ressource"
+        },
+        "_version": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": "202401.4.0",
+            "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+            "title": " Version"
+        },
+        "eigenschaftMsbLokation": {
+            "anyOf": [
+                {
+                    "$ref": "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/enum/Marktrolle.json"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "description": "Eigenschaft des Messstellenbetreibers an der Lokation"
+        },
+        "konfigurationsprodukte": {
+            "anyOf": [
+                {
+                    "items": {
+                        "$ref": "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Konfigurationsprodukt.json"
+                    },
+                    "type": "array"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "description": "Produkt-Daten der Steuerbaren Ressource",
+            "title": "Konfigurationsprodukte"
+        },
+        "lokationsbuendelObjektcode": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "description": "Lokationsbuendel Code, der die Funktion dieses BOs an der Lokationsbuendelstruktur beschreibt.",
+            "title": "Lokationsbuendelobjektcode"
+        },
+        "lokationszuordnungen": {
+            "anyOf": [
+                {
+                    "items": {
+                        "$ref": "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/Lokationszuordnung.json"
+                    },
+                    "type": "array"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "description": "Lokationszuordnung, um bspw. die zugehörigen Messlokationen anzugeben",
+            "title": "Lokationszuordnungen"
+        },
+        "steuerbareRessourceId": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "description": "Id der steuerbaren Ressource",
+            "title": "Steuerbareressourceid"
+        },
+        "steuerkanalLeistungsbeschreibung": {
+            "anyOf": [
+                {
+                    "$ref": "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/enum/SteuerkanalLeistungsbeschreibung.json"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "description": "Leistungsbeschreibung des Steuerkanals"
+        },
+        "zugeordneteMsbCodenummer": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "description": "Angabe des Messstellenbetreibers, der der Steuerbaren Ressource zugeordnet ist.",
+            "title": "Zugeordnetemsbcodenummer"
+        },
+        "zusatzAttribute": {
+            "anyOf": [
+                {
+                    "items": {
+                        "$ref": "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/ZusatzAttribut.json"
+                    },
+                    "type": "array"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "title": "Zusatzattribute"
+        }
+    },
+    "title": "SteuerbareRessource",
+    "type": "object"
+}

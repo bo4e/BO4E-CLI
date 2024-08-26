@@ -1,0 +1,119 @@
+{
+  "description": "Gibt die Staffelgrenzen der jeweiligen Preise an\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/TarifpreisstaffelProOrt.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `TarifpreisstaffelProOrt JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/TarifpreisstaffelProOrt.json>`_",
+  "title": "TarifpreisstaffelProOrt",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "arbeitspreis": {
+      "description": "Der Arbeitspreis in ct/kWh",
+      "title": "Arbeitspreis",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "arbeitspreisNT": {
+      "description": "Der Arbeitspreis für Verbräuche in der Niedertarifzeit in ct/kWh",
+      "title": "Arbeitspreisnt",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "grundpreis": {
+      "description": "Der Grundpreis in Euro/Jahr",
+      "title": "Grundpreis",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "staffelgrenzeBis": {
+      "description": "Oberer Wert, bis zu dem die Staffel gilt (exklusive)",
+      "title": "Staffelgrenzebis",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "staffelgrenzeVon": {
+      "description": "Unterer Wert, ab dem die Staffel gilt (inklusive)",
+      "title": "Staffelgrenzevon",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

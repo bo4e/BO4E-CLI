@@ -1,0 +1,10 @@
+{
+    "description": "Art der E-Mobilität",
+    "enum": [
+        "WALLBOX",
+        "E_MOBILITAETSLADESAEULE",
+        "LADEPARK"
+    ],
+    "title": "EMobilitaetsart",
+    "type": "string"
+}

@@ -1,0 +1,130 @@
+{
+  "description": "Mit dieser Komponente wird ein Teil einer Angebotsvariante abgebildet.\nHier werden alle Angebotspositionen aggregiert.\nAngebotsteile werden im einfachsten Fall für eine Marktlokation oder Lieferstellenadresse erzeugt.\nHier werden die Mengen und Gesamtkosten aller Angebotspositionen zusammengefasst.\nEine Variante besteht mindestens aus einem Angebotsteil.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/Angebotsteil.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Angebotsteil JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Angebotsteil.json>`_",
+  "title": "Angebotsteil",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "anfrageSubreferenz": {
+      "description": "Identifizierung eines Subkapitels einer Anfrage, beispielsweise das Los einer Ausschreibung",
+      "title": "Anfragesubreferenz",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gesamtkostenangebotsteil": {
+      "description": "Summe der Jahresenergiekosten aller in diesem Angebotsteil enthaltenen Lieferstellen",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Betrag.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gesamtmengeangebotsteil": {
+      "description": "Summe der Verbräuche aller in diesem Angebotsteil eingeschlossenen Lieferstellen",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lieferstellenangebotsteil": {
+      "description": "Marktlokationen, für die dieses Angebotsteil gilt, falls vorhanden.\nDurch die Marktlokation ist auch die Lieferadresse festgelegt",
+      "title": "Lieferstellenangebotsteil",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../bo/Marktlokation.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lieferzeitraum": {
+      "description": "Hier kann der Belieferungszeitraum angegeben werden, für den dieser Angebotsteil gilt",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Zeitraum.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "positionen": {
+      "description": "Einzelne Positionen, die zu diesem Angebotsteil gehören",
+      "title": "Positionen",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "Angebotsposition.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

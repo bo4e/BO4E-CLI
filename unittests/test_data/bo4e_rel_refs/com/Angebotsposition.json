@@ -1,0 +1,98 @@
+{
+  "description": "Unterhalb von Angebotsteilen sind die Angebotspositionen eingebunden.\nHier werden die angebotenen Bestandteile einzeln aufgeführt. Beispiel:\nPositionsmenge: 4000 kWh\nPositionspreis: 24,56 ct/kWh\nPositionskosten: 982,40 EUR\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/Angebotsposition.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Angebotsposition JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Angebotsposition.json>`_",
+  "title": "Angebotsposition",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "positionsbezeichnung": {
+      "description": "Bezeichnung der jeweiligen Position des Angebotsteils",
+      "title": "Positionsbezeichnung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "positionskosten": {
+      "description": "Kosten (positionspreis * positionsmenge) für diese Angebotsposition",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Betrag.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "positionsmenge": {
+      "description": "Menge des angebotenen Artikels (z.B. Wirkarbeit in kWh), in dieser Angebotsposition",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "positionspreis": {
+      "description": "Preis pro Einheit/Stückpreis des angebotenen Artikels.",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Preis.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

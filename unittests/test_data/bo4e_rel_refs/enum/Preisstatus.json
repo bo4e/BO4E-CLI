@@ -1,0 +1,9 @@
+{
+  "description": "Statusinformation für Preise",
+  "title": "Preisstatus",
+  "enum": [
+    "VORLAEUFIG",
+    "ENDGUELTIG"
+  ],
+  "type": "string"
+}

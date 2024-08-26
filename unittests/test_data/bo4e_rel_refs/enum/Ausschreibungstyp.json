@@ -1,0 +1,10 @@
+{
+  "description": "Aufzählung für die Typisierung von Ausschreibungen.",
+  "title": "Ausschreibungstyp",
+  "enum": [
+    "PRIVATRECHTLICH",
+    "OEFFENTLICHRECHTLICH",
+    "EUROPAWEIT"
+  ],
+  "type": "string"
+}

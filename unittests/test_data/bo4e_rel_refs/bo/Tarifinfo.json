@@ -1,0 +1,242 @@
+{
+  "description": "Das BO Tarifinfo liefert die Merkmale, die einen Endkundentarif identifizierbar machen.\nDieses BO dient als Basis für weitere BOs mit erweiterten Anwendungsmöglichkeiten.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/bo/Tarifinfo.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Tarifinfo JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/Tarifinfo.json>`_",
+  "title": "Tarifinfo",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Hier können IDs anderer Systeme hinterlegt werden (z.B. eine SAP-GP-Nummer oder eine GUID)",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_typ": {
+      "description": "Name des Tarifs",
+      "default": "TARIFINFO",
+      "anyOf": [
+        {
+          "$ref": "../enum/Typ.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "anbieter": {
+      "description": "Der Marktteilnehmer (Lieferant), der diesen Tarif anbietet",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Marktteilnehmer.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "anbietername": {
+      "description": "Der Name des Marktpartners, der den Tarif anbietet",
+      "title": "Anbietername",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "anwendungVon": {
+      "title": "Anwendungvon",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bemerkung": {
+      "description": "Freitext",
+      "title": "Bemerkung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bezeichnung": {
+      "description": "Name des Tarifs",
+      "title": "Bezeichnung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "energiemix": {
+      "description": "Der Energiemix, der für diesen Tarif gilt",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Energiemix.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "kundentypen": {
+      "description": "Kundentypen für den der Tarif gilt, z.B. Privatkunden",
+      "title": "Kundentypen",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../enum/Kundentyp.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "registeranzahl": {
+      "description": "Die Art des Tarifes, z.B. Eintarif oder Mehrtarif",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Registeranzahl.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sparte": {
+      "description": "Strom oder Gas, etc.",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Sparte.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tarifmerkmale": {
+      "description": "Weitere Merkmale des Tarifs, z.B. Festpreis oder Vorkasse",
+      "title": "Tarifmerkmale",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../enum/Tarifmerkmal.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tariftyp": {
+      "description": "Hinweis auf den Tariftyp, z.B. Grundversorgung oder Sondertarif",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Tariftyp.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragskonditionen": {
+      "description": "Mindestlaufzeiten und Kündigungsfristen zusammengefasst",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Vertragskonditionen.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "website": {
+      "description": "Internetseite auf dem der Tarif zu finden ist",
+      "title": "Website",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zeitlicheGueltigkeit": {
+      "description": "Angabe, in welchem Zeitraum der Tarif gültig ist",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Zeitraum.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

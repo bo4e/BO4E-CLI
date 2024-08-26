@@ -1,0 +1,179 @@
+{
+  "description": "In dieser Komponente sind die Berechnungsparameter für die Ermittlung der Tarifkosten zusammengefasst.\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/Tarifberechnungsparameter.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Tarifberechnungsparameter JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Tarifberechnungsparameter.json>`_",
+  "title": "Tarifberechnungsparameter",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "berechnungsmethode": {
+      "description": "Gibt an, wie die Einzelpreise des Tarifes zu verarbeiten sind",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Tarifkalkulationsmethode.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "hoechstpreisHT": {
+      "description": "Höchstpreis für den Durchschnitts-Arbeitspreis HT",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Preis.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "hoechstpreisNT": {
+      "description": "Höchstpreis für den Durchschnitts-Arbeitspreis NT",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Preis.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istMesspreisInGrundpreisEnthalten": {
+      "description": "True, falls der Messpreis im Grundpreis (GP) enthalten ist",
+      "title": "Istmesspreisingrundpreisenthalten",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istMesspreisZuBeruecksichtigen": {
+      "description": "True, falls bei der Bildung des Durchschnittspreises für die Höchst- und Mindestpreisbetrachtung der Messpreis mit\nberücksichtigt wird",
+      "title": "Istmesspreiszuberuecksichtigen",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "kwInklusive": {
+      "description": "Im Preis bereits eingeschlossene Leistung (für Gas)",
+      "title": "Kwinklusive",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "kwWeitereMengen": {
+      "description": "Intervall, indem die über \"kwInklusive\" hinaus abgenommene Leistung kostenpflichtig wird (z.B. je 5 kW 20 EURO)",
+      "title": "Kwweiteremengen",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "messpreistyp": {
+      "description": "Typ des Messpreises",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Messpreistyp.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "mindestpreis": {
+      "description": "Mindestpreis für den Durchschnitts-Arbeitspreis",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Preis.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzpreise": {
+      "description": "Liste mit zusätzlichen Preisen, beispielsweise Messpreise und/oder Leistungspreise",
+      "title": "Zusatzpreise",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "Tarifpreis.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

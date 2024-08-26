@@ -1,0 +1,250 @@
+{
+  "description": "Object containing information about a technische Ressource\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/bo/TechnischeRessource.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `TechnischeRessource JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/TechnischeRessource.json>`_",
+  "title": "TechnischeRessource",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Hier können IDs anderer Systeme hinterlegt werden (z.B. eine SAP-GP-Nummer oder eine GUID)",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_typ": {
+      "description": "Identifikationsnummer einer technischen Ressource",
+      "default": "TECHNISCHERESSOURCE",
+      "anyOf": [
+        {
+          "$ref": "../enum/Typ.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "emobilitaetsart": {
+      "description": "Art der E-Mobilität",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/EMobilitaetsart.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "erzeugungsart": {
+      "description": "Art der Erzeugung der Energie",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Erzeugungsart.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lokationsbuendelObjektcode": {
+      "description": "Lokationsbuendel Code, der die Funktion dieses BOs an der Lokationsbuendelstruktur beschreibt.",
+      "title": "Lokationsbuendelobjektcode",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lokationszuordnungen": {
+      "description": "Lokationszuordnung, um bspw. die zugehörigen Messlokationen anzugeben",
+      "title": "Lokationszuordnungen",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "Lokationszuordnung.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nennleistungabgabe": {
+      "description": "Nennleistung (Abgabe)",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nennleistungaufnahme": {
+      "description": "Nennleistung (Aufnahme)",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "speicherart": {
+      "description": "Art des Speichers",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Speicherart.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "speicherkapazitaet": {
+      "description": "Speicherkapazität",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "technischeRessourceId": {
+      "description": "Identifikationsnummer einer technischen Ressource",
+      "title": "Technischeressourceid",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "technischeRessourceNutzung": {
+      "description": "Art und Nutzung der technischen Ressource",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/TechnischeRessourceNutzung.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "technischeRessourceVerbrauchsart": {
+      "description": "Verbrauchsart der technischen Ressource",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/TechnischeRessourceVerbrauchsart.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vorgelagerteMesslokationId": {
+      "description": "Vorgelagerte Messlokation ID",
+      "title": "Vorgelagertemesslokationid",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "waermenutzung": {
+      "description": "Wärmenutzung",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Waermenutzung.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zugeordneteMarktlokationId": {
+      "description": "Referenz auf die der technischen Ressource zugeordneten Marktlokation",
+      "title": "Zugeordnetemarktlokationid",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zugeordneteSteuerbareRessourceId": {
+      "description": "Referenz auf die der technischen Ressource zugeordneten Steuerbaren Ressource",
+      "title": "Zugeordnetesteuerbareressourceid",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

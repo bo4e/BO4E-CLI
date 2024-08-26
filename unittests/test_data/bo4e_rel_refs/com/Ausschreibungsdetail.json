@@ -1,0 +1,237 @@
+{
+  "description": "Die Komponente Ausschreibungsdetail wird verwendet um die Informationen zu einer Abnahmestelle innerhalb eines\nAusschreibungsloses abzubilden.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/Ausschreibungsdetail.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Ausschreibungsdetail JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Ausschreibungsdetail.json>`_",
+  "title": "Ausschreibungsdetail",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istLastgangVorhanden": {
+      "description": "Zeigt an, ob es zu der Marktlokation einen Lastgang gibt.\nFalls ja, kann dieser abgerufen werden und daraus die Verbrauchswerte ermittelt werden",
+      "title": "Istlastgangvorhanden",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "kunde": {
+      "description": "Bezeichnung des Kunden, der die Marktlokation nutzt",
+      "title": "Kunde",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lieferzeitraum": {
+      "description": "Angefragter Zeitraum für die ausgeschriebene Belieferung",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Zeitraum.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "marktlokationsId": {
+      "description": "Identifikation einer ausgeschriebenen Marktlokation",
+      "title": "Marktlokationsid",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "marktlokationsadresse": {
+      "description": "Die Adresse an der die Marktlokation sich befindet",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Adresse.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "marktlokationsbezeichnung": {
+      "description": "Bezeichnung für die Lokation, z.B. 'Zentraler Einkauf, Hamburg'",
+      "title": "Marktlokationsbezeichnung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "netzbetreiber": {
+      "description": "Bezeichnung des zuständigen Netzbetreibers, z.B. 'Stromnetz Hamburg GmbH'",
+      "title": "Netzbetreiber",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "netzebeneLieferung": {
+      "description": "In der angegebenen Netzebene wird die Marktlokation versorgt, z.B. MSP für Mittelspannung",
+      "title": "Netzebenelieferung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "netzebeneMessung": {
+      "description": "In der angegebenen Netzebene wird die Lokation gemessen, z.B. NSP für Niederspannung",
+      "title": "Netzebenemessung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "prognoseArbeitLieferzeitraum": {
+      "description": "Ein Prognosewert für die Arbeit innerhalb des angefragten Lieferzeitraums der ausgeschriebenen Lokation",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "prognoseJahresarbeit": {
+      "description": "Prognosewert für die Jahresarbeit der ausgeschriebenen Lokation",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "prognoseLeistung": {
+      "description": "Prognosewert für die abgenommene maximale Leistung der ausgeschriebenen Lokation",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Menge.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rechnungsadresse": {
+      "description": "Die (evtl. abweichende) Rechnungsadresse",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Adresse.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zaehlernummer": {
+      "description": "Die Bezeichnung des Zählers an der Marktlokation",
+      "title": "Zaehlernummer",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zaehlertechnik": {
+      "description": "Spezifikation, um welche Zählertechnik es sich im vorliegenden Fall handelt, z.B. Leistungsmessung",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Zaehlertyp.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}
