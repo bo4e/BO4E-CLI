@@ -82,6 +82,9 @@ class Version(BaseModel):
             return str(self) == other
         return NotImplemented
 
+    def __ne__(self, other: object) -> bool:
+        return not self.__eq__(other)
+
 
 class SchemaMeta(BaseModel):
     """
