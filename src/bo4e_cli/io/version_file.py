@@ -14,8 +14,8 @@ def create_version_file(output_dir: Path, version: Version) -> None:
     (output_dir / ".version").write_text(str(version), encoding="utf-8")
 
 
-def read_version_file(output_dir: Path) -> Version:
+def read_version_file(input_dir: Path) -> Version:
     """
     Read the version file.
     """
-    return Version.from_str((output_dir / ".version").read_text(encoding="utf-8").strip())
+    return Version.from_str((input_dir / ".version").read_text(encoding="utf-8").strip())

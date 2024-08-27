@@ -17,6 +17,7 @@ from github.Repository import Repository
 from rich import print
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
+from bo4e_cli.io.progress import Routine, track_single
 from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
 
 OWNER = "bo4e"
@@ -112,8 +113,11 @@ async def download_schemas(
     Download all schemas. Also prints some output to track the progress.
     A callback can be provided to process the schemas after downloading (to use the power of async).
     """
-    print(f"Querying GitHub tree for version [bold #8cc04d]{version}[/]")
-    schemas = get_schemas_meta_from_gh(version, token)
+    schemas = track_single(
+        Routine(get_schemas_meta_from_gh, version, token),
+        description=f"Querying GitHub tree",
+        finish_description=lambda result: f"Queried GitHub tree. Found [bold #8cc04d]{len(result)}[/] schemas.",
+    )
     progress = Progress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
