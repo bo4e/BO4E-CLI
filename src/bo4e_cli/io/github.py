@@ -146,6 +146,6 @@ async def download_schemas(
 
             tasks = {download_and_save(schema) for schema in schemas}
             await asyncio.gather(*tasks)
-            await asyncio.sleep(1)
+            await asyncio.sleep(1)  # This somehow prevents errors from httpx occurring... sometimes
 
     return schemas

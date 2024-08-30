@@ -54,6 +54,12 @@ class Routine(Generic[P, T]):
 
 
 class ThreadWithReturnValue(threading.Thread, Generic[P, T]):
+    """
+    Subclass to override the run method and store the return value of the target function.
+    The return value can be retrieved by calling get_return_value.
+    Note: The threading.Thread class does not save this return value anywhere.
+    """
+
     UNSET = object()
 
     def __init__(
@@ -64,19 +70,32 @@ class ThreadWithReturnValue(threading.Thread, Generic[P, T]):
     ) -> None:
         super().__init__(group=group, target=target, name=name)
         self._return: T | object = self.UNSET
+        self._exception: Exception | object = self.UNSET
         if TYPE_CHECKING:
             # This is already done in the super class, but mypy does not recognize it
             self._target: Routine[P, T] = target
 
     def run(self):
+        """Override the run method to store the return value of the target function."""
         if self._target is not None:
-            self._return = self._target()
+            try:
+                self._return = self._target()
+            except Exception as e:
+                self._exception = e
 
     def get_return_value(self) -> T:
+        """
+        Get the return value of the target function.
+        Raises a RuntimeError if the thread is still running.
+        If the function raised an exception, the exception will be reraised by this method.
+        """
         if self.is_alive():
             raise RuntimeError("Thread is still running")
-        assert self._return is not self.UNSET
-        return self._return
+        if self._exception is self.UNSET:
+            assert self._return is not self.UNSET
+            return self._return
+        assert self._return is self.UNSET
+        raise self._exception
 
 
 def track_single(
