@@ -2,6 +2,7 @@
 Contains parser functions for custom types in the CLI.
 """
 
+# pylint: disable=redefined-builtin
 from rich import print
 
 from bo4e_cli.io.console.track import Routine, track_single

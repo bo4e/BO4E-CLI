@@ -3,12 +3,12 @@ This module contains the models for the GitHub API queries.
 """
 
 import re
+from collections.abc import Hashable
 from pathlib import Path
 from typing import (
     AbstractSet,
     Annotated,
     Callable,
-    Hashable,
     ItemsView,
     Iterable,
     Iterator,
@@ -161,7 +161,7 @@ class SchemaMeta(BaseModel):
         return f"SchemaMeta(name={self.name}, module={self.module}, src={self.src})"
 
 
-T = TypeVar("T", bound=Hashable, covariant=True)
+T_co = TypeVar("T_co", bound=Hashable, covariant=True)
 
 
 class Schemas(BaseModel):
@@ -205,6 +205,7 @@ class Schemas(BaseModel):
         This method will be called whenever schemas are added or removed.
         """
         for index in self._search_indices:
+            # pylint: disable=protected-access
             index._schemas_updated = True
 
     def equals(self, other: "Schemas", equality_type: Literal["meta", "structure"] = "meta") -> bool:
@@ -260,13 +261,13 @@ class Schemas(BaseModel):
     def __and__(self, other: AbstractSet[object]) -> Set[SchemaMeta]:
         return self.schemas.__and__(other)
 
-    def __or__(self, other: AbstractSet[T]) -> Set[SchemaMeta | T]:
+    def __or__(self, other: AbstractSet[T_co]) -> Set[SchemaMeta | T_co]:
         return self.schemas.__or__(other)
 
     def __sub__(self, other: AbstractSet[SchemaMeta | None]) -> Set[SchemaMeta]:
         return self.schemas.__sub__(other)
 
-    def __xor__(self, other: AbstractSet[T]) -> Set[SchemaMeta | T]:
+    def __xor__(self, other: AbstractSet[T_co]) -> Set[SchemaMeta | T_co]:
         return self.schemas.__xor__(other)
 
     def isdisjoint(self, other: Iterable[object]) -> bool:
@@ -296,7 +297,7 @@ class Schemas(BaseModel):
             self._flag_search_indices()
 
 
-class SearchIndex(Mapping[T, SchemaMeta]):
+class SearchIndex(Mapping[T_co, SchemaMeta]):
     """
     This class is a (read-only) mapping view of an arbitrary key type T to schema metadata objects.
     This view will always reflect the current state of the Schemas collection.
@@ -304,11 +305,11 @@ class SearchIndex(Mapping[T, SchemaMeta]):
     For more understanding see e.g. https://stackoverflow.com/a/62863366/21303427
     """
 
-    def __init__(self, schemas: Schemas, key_func: Callable[[SchemaMeta], T]):
+    def __init__(self, schemas: Schemas, key_func: Callable[[SchemaMeta], T_co]):
         self._schemas = schemas
         self._schemas_updated = False
         self._key_func = key_func
-        self._index: dict[T, SchemaMeta]
+        self._index: dict[T_co, SchemaMeta]
         self._build_index()
 
     def _build_index(self) -> None:
@@ -327,11 +328,11 @@ class SearchIndex(Mapping[T, SchemaMeta]):
             self._schemas_updated = False
 
     # ****************** Functions to mimic a mapping ******************
-    def __getitem__(self, item: T) -> SchemaMeta:
+    def __getitem__(self, item: T_co) -> SchemaMeta:
         self._update_index_if_flagged()
         return self._index.__getitem__(item)
 
-    def __iter__(self) -> Iterator[T]:
+    def __iter__(self) -> Iterator[T_co]:
         self._update_index_if_flagged()
         return self._index.__iter__()
 
@@ -342,12 +343,12 @@ class SearchIndex(Mapping[T, SchemaMeta]):
         self._update_index_if_flagged()
         return self._index.__contains__(other)
 
-    def keys(self) -> KeysView[T]:
+    def keys(self) -> KeysView[T_co]:
         """Return a view of the keys of the mapping."""
         self._update_index_if_flagged()
         return self._index.keys()
 
-    def items(self) -> ItemsView[T, SchemaMeta]:
+    def items(self) -> ItemsView[T_co, SchemaMeta]:
         """Return a view of the items of the mapping."""
         self._update_index_if_flagged()
         return self._index.items()
@@ -356,7 +357,7 @@ class SearchIndex(Mapping[T, SchemaMeta]):
         """Return a view of the values of the mapping."""
         return self._schemas
 
-    def get(self, key: T, default: SchemaMeta | None = None) -> SchemaMeta | None:
+    def get(self, key: T_co, default: SchemaMeta | None = None) -> SchemaMeta | None:
         """Return the value for key if key is in the dictionary, else default."""
         self._update_index_if_flagged()
         return self._index.get(key, default)

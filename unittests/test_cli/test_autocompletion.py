@@ -1,9 +1,7 @@
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 import typer
-from typer.testing import CliRunner
 
 from bo4e_cli.commands.autocompletion import version_autocompletion
 

@@ -39,7 +39,7 @@ class TestSchemaMeta:
             module=("bo", "Angebot"),
             src=path,
         )
-        with open(path, "r") as file:
+        with open(path, "r", encoding="utf-8") as file:
             content = file.read()
             schema_meta.set_schema_text(content)
 

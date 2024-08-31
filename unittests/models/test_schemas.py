@@ -11,7 +11,7 @@ TEST_DIR = Path(__file__).parents[1] / "test_data/bo4e_original"
 def get_disjoint_subsets(schemas: Schemas, no_subsets: int = 2) -> tuple[set[SchemaMeta], ...]:
     subsets = []
     iterator = iter(schemas.schemas)
-    for i in range(no_subsets):
+    for _ in range(no_subsets):
         subsets.append(set(take(len(schemas) // no_subsets, iterator)))
     subsets[-1].update(iterator)
     return tuple(subsets)
@@ -29,6 +29,7 @@ class TestSchemas:
         schemas = read_schemas(TEST_DIR)
         angebot_meta = one(schema for schema in schemas.schemas if schema.name == "Angebot")
         dummy_meta = SchemaMeta(name="dummy", module=("dummy",), src="dummy")
+        # pylint: disable=unbalanced-tuple-unpacking
         subset1, subset2, subset3 = get_disjoint_subsets(schemas, 3)
 
         assert angebot_meta in schemas

@@ -49,6 +49,7 @@ async def track_single_async(  # pragma: no cover
 P = ParamSpec("P")
 
 
+# pylint: disable=too-few-public-methods
 class Routine(Generic[P, T]):
     """
     A class to wrap a function and arguments and keyword arguments for later execution.
@@ -91,7 +92,7 @@ class ThreadWithReturnValue(threading.Thread, Generic[P, T]):
         if self._target is not None:
             try:
                 self._return = self._target()
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 self._exception = e
 
     def get_return_value(self) -> T:

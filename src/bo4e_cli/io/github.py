@@ -3,7 +3,6 @@ This module provides functions to interact with the GitHub API.
 """
 
 import asyncio
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Iterable
@@ -117,7 +116,7 @@ async def download_schemas(
     """
     schemas = track_single(
         Routine(get_schemas_meta_from_gh, version, token),
-        description=f"Querying GitHub tree",
+        description="Querying GitHub tree",
         finish_description=lambda result: f"Queried GitHub tree. Found [bold #8cc04d]{len(result)}[/] schemas.",
     )
     progress = Progress(

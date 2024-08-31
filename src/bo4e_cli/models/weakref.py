@@ -31,9 +31,16 @@ class WeakCollection(Collection[T]):
         return len(self._elements)
 
     def add(self, item: T) -> None:
+        """
+        Add an item to the collection.
+        If the item has no hard references anywhere it will get garbage collected and removed from this collection.
+        """
         self._elements.append(weakref.ref(item, self._remove_weakref))
 
     def remove(self, item: T) -> None:
+        """
+        Remove an item from the collection.
+        """
         self._elements.remove(weakref.ref(item))
 
     def _remove_weakref(self, item: weakref.ReferenceType[T]) -> None:
