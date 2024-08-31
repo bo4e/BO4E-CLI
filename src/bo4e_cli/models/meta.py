@@ -54,6 +54,7 @@ class Version(BaseModel):
     def from_str(cls, version: str) -> "Version":
         """
         Parse a version string into a Version object e.g. 'v202401.0.1-rc8+dev12asdf34' or 'v202401.0.1'.
+        Raises a ValueError if the version string is invalid.
         """
         match = REGEX_VERSION.match(version)
         if match is None:

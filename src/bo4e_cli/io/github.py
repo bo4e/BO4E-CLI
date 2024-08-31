@@ -6,7 +6,7 @@ import asyncio
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 import httpx
 from github import Github
@@ -43,14 +43,17 @@ def resolve_latest_version(token: str | None) -> Version:
     return Version.from_str(latest_release)
 
 
-def get_versions(token: str | None) -> list[Version]:
+def get_versions(token: str | None) -> Iterable[Version]:
     """
     Get all BO4E versions matching the new versioning schema (e.g. v202401.0.1-rc8) from the github api.
     """
-    regex = re.compile(r"^v\d{6}\.\d+\.\d+(?:-rc\d*)?$")
     repo = get_source_repo(token)
     releases = repo.get_releases()
-    return [Version.from_str(release.title) for release in releases if regex.fullmatch(release.title) is not None]
+    for release in releases:
+        try:
+            yield Version.from_str(release.title)
+        except ValueError:
+            pass
 
 
 def get_schemas_meta_from_gh(version: Version, token: str | None) -> Schemas:
