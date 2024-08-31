@@ -20,7 +20,7 @@ async def track_single_async(  # pragma: no cover
     *,
     description: str = "Processing",
     finish_description: Callable[[T], str] | None = None,
-    appendix_els: tuple[str] = (" .", " ..", " ..."),
+    appendix_els: tuple[str, ...] = (" .", " ..", " ..."),
     frequency: float = 3,
 ) -> T:
     """
@@ -32,7 +32,7 @@ async def track_single_async(  # pragma: no cover
         task_id = progress.add_task(description)
         async_task = asyncio.create_task(coro)
 
-        async def watch_awaitable():
+        async def watch_awaitable() -> None:
             description_iter = cycle([f"{description}{appendix}" for appendix in appendix_els])
             while not async_task.done():
                 await asyncio.sleep(period_time)
@@ -65,14 +65,21 @@ class Routine(Generic[P, T]):
         return self._function(*self._args, **self._kwargs)
 
 
+class UnsetType:
+    """A class to represent an unset value."""
+
+    pass
+
+
+UNSET = UnsetType()
+
+
 class ThreadWithReturnValue(threading.Thread, Generic[P, T]):
     """
     Subclass to override the run method and store the return value of the target function.
     The return value can be retrieved by calling get_return_value.
     Note: The threading.Thread class does not save this return value anywhere.
     """
-
-    UNSET = object()
 
     def __init__(
         self,
@@ -81,13 +88,13 @@ class ThreadWithReturnValue(threading.Thread, Generic[P, T]):
         name: str | None = None,
     ) -> None:
         super().__init__(group=group, target=target, name=name)
-        self._return: T | object = self.UNSET
-        self._exception: Exception | object = self.UNSET
+        self._return: T | UnsetType = UNSET
+        self._exception: Exception | UnsetType = UNSET
         if TYPE_CHECKING:  # pragma: no cover
             # This is already set in the super class, but mypy does not recognize it
             self._target: Routine[P, T] = target
 
-    def run(self):
+    def run(self) -> None:
         """Override the run method to store the return value of the target function."""
         if self._target is not None:
             try:
@@ -103,10 +110,10 @@ class ThreadWithReturnValue(threading.Thread, Generic[P, T]):
         """
         if self.is_alive():
             raise RuntimeError("Thread is still running")
-        if self._exception is self.UNSET:
-            assert self._return is not self.UNSET
+        if isinstance(self._exception, UnsetType):
+            assert not isinstance(self._return, UnsetType)
             return self._return
-        assert self._return is self.UNSET
+        assert not isinstance(self._exception, UnsetType)
         raise self._exception
 
 
@@ -115,7 +122,7 @@ def track_single(
     *,
     description: str = "Processing",
     finish_description: Callable[[T], str] | None = None,
-    appendix_els: tuple[str] = (" .", " ..", " ..."),
+    appendix_els: tuple[str, ...] = (" .", " ..", " ..."),
     frequency: float = 3,
 ) -> T:
     """
@@ -128,7 +135,7 @@ def track_single(
         task_id = progress.add_task(description)
         thread = ThreadWithReturnValue[P, T](target=func)
 
-        def watch_thread():
+        def watch_thread() -> None:
             description_iter = cycle([f"{description}{appendix}" for appendix in appendix_els])
             while thread.is_alive():
                 time.sleep(period_time)

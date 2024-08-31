@@ -4,7 +4,7 @@ This module contains the command to pull the BO4E-schemas from the BO4E-Schemas 
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import typer
 
@@ -31,14 +31,14 @@ def pull(
         ),
     ],
     version_tag: Annotated[
-        Version,
+        str,
         typer.Option(
             "--version-tag",
             "-t",
             help="The BO4E-version tag to pull the data for. "
+            "If none is provided, the latest version will be queried from GitHub. "
             "They will be pulled from https://github.com/bo4e/BO4E-Schemas.",
             autocompletion=version_autocompletion,
-            parser=parse_version,
         ),
     ] = "latest",
     update_refs: Annotated[
@@ -68,10 +68,11 @@ def pull(
     """
     if token is not None:
         print("Using GitHub Access Token for authentication.")
+    version = parse_version(version_tag)
     if clear_output:
         clear_dir_if_needed(output_dir)
 
-    schemas = asyncio.run(download_schemas(version=version_tag, token=token))
+    schemas = asyncio.run(download_schemas(version=version, token=token))
     if update_refs:
         update_references_all_schemas(schemas)
     write_schemas(schemas, output_dir)

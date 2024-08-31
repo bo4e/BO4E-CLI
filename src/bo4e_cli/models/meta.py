@@ -9,6 +9,7 @@ from typing import (
     AbstractSet,
     Annotated,
     Callable,
+    Generic,
     ItemsView,
     Iterable,
     Iterator,
@@ -18,11 +19,12 @@ from typing import (
     Set,
     TypeVar,
     ValuesView,
+    overload,
 )
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, computed_field
 
-from bo4e_cli.models.schema import SchemaRootType
+from bo4e_cli.models.schema import SchemaRootObject, SchemaRootStrEnum, SchemaRootType
 from bo4e_cli.models.weakref import WeakCollection
 
 REGEX_VERSION = re.compile(
@@ -59,7 +61,7 @@ class Version(BaseModel):
         match = REGEX_VERSION.match(version)
         if match is None:
             raise ValueError(f"Invalid version: {version}")
-        return cls(**match.groupdict())
+        return cls.model_validate(match.groupdict())
 
     def is_release_candidate(self) -> bool:
         """Check if the version is a release candidate."""
@@ -104,7 +106,7 @@ class SchemaMeta(BaseModel):
 
     _schema: SchemaRootType | str | None = None
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def relative_path(self) -> Path:
         """E.g. 'bo/Marktlokation.json' or 'ZusatzAttribut.json'"""
@@ -144,13 +146,14 @@ class SchemaMeta(BaseModel):
         """
         if self._schema is None:
             raise ValueError("The schema has not been loaded yet. Call `set_schema_parsed` or `set_schema_text` first.")
-        if isinstance(self._schema, SchemaRootType):
+        if isinstance(self._schema, (SchemaRootObject, SchemaRootStrEnum)):
             return self._schema.model_dump_json(indent=2, exclude_unset=True, by_alias=True)
+        assert isinstance(self._schema, str)
         return self._schema
 
     def set_schema_text(self, value: str) -> None:
         """Sets the schema as a JSON string."""
-        if isinstance(self._schema, SchemaRootType):
+        if isinstance(self._schema, (SchemaRootObject, SchemaRootStrEnum)):
             raise ValueError(
                 "The schema has already been parsed. If you are sure you want to delete possible changes "
                 "to the parsed schema, call `del_schema_parsed` first."
@@ -173,7 +176,7 @@ class Schemas(BaseModel):
     The search indices are read-only mappings (views) on the underlying schemas.
     """
 
-    schemas: Annotated[set[SchemaMeta], Field(default_factory=set)]
+    schemas: set[SchemaMeta] = Field(default_factory=set)
     version: Version
 
     _search_indices: WeakCollection["SearchIndex[Hashable]"] = WeakCollection()
@@ -232,7 +235,8 @@ class Schemas(BaseModel):
     def __contains__(self, item: object) -> bool:
         return self.schemas.__contains__(item)
 
-    def __iter__(self) -> Iterator[SchemaMeta]:
+    def __iter__(self) -> Iterator[SchemaMeta]:  # type: ignore[override]
+        # BaseModel already defines an __iter__ method but f*ck it, I don't need it.
         return self.schemas.__iter__()
 
     def __len__(self) -> int:
@@ -297,7 +301,10 @@ class Schemas(BaseModel):
             self._flag_search_indices()
 
 
-class SearchIndex(Mapping[T_co, SchemaMeta]):
+class SearchIndex(Generic[T_co]):
+    # Note: Mapping is invariant in key-type due to problems with the __getitem__ method.
+    # See https://github.com/python/typing/issues/445 and https://github.com/python/typing/pull/273.
+    # But in this case it would actually be safe to use a covariant type variable as key type.
     """
     This class is a (read-only) mapping view of an arbitrary key type T to schema metadata objects.
     This view will always reflect the current state of the Schemas collection.
@@ -328,7 +335,10 @@ class SearchIndex(Mapping[T_co, SchemaMeta]):
             self._schemas_updated = False
 
     # ****************** Functions to mimic a mapping ******************
-    def __getitem__(self, item: T_co) -> SchemaMeta:
+    def __getitem__(self, item: T_co) -> SchemaMeta:  # type: ignore[misc]
+        # Cannot use a covariant type variable as a parameter
+        # This is actually not true if the object is read-only.
+        # Since there is no way of telling mypy that this object is read-only, I have to ignore this error.
         self._update_index_if_flagged()
         return self._index.__getitem__(item)
 
@@ -355,9 +365,17 @@ class SearchIndex(Mapping[T_co, SchemaMeta]):
 
     def values(self) -> ValuesView[SchemaMeta]:
         """Return a view of the values of the mapping."""
-        return self._schemas
+        return self._schemas  # type: ignore[return-value]
 
-    def get(self, key: T_co, default: SchemaMeta | None = None) -> SchemaMeta | None:
+    @overload
+    def get(self, key: T_co, /) -> SchemaMeta | None:
+        ...  # type: ignore[misc]
+
+    @overload
+    def get(self, key: T_co, /, default: SchemaMeta) -> SchemaMeta:
+        ...  # type: ignore[misc]
+
+    def get(self, key: T_co, /, default: SchemaMeta | None = None) -> SchemaMeta | None:  # type: ignore[misc]
         """Return the value for key if key is in the dictionary, else default."""
         self._update_index_if_flagged()
         return self._index.get(key, default)

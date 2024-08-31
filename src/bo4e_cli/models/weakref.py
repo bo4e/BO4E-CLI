@@ -25,7 +25,11 @@ class WeakCollection(Collection[T]):
         return any(ref() == item for ref in self._elements)
 
     def __iter__(self) -> Iterator[T]:
-        return (ref() for ref in self._elements)
+        for ref in self._elements:
+            item = ref()
+            if item is None:
+                raise RuntimeError("Weak reference is dead but was not removed from this collection.")
+            yield item
 
     def __len__(self) -> int:
         return len(self._elements)

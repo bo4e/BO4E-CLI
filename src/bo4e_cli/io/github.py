@@ -81,7 +81,7 @@ def get_schemas_meta_from_gh(version: Version, token: str | None) -> Schemas:
                 schema = SchemaMeta(
                     name=relative_path.name,
                     module=relative_path.parts,
-                    src=file_or_dir.download_url,
+                    src=file_or_dir.download_url,  # type: ignore[arg-type]
                 )
                 schemas.add(schema)
     return schemas
