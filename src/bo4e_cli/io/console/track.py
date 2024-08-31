@@ -1,3 +1,7 @@
+"""
+Contains functions to animate console output while idling a single task.
+"""
+
 import asyncio
 import threading
 import time
@@ -9,7 +13,9 @@ from rich.progress import Progress, TextColumn
 T = TypeVar("T")
 
 
-async def track_single_async(
+async def track_single_async(  # pragma: no cover
+    # This function probably won't ever be used in this project, but I wanted to keep this snippet as a reference
+    # for other projects here. It is therefore not covered by tests.
     coro: Coroutine[None, None, T],
     *,
     description: str = "Processing",
@@ -29,8 +35,8 @@ async def track_single_async(
         async def watch_awaitable():
             description_iter = cycle([f"{description}{appendix}" for appendix in appendix_els])
             while not async_task.done():
-                progress.update(task_id, description=next(description_iter))
                 await asyncio.sleep(period_time)
+                progress.update(task_id, description=next(description_iter))
 
         result = (await asyncio.gather(async_task, watch_awaitable()))[0]
         if finish_description is not None:
@@ -44,6 +50,11 @@ P = ParamSpec("P")
 
 
 class Routine(Generic[P, T]):
+    """
+    A class to wrap a function and arguments and keyword arguments for later execution.
+    This design decision was made to avoid naming conflicts with the keyword arguments of the `track_single` function.
+    """
+
     def __init__(self, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs):
         self._function = function
         self._args = args
@@ -71,8 +82,8 @@ class ThreadWithReturnValue(threading.Thread, Generic[P, T]):
         super().__init__(group=group, target=target, name=name)
         self._return: T | object = self.UNSET
         self._exception: Exception | object = self.UNSET
-        if TYPE_CHECKING:
-            # This is already done in the super class, but mypy does not recognize it
+        if TYPE_CHECKING:  # pragma: no cover
+            # This is already set in the super class, but mypy does not recognize it
             self._target: Routine[P, T] = target
 
     def run(self):
@@ -119,8 +130,8 @@ def track_single(
         def watch_thread():
             description_iter = cycle([f"{description}{appendix}" for appendix in appendix_els])
             while thread.is_alive():
-                progress.update(task_id, description=next(description_iter))
                 time.sleep(period_time)
+                progress.update(task_id, description=next(description_iter))
             thread.join()
 
         thread_watcher = threading.Thread(target=watch_thread)

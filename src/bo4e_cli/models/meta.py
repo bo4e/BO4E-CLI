@@ -13,6 +13,7 @@ from typing import (
     Iterable,
     Iterator,
     KeysView,
+    Literal,
     Mapping,
     Set,
     TypeVar,
@@ -204,6 +205,26 @@ class Schemas(BaseModel):
         """
         for index in self._search_indices:
             index._schemas_updated = True
+
+    def equals(self, other: "Schemas", equality_type: Literal["meta", "structure"] = "meta") -> bool:
+        """
+        Check if these schemas are equal to the other schemas.
+        The equality type can be either 'meta' or 'structure'.
+        'meta' means that the schemas are equal if they have the same metadata (except the source path).
+        'structure' means that the schemas are equal if they have the same metadata and the
+        same structure (see `get_schema_parsed()`).
+        """
+        if self.version != other.version:
+            return False
+        for schema_self, schema_other in zip(
+            sorted(self.schemas, key=lambda schema: schema.name), sorted(other.schemas, key=lambda schema: schema.name)
+        ):
+            if schema_self.name != schema_other.name or schema_self.module != schema_other.module:
+                return False
+            if equality_type == "structure":
+                if schema_self.get_schema_parsed() != schema_other.get_schema_parsed():
+                    return False
+        return True
 
     # ****************** Functions to mimic a set ******************
     def __contains__(self, item: object) -> bool:

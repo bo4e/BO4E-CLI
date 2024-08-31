@@ -14,10 +14,9 @@ from github.Auth import Token
 from github.Repository import Repository
 
 # pylint: disable=redefined-builtin
-from rich import print
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from bo4e_cli.io.progress import Routine, track_single
+from bo4e_cli.io.console.track import Routine, track_single
 from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
 
 OWNER = "bo4e"
@@ -30,7 +29,7 @@ def get_source_repo(token: str | None) -> Repository:
     """
     Get the source repository.
     """
-    if token is not None:
+    if token is not None:  # pragma: no cover
         return Github(auth=Token(token)).get_repo(f"{OWNER}/{REPO}")
     return Github().get_repo(f"{OWNER}/{REPO}")
 
@@ -91,7 +90,7 @@ async def download(schema: SchemaMeta, client: httpx.AsyncClient, token: str | N
     Download the schema file.
     Assumes that the schemas 'src' is a URL (an error will be raised otherwise).
     """
-    if token is not None:
+    if token is not None:  # pragma: no cover
         headers = {"Authorization": f"Bearer {token}"}
     else:
         headers = None

@@ -4,8 +4,8 @@ Contains parser functions for custom types in the CLI.
 
 from rich import print
 
+from bo4e_cli.io.console.track import Routine, track_single
 from bo4e_cli.io.github import resolve_latest_version
-from bo4e_cli.io.progress import Routine, track_single
 from bo4e_cli.models.meta import Version
 
 

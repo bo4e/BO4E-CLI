@@ -12,19 +12,20 @@ class Dummy(BaseModel):
 
 class TestWeakrefCollection:
     def test_collection_methods(self):
-        collection = WeakCollection[Dummy]()
+        dummy0_hard_ref = Dummy(a="!")
+        collection = WeakCollection[Dummy]([dummy0_hard_ref])
         dummy1_hard_ref = Dummy(a="Hello")
         dummy2_hard_ref = Dummy(a="World")
         collection.add(dummy1_hard_ref)
-        assert len(collection) == 1
+        assert len(collection) == 2
         assert dummy1_hard_ref in collection
         assert dummy2_hard_ref not in collection
         collection.add(dummy2_hard_ref)
-        assert len(collection) == 2
+        assert len(collection) == 3
         assert dummy2_hard_ref in collection
-        assert set(collection) == {dummy1_hard_ref, dummy2_hard_ref}
+        assert set(collection) == {dummy0_hard_ref, dummy1_hard_ref, dummy2_hard_ref}
         collection.remove(dummy2_hard_ref)
-        assert len(collection) == 1
+        assert len(collection) == 2
         assert dummy2_hard_ref not in collection
         assert dummy1_hard_ref in collection
 

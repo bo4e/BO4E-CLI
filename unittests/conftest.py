@@ -74,9 +74,9 @@ def download_sideeffect(request, version: str, sub_path: str, model: str) -> Res
 def mock_github(respx_mock: respx.MockRouter) -> Iterable[None]:
     version = read_version_file(TEST_DIR)
 
-    Github = Mock()
-    Github.return_value.get_repo.return_value = RepoMock(TEST_DIR, PurePosixPath("src/bo4e_schemas"), str(version))
-    with patch("bo4e_cli.io.github.Github", new=Github):
+    github = Mock()
+    github.return_value.get_repo.return_value = RepoMock(TEST_DIR, PurePosixPath("src/bo4e_schemas"), str(version))
+    with patch("bo4e_cli.io.github.Github", new=github):
         route = respx_mock.get(url__regex=REF_ONLINE_REGEX)
         route.side_effect = download_sideeffect
         get_source_repo.cache_clear()
