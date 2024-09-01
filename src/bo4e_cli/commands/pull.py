@@ -18,6 +18,7 @@ from bo4e_cli.io.cleanse import clear_dir_if_needed
 from bo4e_cli.io.github import download_schemas
 from bo4e_cli.io.schemas import write_schemas
 from bo4e_cli.transform.update_refs import update_references_all_schemas
+from bo4e_cli.utils.github_cli import get_access_token_from_cli_if_installed
 
 
 @app.command()
@@ -67,6 +68,15 @@ def pull(
     """
     if token is not None:
         print("Using GitHub Access Token for authentication.")
+    else:
+        token = get_access_token_from_cli_if_installed()
+        if token is not None:
+            print("Using GitHub Access Token from GitHub CLI for authentication.")
+    if token is None:
+        print(
+            "No GitHub Access Token provided. "
+            "This may lead to rate limiting issues if you run this command multiple times."
+        )
     version = parse_version(version_tag)
     if clear_output:
         clear_dir_if_needed(output_dir)
