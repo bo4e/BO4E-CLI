@@ -2,7 +2,6 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from bo4e_cli.models.meta import Schemas
 from bo4e_cli.models.schema import AnyOf, Decimal, Reference, SchemaRootObject, SchemaRootStrEnum, SchemaRootType
 
 TEST_DIR = Path(__file__).parents[1] / "test_data/bo4e_rel_refs"

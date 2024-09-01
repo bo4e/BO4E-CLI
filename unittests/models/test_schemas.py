@@ -23,11 +23,11 @@ class TestSchemas:
         assert isinstance(schemas, Schemas)
         assert isinstance(schemas.version, Version)
         assert isinstance(schemas.schemas, set)
-        assert all(isinstance(schema, SchemaMeta) for schema in schemas.schemas)
+        assert all(isinstance(schema, SchemaMeta) for schema in schemas)
 
     def test_set_methods(self) -> None:
         schemas = read_schemas(TEST_DIR)
-        angebot_meta = one(schema for schema in schemas.schemas if schema.name == "Angebot")
+        angebot_meta = one(schema for schema in schemas if schema.name == "Angebot")
         dummy_meta = SchemaMeta(name="dummy", module=("dummy",), src="dummy")  # type: ignore[arg-type]
         # pylint: disable=unbalanced-tuple-unpacking
         subset1, subset2, subset3 = get_disjoint_subsets(schemas, 3)

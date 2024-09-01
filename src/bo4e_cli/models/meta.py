@@ -7,7 +7,6 @@ from collections.abc import Hashable
 from pathlib import Path
 from typing import (
     AbstractSet,
-    Annotated,
     Callable,
     Generic,
     ItemsView,
@@ -15,7 +14,6 @@ from typing import (
     Iterator,
     KeysView,
     Literal,
-    Mapping,
     Set,
     TypeVar,
     ValuesView,

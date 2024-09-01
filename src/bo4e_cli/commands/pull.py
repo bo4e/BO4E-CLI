@@ -4,7 +4,7 @@ This module contains the command to pull the BO4E-schemas from the BO4E-Schemas 
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 
 import typer
 
@@ -17,7 +17,6 @@ from bo4e_cli.commands.parser import parse_version
 from bo4e_cli.io.cleanse import clear_dir_if_needed
 from bo4e_cli.io.github import download_schemas
 from bo4e_cli.io.schemas import write_schemas
-from bo4e_cli.models.meta import Version
 from bo4e_cli.transform.update_refs import update_references_all_schemas
 
 

@@ -68,8 +68,6 @@ class Routine(Generic[P, T]):
 class UnsetType:
     """A class to represent an unset value."""
 
-    pass
-
 
 UNSET = UnsetType()
 
