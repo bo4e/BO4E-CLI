@@ -13,7 +13,7 @@ REGEX_GH_TOKEN = re.compile(
 def is_github_cli_installed() -> bool:
     """Check if the GitHub CLI is installed."""
     try:
-        result = subprocess.run(["gh", "--version"], capture_output=True)
+        result = subprocess.run(["gh", "--version"], capture_output=True, check=False)
         return result.returncode == 0
     except FileNotFoundError:
         # The GitHub CLI is not installed or at least not found in the PATH under "gh".
@@ -26,7 +26,9 @@ def get_access_token_from_cli() -> str | None:
     Assumes that the GitHub CLI is installed.
     Returns `None` if no user is logged into the GitHub CLI.
     """
-    result = subprocess.run(["gh", "auth", "token"], capture_output=True)
+    result = subprocess.run(["gh", "auth", "token"], capture_output=True, check=False)
+    if result.returncode != 0:
+        return None
     token = result.stdout.decode().strip()
     if REGEX_GH_TOKEN.fullmatch(token):
         return token
