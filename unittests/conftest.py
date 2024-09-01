@@ -1,10 +1,14 @@
 from pathlib import Path, PurePosixPath
-from typing import Iterable
-from unittest.mock import Mock, patch
+from typing import Iterable, cast
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import respx
-from httpx import Response
+from github.ContentFile import ContentFile
+from github.GitRelease import GitRelease
+from github.GitTree import GitTree
+from github.PaginatedList import PaginatedList
+from httpx import Request, Response
 from more_itertools import take
 
 from bo4e_cli.io.github import OWNER, REPO, get_source_repo
@@ -34,38 +38,52 @@ class RepoMock:
     def _remove_first_slash_if_needed(self, path: PurePosixPath) -> PurePosixPath:
         return PurePosixPath(str(path).lstrip("/"))
 
-    def get_latest_release(self):
-        return Mock(title=self._version)
+    def get_latest_release(self) -> GitRelease:
+        return cast(GitRelease, Mock(spec=GitRelease, title=self._version))
 
-    def get_releases(self):
-        return [
-            Mock(title=version)
-            for version in [self._version, "v0.6.1-rc13", "v200000.0.0", "v202401.0.1-rc3", "v202407.3.1+dev2hb3826gj"]
-        ]
+    def get_releases(self) -> PaginatedList[GitRelease]:
+        mock_list = MagicMock(spec=PaginatedList)
+        mock_list.__iter__.return_value = iter(
+            [
+                Mock(spec=GitRelease, title=version)
+                for version in [
+                    self._version,
+                    "v0.6.1-rc13",
+                    "v200000.0.0",
+                    "v202401.0.1-rc3",
+                    "v202407.3.1+dev2hb3826gj",
+                ]
+            ]
+        )
+        return cast(PaginatedList[GitRelease], mock_list)
 
-    def get_release(self, version):
-        return Mock(target_commitish=str(version))
+    def get_release(self, version: str) -> GitRelease:
+        return cast(GitRelease, Mock(spec=GitRelease, target_commitish=version))
 
-    def get_git_tree(self, target_commitish, recursive):
-        return Mock(tree=[Mock(path=str(path)) for path in self._dirs | self._files])
+    def get_git_tree(self, target_commitish: str, recursive: bool) -> GitTree:
+        return cast(GitTree, Mock(spec=GitTree, tree=[Mock(path=str(path)) for path in self._dirs | self._files]))
 
-    def get_contents(self, path, ref):
+    def get_contents(self, path: str, ref: str) -> list[ContentFile]:
         path_ = self._remove_first_slash_if_needed(PurePosixPath(path))
         contents = []
         for el in self._dirs:
             if el.parent == path_:
-                contents.append(Mock(path=str(el)))
+                contents.append(Mock(spec=ContentFile, path=str(el)))
                 contents[-1].name = el.name
         for el in self._files:
             if el.parent == path_:
                 contents.append(
-                    Mock(path=str(el), download_url=f"https://raw.githubusercontent.com/{OWNER}/{REPO}/{ref}/{el}")
+                    Mock(
+                        spec=ContentFile,
+                        path=str(el),
+                        download_url=f"https://raw.githubusercontent.com/{OWNER}/{REPO}/{ref}/{el}",
+                    )
                 )
                 contents[-1].name = el.name
-        return contents
+        return cast(list[ContentFile], contents)
 
 
-def download_sideeffect(request, version: str, sub_path: str, model: str) -> Response:
+def download_sideeffect(request: Request, version: str, sub_path: str, model: str) -> Response:
     path = TEST_DIR / sub_path / f"{model}.json"
     return Response(200, content=path.read_text())
 

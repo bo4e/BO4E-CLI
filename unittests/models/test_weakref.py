@@ -11,7 +11,7 @@ class Dummy(BaseModel):
 
 
 class TestWeakrefCollection:
-    def test_collection_methods(self):
+    def test_collection_methods(self) -> None:
         dummy0_hard_ref = Dummy(a="!")
         collection = WeakCollection[Dummy]([dummy0_hard_ref])
         dummy1_hard_ref = Dummy(a="Hello")
@@ -29,7 +29,7 @@ class TestWeakrefCollection:
         assert dummy2_hard_ref not in collection
         assert dummy1_hard_ref in collection
 
-    def test_gc_deletion(self):
+    def test_gc_deletion(self) -> None:
         collection = WeakCollection[Dummy]()
         dummy1_hard_ref = Dummy(a="Hello")
         dummy2_hard_ref = Dummy(a="World")

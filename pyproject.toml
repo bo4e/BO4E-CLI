@@ -48,6 +48,12 @@ truethy-bool = true
 [tool.mypy]
 disable_error_code = []
 
+[[tool.mypy.overrides]]
+module = 'unittests.*'
+disable_error_code = ["union-attr"]
+# union-attr will be ignored for type checking the tests because most of them are intended.
+# The tests will fail if there is a problem.
+
 [build-system]
 requires = ["hatchling>=1.8.0", "hatch-vcs", "hatch-fancy-pypi-readme"]
 build-backend = "hatchling.build"

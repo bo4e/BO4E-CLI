@@ -10,29 +10,29 @@ TEST_DIR = Path(__file__).parents[1] / "test_data/bo4e_original"
 
 
 class TestSchemaMeta:
-    def test_online_src(self):
+    def test_online_src(self) -> None:
         url = "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.1.0-rc1/src/bo4e_schemas/bo/Angebot.json"
         schema_meta = SchemaMeta(
             name="Angebot",
             module=("bo", "Angebot"),
-            src=url,
+            src=url,  # type: ignore[arg-type]
         )
         assert str(schema_meta.src_url) == url
         with pytest.raises(ValueError):
             _ = schema_meta.src_path
 
-    def test_local_src(self):
+    def test_local_src(self) -> None:
         path = "src/bo4e_schemas/bo/Angebot.json"
         schema_meta = SchemaMeta(
             name="Angebot",
             module=("bo", "Angebot"),
-            src=path,
+            src=path,  # type: ignore[arg-type]
         )
         assert schema_meta.src_path == Path(path)
         with pytest.raises(ValueError):
             _ = schema_meta.src_url
 
-    def test_schema_parsed(self):
+    def test_schema_parsed(self) -> None:
         path = TEST_DIR / "bo/Angebot.json"
         schema_meta = SchemaMeta(
             name="Angebot",

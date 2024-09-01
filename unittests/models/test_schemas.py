@@ -18,17 +18,17 @@ def get_disjoint_subsets(schemas: Schemas, no_subsets: int = 2) -> tuple[set[Sch
 
 
 class TestSchemas:
-    def test_fields(self):
+    def test_fields(self) -> None:
         schemas = read_schemas(TEST_DIR)
         assert isinstance(schemas, Schemas)
         assert isinstance(schemas.version, Version)
         assert isinstance(schemas.schemas, set)
         assert all(isinstance(schema, SchemaMeta) for schema in schemas.schemas)
 
-    def test_set_methods(self):
+    def test_set_methods(self) -> None:
         schemas = read_schemas(TEST_DIR)
         angebot_meta = one(schema for schema in schemas.schemas if schema.name == "Angebot")
-        dummy_meta = SchemaMeta(name="dummy", module=("dummy",), src="dummy")
+        dummy_meta = SchemaMeta(name="dummy", module=("dummy",), src="dummy")  # type: ignore[arg-type]
         # pylint: disable=unbalanced-tuple-unpacking
         subset1, subset2, subset3 = get_disjoint_subsets(schemas, 3)
 
@@ -56,7 +56,7 @@ class TestSchemas:
         schemas.update(subset1, {dummy_meta})
         assert schemas == subset1 | subset2 | subset3 | {dummy_meta}
 
-    def test_search_index_views(self):
+    def test_search_index_views(self) -> None:
         schemas = read_schemas(TEST_DIR)
         cls_name_view = schemas.search_index_by_cls_name
         angebot_meta = one(schema for schema in schemas if schema.name == "Angebot")

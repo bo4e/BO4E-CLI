@@ -368,12 +368,12 @@ class SearchIndex(Generic[T_co]):
         return self._schemas  # type: ignore[return-value]
 
     @overload
-    def get(self, key: T_co, /) -> SchemaMeta | None:
-        ...  # type: ignore[misc]
+    def get(self, key: T_co, /) -> SchemaMeta | None:  # type: ignore[misc]
+        ...
 
     @overload
-    def get(self, key: T_co, /, default: SchemaMeta) -> SchemaMeta:
-        ...  # type: ignore[misc]
+    def get(self, key: T_co, /, default: SchemaMeta) -> SchemaMeta:  # type: ignore[misc]
+        ...
 
     def get(self, key: T_co, /, default: SchemaMeta | None = None) -> SchemaMeta | None:  # type: ignore[misc]
         """Return the value for key if key is in the dictionary, else default."""
