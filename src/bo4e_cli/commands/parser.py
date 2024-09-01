@@ -10,13 +10,13 @@ from bo4e_cli.io.github import resolve_latest_version
 from bo4e_cli.models.meta import Version
 
 
-def parse_version(version: str) -> Version:
+def parse_version(version: str, token: str | None = None) -> Version:
     """
     Parse a version string.
     """
     if version == "latest":
         latest_version: Version = track_single(
-            Routine(resolve_latest_version, token=None),
+            Routine(resolve_latest_version, token=token),
             description="Querying GitHub for latest version",
             finish_description=lambda result: f"Resolved latest release to [bold #8cc04d]{result}[/]",
         )

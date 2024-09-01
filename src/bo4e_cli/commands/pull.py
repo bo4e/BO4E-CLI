@@ -79,7 +79,7 @@ def pull(
             "No GitHub Access Token provided. "
             "This may lead to rate limiting issues if you run this command multiple times."
         )
-    version = parse_version(version_tag)
+    version = parse_version(version_tag, token=token)
     if clear_output:
         clear_dir_if_needed(output_dir)
 
