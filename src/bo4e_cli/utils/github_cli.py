@@ -8,6 +8,8 @@ import subprocess
 REGEX_GH_TOKEN = re.compile(
     r"^(gh[pousr]_[A-Za-z0-9_]{36,251}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$"
 )
+# pylint: disable=line-too-long
+# Taken from https://gist.github.com/magnetikonline/073afe7909ffdd6f10ef06a00bc3bc88?permalink_comment_id=4577400#gistcomment-4577400
 
 
 def is_github_cli_installed() -> bool:
