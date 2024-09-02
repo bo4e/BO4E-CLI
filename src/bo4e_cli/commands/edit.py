@@ -6,24 +6,42 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
+from rich import print as print_rich
 
 from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.commands.entry import app
+from bo4e_cli.io.cleanse import clear_dir_if_needed
+from bo4e_cli.io.config import get_additional_schemas, load_config
+from bo4e_cli.io.schemas import read_schemas, write_schemas
+from bo4e_cli.models.schema import SchemaRootObject
+from bo4e_cli.transform.add import transform_all_additional_enum_items
+from bo4e_cli.transform.non_nullable import transform_all_non_nullable_fields
 
 
 @app.command()
 def edit(
     *,
     input_dir: Annotated[
-        Path, typer.Option("--input", "-i", help="The directory to read the JSON-schemas from.", show_default=False)
+        Path,
+        typer.Option(
+            "--input", "-i", help="The directory to read the JSON-schemas from.", show_default=False, resolve_path=True
+        ),
     ],
     output_dir: Annotated[
         Path,
-        typer.Option("--output", "-o", help="The directory to save the edited JSON-schemas to.", show_default=False),
+        typer.Option(
+            "--output",
+            "-o",
+            help="The directory to save the edited JSON-schemas to.",
+            show_default=False,
+            resolve_path=True,
+        ),
     ],
-    config: Annotated[
+    config_file: Annotated[
         Optional[Path],
-        typer.Option("--config", "-c", help="The configuration file to use for editing the JSON-schemas."),
+        typer.Option(
+            "--config", "-c", help="The configuration file to use for editing the JSON-schemas.", resolve_path=True
+        ),
     ] = None,
     set_default_version: Annotated[
         bool,
@@ -41,10 +59,34 @@ def edit(
     The schemas in the input directory won't be changed. If no configuration file is provided, the schemas will be
     copied to the output directory unchanged.
     """
-    dummy(
-        input_dir=input_dir,
-        output_dir=output_dir,
-        config=config,
-        set_default_version=set_default_version,
-        clear_output=clear_output,
-    )
+    if config_file is not None:
+        config = load_config(config_file)
+    else:
+        config = None
+
+    schemas = read_schemas(input_dir)
+
+    if config is not None:
+        schemas.update(get_additional_schemas(config, config_file))
+        print_rich("Added all additional models")
+        transform_all_additional_fields(config.additional_fields, schemas)  # type: ignore[arg-type]
+        # the load_config function ensures that the references are resolved.
+        print_rich("Added all additional fields")
+        transform_all_non_nullable_fields(config.non_nullable_fields, schemas)
+        print_rich("Transformed all non nullable fields")
+        transform_all_additional_enum_items(config.additional_enum_items, schemas)
+        print_rich("Added all additional enum items")
+
+    if set_default_version:
+        for schema in schemas:
+            if (
+                isinstance(schema.get_schema_parsed(), SchemaRootObject)
+                and "_version" in schema.get_schema_parsed().properties
+            ):
+                schema.get_schema_parsed().properties["_version"].default = schemas.version.to_str_without_prefix()
+        print_rich(f"Set default versions to {schemas.version}")
+
+    if clear_output:
+        clear_dir_if_needed(output_dir)
+
+    write_schemas(schemas, output_dir)
