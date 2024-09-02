@@ -1,3 +1,4 @@
+import os
 from pathlib import Path, PurePosixPath
 from typing import Iterable, cast
 from unittest.mock import MagicMock, Mock, patch
@@ -28,8 +29,8 @@ class RepoMock:
             PurePosixPath(*take(take_num, mount_path.parts)) for take_num in range(1, 1 + len(mount_path.parts))
         }
         self._files = set()
-        for cur_dir, _, files in local_directory.walk():
-            dir_path = mount_path / cur_dir.relative_to(local_directory)
+        for cur_dir, _, files in os.walk(local_directory):
+            dir_path = mount_path / Path(cur_dir).relative_to(local_directory)
             self._dirs.add(dir_path)
             for file in files:
                 file_path = dir_path / file
