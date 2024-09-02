@@ -1,0 +1,9 @@
+{
+  "description": "Gibt an, ob es sich um eine Prognose oder eine Messung handelt, beispielsweise bei der Abbildung eines Verbrauchs.",
+  "title": "Wertermittlungsverfahren",
+  "enum": [
+    "PROGNOSE",
+    "MESSUNG"
+  ],
+  "type": "string"
+}

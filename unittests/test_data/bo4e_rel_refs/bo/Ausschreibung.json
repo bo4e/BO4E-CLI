@@ -1,0 +1,200 @@
+{
+  "description": "Das BO Ausschreibung dient zur detaillierten Darstellung von ausgeschriebenen Energiemengen in der Energiewirtschaft\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/bo/Ausschreibung.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Ausschreibung JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/Ausschreibung.json>`_",
+  "title": "Ausschreibung",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Hier können IDs anderer Systeme hinterlegt werden (z.B. eine SAP-GP-Nummer oder eine GUID)",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_typ": {
+      "description": "Vom Herausgeber der Ausschreibung vergebene eindeutige Nummer",
+      "default": "AUSSCHREIBUNG",
+      "anyOf": [
+        {
+          "$ref": "../enum/Typ.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "abgabefrist": {
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Zeitraum.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ausschreibender": {
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Geschaeftspartner.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ausschreibungportal": {
+      "description": "Aufzählung der unterstützten Ausschreibungsportale",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Ausschreibungsportal.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ausschreibungsnummer": {
+      "description": "Vom Herausgeber der Ausschreibung vergebene eindeutige Nummer",
+      "title": "Ausschreibungsnummer",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ausschreibungsstatus": {
+      "description": "Bezeichnungen für die Ausschreibungsphasen",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Ausschreibungsstatus.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ausschreibungstyp": {
+      "description": "Aufzählung für die Typisierung von Ausschreibungen",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Ausschreibungstyp.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bindefrist": {
+      "description": "Die einzelnen Lose, aus denen sich die Ausschreibung zusammensetzt",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Zeitraum.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istKostenpflichtig": {
+      "description": "Kennzeichen, ob die Ausschreibung kostenpflichtig ist",
+      "title": "Istkostenpflichtig",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lose": {
+      "description": "Die einzelnen Lose, aus denen sich die Ausschreibung zusammensetzt",
+      "title": "Lose",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../com/Ausschreibungslos.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "veroeffentlichungszeitpunkt": {
+      "description": "Gibt den Veröffentlichungszeitpunkt der Ausschreibung an",
+      "title": "Veroeffentlichungszeitpunkt",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "webseite": {
+      "description": "Internetseite, auf der die Ausschreibung veröffentlicht wurde (falls vorhanden)",
+      "title": "Webseite",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

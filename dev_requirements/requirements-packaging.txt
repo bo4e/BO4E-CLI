@@ -6,7 +6,7 @@
 #
 build==1.2.1
     # via -r requirements-packaging.in
-certifi==2024.7.4
+certifi==2024.8.30
     # via requests
 cffi==1.16.0
     # via cryptography

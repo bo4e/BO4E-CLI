@@ -1,2 +1,5 @@
 # specific requirements for the tox tests env
 pytest
+pytest-asyncio
+respx
+more-itertools

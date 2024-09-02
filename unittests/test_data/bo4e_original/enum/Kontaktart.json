@@ -1,0 +1,12 @@
+{
+    "description": "Gibt an, auf welchem Weg die Person oder der Geschäftspartner kontaktiert werden kann.",
+    "enum": [
+        "POSTWEG",
+        "TELEFON",
+        "FAX",
+        "E_MAIL",
+        "SMS"
+    ],
+    "title": "Kontaktart",
+    "type": "string"
+}

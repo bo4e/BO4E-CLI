@@ -1,0 +1,12 @@
+{
+  "description": "Gibt an, ob es sich um eine Markt- oder Messlokation handelt.",
+  "title": "Lokationstyp",
+  "enum": [
+    "MALO",
+    "MELO",
+    "NELO",
+    "SR",
+    "TR"
+  ],
+  "type": "string"
+}

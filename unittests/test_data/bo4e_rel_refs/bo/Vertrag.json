@@ -1,0 +1,233 @@
+{
+  "description": "Modell für die Abbildung von Vertragsbeziehungen;\nDas Objekt dient dazu, alle Arten von Verträgen, die in der Energiewirtschaft Verwendung finden, abzubilden.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/bo/Vertrag.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Vertrag JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/Vertrag.json>`_",
+  "title": "Vertrag",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Hier können IDs anderer Systeme hinterlegt werden (z.B. eine SAP-GP-Nummer oder eine GUID)",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_typ": {
+      "description": "Der Typ des Geschäftsobjektes",
+      "default": "VERTRAG",
+      "anyOf": [
+        {
+          "$ref": "../enum/Typ.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "beschreibung": {
+      "description": "Beschreibung zum Vertrag",
+      "title": "Beschreibung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sparte": {
+      "description": "Unterscheidungsmöglichkeiten für die Sparte",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Sparte.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "unterzeichnervp1": {
+      "description": "Unterzeichner des Vertragspartners 1",
+      "title": "Unterzeichnervp1",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../com/Unterschrift.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "unterzeichnervp2": {
+      "description": "Unterzeichner des Vertragspartners 2",
+      "title": "Unterzeichnervp2",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../com/Unterschrift.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragsart": {
+      "description": "Hier ist festgelegt, um welche Art von Vertrag es sich handelt.",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Vertragsart.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragsbeginn": {
+      "description": "Gibt an, wann der Vertrag beginnt (inklusiv)",
+      "title": "Vertragsbeginn",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragsende": {
+      "description": "Gibt an, wann der Vertrag (voraussichtlich) endet oder beendet wurde (exklusiv)",
+      "title": "Vertragsende",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragskonditionen": {
+      "description": "Festlegungen zu Laufzeiten und Kündigungsfristen",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Vertragskonditionen.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragsnummer": {
+      "description": "Eine im Verwendungskontext eindeutige Nummer für den Vertrag",
+      "title": "Vertragsnummer",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragspartner1": {
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Geschaeftspartner.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragspartner2": {
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Geschaeftspartner.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragsstatus": {
+      "description": "Gibt den Status des Vertrags an",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Vertragsstatus.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertragsteile": {
+      "description": "Beschreibung zum Vertrag",
+      "title": "Vertragsteile",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../com/Vertragsteil.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

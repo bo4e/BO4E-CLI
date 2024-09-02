@@ -1,0 +1,163 @@
+{
+  "description": "Abbildung einer allgemeinen Zeitreihe mit einem Wertvektor.\nDie Werte können mit wahlfreier zeitlicher Distanz im Vektor abgelegt sein.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/bo/Zeitreihe.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Zeitreihe JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/Zeitreihe.json>`_",
+  "title": "Zeitreihe",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Hier können IDs anderer Systeme hinterlegt werden (z.B. eine SAP-GP-Nummer oder eine GUID)",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_typ": {
+      "description": "Bezeichnung für die Zeitreihe",
+      "default": "ZEITREIHE",
+      "anyOf": [
+        {
+          "$ref": "../enum/Typ.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "beschreibung": {
+      "description": "Beschreibt die Verwendung der Zeitreihe",
+      "title": "Beschreibung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bezeichnung": {
+      "description": "Bezeichnung für die Zeitreihe",
+      "title": "Bezeichnung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "einheit": {
+      "description": "Alle Werte in der Tabelle haben die Einheit, die hier angegeben ist",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Mengeneinheit.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "medium": {
+      "description": "Medium, das gemessen wurde (z.B. Wasser, Dampf, Strom, Gas)",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Medium.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "messart": {
+      "description": "Beschreibt die Art der Messung (z.B. aktueller Wert, mittlerer Wert, maximaler Wert)",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Messart.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "messgroesse": {
+      "description": "Beschreibt, was gemessen wurde (z.B. Strom, Spannung, Wirkleistung, Scheinleistung)",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Messgroesse.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "version": {
+      "description": "Version der Zeitreihe",
+      "title": "Version",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "werte": {
+      "description": "Hier liegen jeweils die Werte",
+      "title": "Werte",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../com/Zeitreihenwert.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "wertherkunft": {
+      "description": "Kennzeichnung, wie die Werte entstanden sind, z.B. durch Messung",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Wertermittlungsverfahren.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

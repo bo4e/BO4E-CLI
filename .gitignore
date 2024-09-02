@@ -133,4 +133,7 @@ dmypy.json
 # vscode settings
 .vscode/
 
+# tmp files
+.tmp/
+
 src/_bo4e_cli_version.py

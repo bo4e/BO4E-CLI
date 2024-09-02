@@ -1,0 +1,275 @@
+{
+  "description": "Mit dieser Komponente werden Zählwerke modelliert.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/com/Zaehlwerk.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Zaehlwerk JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/com/Zaehlwerk.json>`_",
+  "title": "Zaehlwerk",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Eine generische ID, die für eigene Zwecke genutzt werden kann.\nZ.B. könnten hier UUIDs aus einer Datenbank stehen oder URLs zu einem Backend-System.",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "anzahlAblesungen": {
+      "description": "Abrechnungsrelevant",
+      "title": "Anzahlablesungen",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bezeichnung": {
+      "title": "Bezeichnung",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "einheit": {
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Mengeneinheit.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istAbrechnungsrelevant": {
+      "description": "Anzahl der Nachkommastellen",
+      "title": "Istabrechnungsrelevant",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istSchwachlastfaehig": {
+      "description": "Schwachlastfaehigkeit",
+      "title": "Istschwachlastfaehig",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istSteuerbefreit": {
+      "description": "Konzessionsabgabe",
+      "title": "Iststeuerbefreit",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "istUnterbrechbar": {
+      "description": "Stromverbrauchsart/Verbrauchsart Marktlokation",
+      "title": "Istunterbrechbar",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "konzessionsabgabe": {
+      "description": "Wärmenutzung Marktlokation",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Konzessionsabgabe.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nachkommastelle": {
+      "description": "Anzahl der Vorkommastellen",
+      "title": "Nachkommastelle",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "obisKennzahl": {
+      "title": "Obiskennzahl",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "richtung": {
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Energierichtung.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verbrauchsart": {
+      "description": "Stromverbrauchsart/Verbrauchsart Marktlokation",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Verbrauchsart.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verwendungszwecke": {
+      "description": "Schwachlastfaehigkeit",
+      "title": "Verwendungszwecke",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "VerwendungszweckProMarktrolle.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vorkommastelle": {
+      "description": "Steuerbefreiung",
+      "title": "Vorkommastelle",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "waermenutzung": {
+      "description": "Unterbrechbarkeit Marktlokation",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../enum/Waermenutzung.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "wandlerfaktor": {
+      "title": "Wandlerfaktor",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zaehlwerkId": {
+      "title": "Zaehlwerkid",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zaehlzeitregister": {
+      "description": "Anzahl Ablesungen pro Jahr",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "Zaehlzeitregister.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

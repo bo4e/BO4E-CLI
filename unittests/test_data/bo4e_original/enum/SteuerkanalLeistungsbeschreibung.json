@@ -1,0 +1,9 @@
+{
+    "description": "Beschreibung des Steuerkanals",
+    "enum": [
+        "AN_AUS",
+        "GESTUFT"
+    ],
+    "title": "SteuerkanalLeistungsbeschreibung",
+    "type": "string"
+}

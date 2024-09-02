@@ -1,0 +1,179 @@
+{
+  "description": "Modell für die Abbildung der Referenz auf die Lokationsbündelstruktur. Diese gibt an welche Marktlokationen,\nMesslokationen, Netzlokationen, technische/steuerbaren Ressourcen an einer Lokation vorhanden sind.\n\n.. raw:: html\n\n    <object data=\"../_static/images/bo4e/bo/Lokationszuordnung.svg\" type=\"image/svg+xml\"></object>\n\n.. HINT::\n    `Lokationszuordnung JSON Schema <https://json-schema.app/view/%23?url=https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.4.0/src/bo4e_schemas/bo/Lokationszuordnung.json>`_",
+  "title": "Lokationszuordnung",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "description": "Hier können IDs anderer Systeme hinterlegt werden (z.B. eine SAP-GP-Nummer oder eine GUID)",
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_typ": {
+      "description": "Liste mit referenzierten Marktlokationen",
+      "default": "LOKATIONSZUORDNUNG",
+      "anyOf": [
+        {
+          "$ref": "../enum/Typ.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_version": {
+      "description": "Version der BO-Struktur aka \"fachliche Versionierung\"",
+      "title": " Version",
+      "default": "202401.4.0",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gueltigkeit": {
+      "description": "Zeitspanne der Gültigkeit",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "../com/Zeitspanne.json#"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lokationsbuendelcode": {
+      "description": "Code, der angibt wie die Lokationsbündelstruktur zusammengesetzt ist (zu finden unter \"Codeliste der Lokationsbündelstrukturen\" auf https://www.edi-energy.de/index.php?id=38)",
+      "title": "Lokationsbuendelcode",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "marktlokationen": {
+      "description": "Liste mit referenzierten Marktlokationen",
+      "title": "Marktlokationen",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "Marktlokation.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "messlokationen": {
+      "description": "Liste mit referenzierten Messlokationen",
+      "title": "Messlokationen",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "Messlokation.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "netzlokationen": {
+      "description": "Liste mit referenzierten Netzlokationen",
+      "title": "Netzlokationen",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "Netzlokation.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "steuerbareRessourcen": {
+      "description": "Liste mit referenzierten steuerbaren Ressourcen",
+      "title": "Steuerbareressourcen",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "SteuerbareRessource.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "technischeRessourcen": {
+      "description": "Liste mit referenzierten technischen Ressourcen",
+      "title": "Technischeressourcen",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "TechnischeRessource.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zuordnungstyp": {
+      "description": "Verknüpfungsrichtung z.B. Malo-Melo [TODO: Eventuell anderer Datentyp]",
+      "title": "Zuordnungstyp",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "zusatzAttribute": {
+      "title": "Zusatzattribute",
+      "default": null,
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "../ZusatzAttribut.json#"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

@@ -7,5 +7,6 @@ disable =
     R0903,  # disable too-few-public-methods
     W0621,  # disable redefined-outer-name (this is for the use of pytest fixtures)
     R0801,  # disable duplicate-code (we prefer our test to be explicit rather than perfectly redundancy free)
+    W0613,  # disable unused-argument (this is for the use of pytest fixtures)
 [pylint."MESSAGES CONTROL"]
 max-line-length = 120

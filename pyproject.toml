@@ -18,6 +18,9 @@ classifiers = [
 ]
 dependencies = [
     "typer",
+    "PyGithub",
+    "pydantic",
+    "httpx",
 ]     # add all the dependencies here
 dynamic = ["readme", "version"]
 
@@ -26,7 +29,7 @@ Changelog = "https://github.com/bo4e/BO4E-CLI/releases"
 Homepage = "https://github.com/bo4e/BO4E-CLI"
 
 [project.scripts]
-bo4e = "bo4e_cli.__main__"
+bo4e = "bo4e_cli.__main__:main"
 
 [tool.black]
 line-length = 120
@@ -39,11 +42,20 @@ profile = "black"
 [tool.pylint."MESSAGES CONTROL"]
 max-line-length = 120
 
+[tool.pylint.MASTER]
+load-plugins= "pylint_pydantic"
+
 [mypy]
 truethy-bool = true
 
 [tool.mypy]
 disable_error_code = []
+
+[[tool.mypy.overrides]]
+module = 'unittests.*'
+disable_error_code = ["union-attr"]
+# union-attr will be ignored for type checking the tests because most of them are intended.
+# The tests will fail if there is a problem.
 
 [build-system]
 requires = ["hatchling>=1.8.0", "hatch-vcs", "hatch-fancy-pypi-readme"]
@@ -68,3 +80,10 @@ exclude = ["/unittests"]
 [tool.hatch.build.targets.wheel]
 only-include = ["src"]
 sources = ["src"]
+
+[tool.pytest.ini_options]
+# When the mode is auto, all discovered async tests are considered asyncio-driven
+# even if they have no @pytest.mark.asyncio marker.
+# https://github.com/pytest-dev/pytest-asyncio#auto-mode
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

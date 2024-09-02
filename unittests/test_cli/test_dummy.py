@@ -11,6 +11,8 @@ class TestDummy:
     """
 
     def test_dummy(self) -> None:
-        result = CliRunner().invoke(app, ["pull", "-o", str(Path.root)])
+        result = CliRunner().invoke(
+            app, ["generate", "-i", str(Path.root), "-o", str(Path.home()), "-t", "python-pydantic-v2"]
+        )
         assert result.exit_code == 0
         assert "dummy function" in result.stdout

@@ -1,0 +1,20 @@
+{
+    "description": "Diese Rollen kann ein Marktteilnehmer einnehmen.",
+    "enum": [
+        "BTR",
+        "BIKO",
+        "BKV",
+        "DP",
+        "EIV",
+        "ESA",
+        "KN",
+        "LF",
+        "MGV",
+        "MSB",
+        "NB",
+        "RB",
+        "UENB"
+    ],
+    "title": "Marktrolle",
+    "type": "string"
+}
