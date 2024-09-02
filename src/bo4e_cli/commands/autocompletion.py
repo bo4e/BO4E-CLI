@@ -21,6 +21,7 @@ def version_autocompletion(ctx: typer.Context) -> Iterable[str]:
     if token is None:
         token = os.environ.get("GITHUB_ACCESS_TOKEN", None)
 
+    # Note that token can still be None. For documentation on this see help text of `bo4e pull` command.
     for release in get_versions(token=token):
         version = str(release)
         if version.startswith(incomplete_value):

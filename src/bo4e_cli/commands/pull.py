@@ -51,10 +51,11 @@ def pull(
         Optional[str],
         typer.Option(
             help="A GitHub Access token to authenticate with the GitHub API. "
-            "Use this if you have problems with the rate limit. "
+            "Use this if you have rate limiting problems with the GitHub API. "
             "It is encouraged to set the environment variable GITHUB_ACCESS_TOKEN instead to prevent"
             "accidentally storing your token into the shell history. "
-            "If you have the GitHub CLI installed and the token can't be found in the environment variables, "
+            "Alternatively, if you have the GitHub CLI installed and "
+            "the token can't be found in the environment variables, "
             "the token will be fetched from the GitHub CLI (if you are logged in). Uses `gh auth token`.",
             envvar="GITHUB_ACCESS_TOKEN",
         ),
