@@ -7,9 +7,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-
-# pylint: disable=redefined-builtin
-from rich import print
+from rich import print as print_rich
 
 from bo4e_cli.commands.autocompletion import version_autocompletion
 from bo4e_cli.commands.entry import app
@@ -69,13 +67,13 @@ def pull(
     This file is needed for other commands.
     """
     if token is not None:
-        print("Using GitHub Access Token for authentication.")
+        print_rich("Using GitHub Access Token for authentication.")
     else:
         token = get_access_token_from_cli_if_installed()
         if token is not None:
-            print("Using GitHub Access Token from GitHub CLI for authentication.")
+            print_rich("Using GitHub Access Token from GitHub CLI for authentication.")
     if token is None:
-        print(
+        print_rich(
             "No GitHub Access Token provided. "
             "This may lead to rate limiting issues if you run this command multiple times."
         )

@@ -11,8 +11,6 @@ import httpx
 from github import Github
 from github.Auth import Token
 from github.Repository import Repository
-
-# pylint: disable=redefined-builtin
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 from bo4e_cli.io.console.track import Routine, track_single

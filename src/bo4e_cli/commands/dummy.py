@@ -5,14 +5,13 @@ When filled with logic, this file can be removed.
 
 from typing import Any
 
-# pylint: disable=redefined-builtin
-from rich import print
+from rich import print as print_rich
 
 
 def dummy(*args: Any, **kwargs: Any) -> None:
     """
     Dummy function to prevent linter errors.
     """
-    print("[red]This is a dummy function to prevent linter errors.[/]")
-    print(f"Arguments: {args}")
-    print(f"Keyword arguments: {kwargs}")
+    print_rich("[red]This is a dummy function to prevent linter errors.[/]")
+    print_rich(f"Arguments: {args}")
+    print_rich(f"Keyword arguments: {kwargs}")

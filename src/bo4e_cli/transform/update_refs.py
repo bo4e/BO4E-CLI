@@ -4,8 +4,7 @@ Contains logic to replace online references in the JSON-schemas with relative pa
 
 import re
 
-# pylint: disable=redefined-builtin
-from rich import print
+from rich import print as print_rich
 from rich.progress import track
 
 from bo4e_cli.io.github import OWNER, REPO
@@ -56,7 +55,7 @@ def update_reference(
                 )
             reference_module_path = list(schema_cls_namespace[match.group("model")].module)
         else:
-            print("Reference unchanged. Could not parse reference: %s", field.ref)
+            print_rich("Reference unchanged. Could not parse reference: %s", field.ref)
             return
 
     relative_ref = "#"
