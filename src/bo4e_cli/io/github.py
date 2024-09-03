@@ -12,8 +12,10 @@ from github import Github
 from github.Auth import Token
 from github.Repository import Repository
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
+from rich.text import Text
 
-from bo4e_cli.io.console.track import Routine, track_single
+from bo4e_cli.io.console import CONSOLE
+from bo4e_cli.io.console.style import STYLES
 from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
 
 OWNER = "bo4e"
@@ -82,6 +84,12 @@ def get_schemas_meta_from_gh(version: Version, token: str | None) -> Schemas:
                     src=file_or_dir.download_url,  # type: ignore[arg-type]
                 )
                 schemas.add(schema)
+
+                style = STYLES.get(f"bo4e.{schema.module[0]}", STYLES["bo4e.bo4e_4e"])
+                CONSOLE.print(
+                    Text.assemble("Found schema ", (schema.name, style), " in ", (str(schema.module), style)),
+                    show_only_on_verbose=True,
+                )
     return schemas
 
 
@@ -99,7 +107,15 @@ async def download(schema: SchemaMeta, client: httpx.AsyncClient, token: str | N
         response.encoding = "utf-8"
 
         if response.status_code != 200:
-            raise ValueError(f"Could not download schema from {schema.src_url}: {response.text}")
+            raise ValueError(
+                f"Could not download schema from {schema.src_url}: {response.status_code}, {response.text}"
+            )
+
+        style = STYLES.get(f"bo4e.{schema.module[0]}", STYLES["bo4e.bo4e_4e"])
+        CONSOLE.print(
+            Text.assemble("Downloaded schema ", (schema.name, style), " from ", (str(schema.src_url), style)),
+            show_only_on_verbose=True,
+        )
         return response.text
     except Exception as e:
         raise ValueError(f"Could not download schema from {schema.src_url}: {e}") from e
@@ -112,16 +128,15 @@ async def download_schemas(
     Download all schemas. Also prints some output to track the progress.
     A callback can be provided to process the schemas after downloading (to use the power of async).
     """
-    schemas = track_single(
-        Routine(get_schemas_meta_from_gh, version, token),
-        description="Querying GitHub tree",
-        finish_description=lambda result: f"Queried GitHub tree. Found [bold #8cc04d]{len(result)}[/] schemas.",
-    )
+    with CONSOLE.status("Querying GitHub tree", spinner="earth"):
+        schemas = get_schemas_meta_from_gh(version, token)
+    CONSOLE.print(f"Queried GitHub tree. Found {len(schemas)} schemas.")
     progress = Progress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TaskProgressColumn(show_speed=True),
         TimeRemainingColumn(elapsed_when_finished=True),
+        console=CONSOLE,
     )
 
     with progress:

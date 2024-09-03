@@ -39,7 +39,7 @@ def generate(
     ] = True,
 ) -> None:
     """
-    Generate the [#8cc04d]BO[/][#617d8b]4E[/] models from the JSON-schemas in the input directory and save them in the
+    Generate the BO4E models from the JSON-schemas in the input directory and save them in the
     output directory.
 
     Several output types are available, see --output-type.

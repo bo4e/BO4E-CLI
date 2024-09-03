@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-from rich import print as print_rich
 
 from bo4e_cli.commands.autocompletion import version_autocompletion
 from bo4e_cli.commands.entry import app
 from bo4e_cli.commands.parser import parse_version
 from bo4e_cli.io.cleanse import clear_dir_if_needed
+from bo4e_cli.io.console.console import CONSOLE, add_schemas_to_highlighter
 from bo4e_cli.io.github import download_schemas
 from bo4e_cli.io.schemas import write_schemas
 from bo4e_cli.transform.update_refs import update_references_all_schemas
@@ -62,19 +62,19 @@ def pull(
     ] = None,
 ) -> None:
     """
-    Pull all [#8cc04d]BO[/][#617d8b]4E[/]-JSON-schemas of a specific version.
+    Pull all BO4E-JSON-schemas of a specific version.
 
     Beside the json-files a .version file will be created in utf-8 format at root of the output directory.
     This file is needed for other commands.
     """
     if token is not None:
-        print_rich("Using GitHub Access Token for authentication.")
+        CONSOLE.print("Using GitHub Access Token for authentication.")
     else:
         token = get_access_token_from_cli_if_installed()
         if token is not None:
-            print_rich("Using GitHub Access Token from GitHub CLI for authentication.")
+            CONSOLE.print("Using GitHub Access Token from GitHub CLI for authentication.")
     if token is None:
-        print_rich(
+        CONSOLE.print(
             "No GitHub Access Token provided. "
             "This may lead to rate limiting issues if you run this command multiple times."
         )
@@ -83,6 +83,7 @@ def pull(
         clear_dir_if_needed(output_dir)
 
     schemas = asyncio.run(download_schemas(version=version, token=token))
+    add_schemas_to_highlighter(schemas)
     if update_refs:
         update_references_all_schemas(schemas)
     write_schemas(schemas, output_dir)
