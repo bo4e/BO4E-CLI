@@ -24,6 +24,7 @@ class BO4EHighlighter(RegexHighlighter):
     highlights: list[str | re.Pattern[str]] = [  # type: ignore[assignment]
         # This is typed as string in superclass, but apparently it works without problems when using re.Pattern.
         re.compile(r"\b(?P<bo4e_bo>BO)(?P<bo4e_4e>4E)\b", re.IGNORECASE),
+        re.compile(r"\b(?P<bo4e_bo>Business Objects) (?P<bo4e_4e>for Energy)\b", re.IGNORECASE),
         re.compile(r"\b(?:(?P<bo>bo)|(?P<com>com)|(?P<enum>enum))\b", re.IGNORECASE),
         re.compile(r"(?P<version>v?\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+dev\w+)?)"),
         re.compile(r"(?P<win_path>\b[a-zA-Z]:(?:\\[-\w._+]+)*\\)(?P<filename>[-\w._+]*)"),
