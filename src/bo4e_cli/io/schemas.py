@@ -22,9 +22,9 @@ def write_schemas(schemas: Schemas, output_dir: Path) -> None:
     create_version_file(output_dir, schemas.version)
 
 
-def read_schemas(output_dir: Path) -> Schemas:
+def read_schemas(input_dir: Path) -> Schemas:
     """
-    Read the schemas from the output directory.
+    Read the schemas from the input directory.
     """
     schemas = Schemas(version=read_version_file(input_dir))
     all_files = list(input_dir.rglob("*.json"))

@@ -1,16 +1,28 @@
+"""
+This module contains the style definitions and highlighters for the BO4E CLI.
+"""
+
 import re
-from typing import AnyStr, Text
 
 from rich.color import Color
 from rich.default_styles import DEFAULT_STYLES
 from rich.highlighter import Highlighter, RegexHighlighter
 from rich.style import Style
+from rich.text import Text
 from rich.theme import Theme
 
+from bo4e_cli.models.meta import Schemas
 
+
+# pylint: disable=too-few-public-methods
 class BO4EHighlighter(RegexHighlighter):
+    """
+    Custom highlighter for this CLI.
+    """
+
     base_style = "bo4e."
-    highlights: list[str | re.Pattern[AnyStr]] = [
+    highlights: list[str | re.Pattern[str]] = [  # type: ignore[assignment]
+        # This is typed as string in superclass, but apparently it works without problems when using re.Pattern.
         re.compile(r"\b(?P<bo4e_bo>BO)(?P<bo4e_4e>4E)\b", re.IGNORECASE),
         re.compile(r"\b(?:(?P<bo>bo)|(?P<com>com)|(?P<enum>enum))\b", re.IGNORECASE),
         re.compile(r"(?P<version>v?\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+dev\w+)?)"),
@@ -19,22 +31,67 @@ class BO4EHighlighter(RegexHighlighter):
     ]
 
 
+def get_bo4e_schema_highlighter(schemas: Schemas) -> Highlighter:
+    """
+    Create a highlighter for the BO4E schemas. The highlighter will highlight all schema names according to
+    their module (bo, com, enum).
+    """
+    bo_names = []
+    com_names = []
+    enum_names = []
+    unmatched_names = []
+    for schema in schemas:
+        if schema.module[0] == "bo":
+            bo_names.append(schema.name)
+        elif schema.module[0] == "com":
+            com_names.append(schema.name)
+        elif schema.module[0] == "enum":
+            enum_names.append(schema.name)
+        else:
+            unmatched_names.append(schema.name)
+
+    class BO4ESchemaHighlighter(RegexHighlighter):
+        """
+        Highlighter for BO4E schemas. Highlights BO, COM and ENUM schemas.
+        Also highlights unmatched schemas i.e. with unmatched module names.
+        """
+
+        base_style = "bo4e."
+        highlights: list[str | re.Pattern[str]] = [  # type: ignore[assignment]
+            re.compile(rf"(?:^|\s)(?P<bo>(?:\.\./|\./)*(?:bo/)?(?:{'|'.join(bo_names)})(?:\.json#?)?)(?:\s|$)"),
+            re.compile(rf"(?:^|\s)(?P<com>(?:\.\./|\./)*(?:com/)?(?:{'|'.join(com_names)})(?:\.json#?)?)(?:\s|$)"),
+            re.compile(rf"(?:^|\s)(?P<enum>(?:\.\./|\./)*(?:enum/)?(?:{'|'.join(enum_names)})(?:\.json#?)?)(?:\s|$)"),
+            re.compile(
+                rf"(?:^|\s)(?P<bo4e_4e>(?:\.\./|\./)*(?:\w+/)?(?:{'|'.join(unmatched_names)})(?:\.json#?)?)(?:\s|$)"
+            ),
+        ]
+
+    return BO4ESchemaHighlighter()
+
+
 class HighlighterMixer(Highlighter):
+    """
+    Mix multiple highlighters into one. They will be applied in the order they are passed to the constructor.
+    """
+
     def __init__(self, *highlighters: Highlighter):
-        self.highlighters = highlighters
+        self.highlighters = list(highlighters)
 
     def highlight(self, text: Text) -> None:
         """Highlight :class:`rich.text.Text` using regular expressions.
 
         Args:
             text (~Text): Text to highlight.
-
         """
         for highlighter in self.highlighters:
             highlighter.highlight(text)
 
 
 class ColorPalette:
+    """
+    A color palette for the BO4E theme. Only use colors from this palette to ensure a consistent look.
+    """
+
     MAIN = Color.parse("#8cc04d")
     SUB = Color.parse("#617d8b")
     ERROR = Color.parse("#e35b3a")
@@ -45,11 +102,11 @@ class ColorPalette:
 
     MAIN_ACCENT = Color.parse("#b9ff66")
     SUB_ACCENT = Color.parse("#96c1d7")
-    # MAGENTA = Color.parse("#dd695f")
 
 
 STYLES = {
     **DEFAULT_STYLES,
+    "warning": Style(color=ColorPalette.ERROR),
     "bo4e.bo4e_bo": Style(color=ColorPalette.MAIN, bold=True),
     "bo4e.bo4e_4e": Style(color=ColorPalette.SUB, bold=True),
     "bo4e.bo": Style(color=ColorPalette.BO, bold=True),

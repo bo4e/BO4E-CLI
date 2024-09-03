@@ -2,12 +2,10 @@
 This module contains the entry point for the CLI.
 """
 
-import time
 from importlib.metadata import version as get_version
 from typing import Annotated
 
 import typer
-from rich.highlighter import JSONHighlighter
 
 from bo4e_cli.io.console.console import CONSOLE
 
@@ -38,15 +36,3 @@ def callback(
         raise typer.Exit()
     if verbose:
         CONSOLE.verbose = True
-
-
-@app.command()
-def dummy() -> None:
-    """
-    Dummy command for testing purposes.
-    """
-
-    # with CONSOLE.status("Querying GitHub tree", spinner="grenade"):
-    #     time.sleep(800)
-    # CONSOLE.print("Queried GitHub tree")
-    CONSOLE.print(JSONHighlighter()('{ "key": "value" }'))

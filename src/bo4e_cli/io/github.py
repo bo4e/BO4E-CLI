@@ -11,10 +11,11 @@ import httpx
 from github import Github
 from github.Auth import Token
 from github.Repository import Repository
-from pydantic.v1.schema import schema
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
+from rich.text import Text
 
 from bo4e_cli.io.console import CONSOLE
+from bo4e_cli.io.console.style import STYLES
 from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
 
 OWNER = "bo4e"
@@ -83,6 +84,12 @@ def get_schemas_meta_from_gh(version: Version, token: str | None) -> Schemas:
                     src=file_or_dir.download_url,  # type: ignore[arg-type]
                 )
                 schemas.add(schema)
+
+                style = STYLES.get(f"bo4e.{schema.module[0]}", STYLES["bo4e.bo4e_4e"])
+                CONSOLE.print(
+                    Text.assemble("Found schema ", (schema.name, style), " in ", (str(schema.module), style)),
+                    show_only_on_verbose=True,
+                )
     return schemas
 
 
@@ -100,9 +107,15 @@ async def download(schema: SchemaMeta, client: httpx.AsyncClient, token: str | N
         response.encoding = "utf-8"
 
         if response.status_code != 200:
-            raise ValueError(f"Could not download schema from {schema.src_url}: {response.text}")
+            raise ValueError(
+                f"Could not download schema from {schema.src_url}: {response.status_code}, {response.text}"
+            )
 
-        CONSOLE.print(f"Downloaded schema {schema.name} from {schema.src_url}", show_only_on_verbose=True)
+        style = STYLES.get(f"bo4e.{schema.module[0]}", STYLES["bo4e.bo4e_4e"])
+        CONSOLE.print(
+            Text.assemble("Downloaded schema ", (schema.name, style), " from ", (str(schema.src_url), style)),
+            show_only_on_verbose=True,
+        )
         return response.text
     except Exception as e:
         raise ValueError(f"Could not download schema from {schema.src_url}: {e}") from e

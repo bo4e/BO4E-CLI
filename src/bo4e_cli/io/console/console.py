@@ -1,3 +1,7 @@
+"""
+Add a verbosity feature to the rich.Console. Provides a global console object ``CONSOLE``.
+"""
+
 from collections.abc import Mapping
 from datetime import datetime
 from typing import IO, Any, Callable, Literal, Optional, Union
@@ -10,10 +14,12 @@ from rich.style import Style, StyleType
 from rich.theme import Theme
 from typer.rich_utils import OptionHighlighter
 
-from bo4e_cli.io.console.style import BO4EHighlighter, BO4ETheme, HighlighterMixer
+from bo4e_cli.io.console.style import BO4EHighlighter, BO4ETheme, HighlighterMixer, get_bo4e_schema_highlighter
+from bo4e_cli.models.meta import Schemas
 
 
 class ConsoleWithVerbose(Console):
+    # pylint: disable=line-too-long, too-many-arguments, too-many-locals
     """
     A high level console interface.
 
@@ -223,13 +229,12 @@ class ConsoleWithVerbose(Console):
         )
 
 
-def get_console(verbose: bool = False, stderr: bool = False) -> ConsoleWithVerbose:
+def get_console(verbose: bool = False) -> ConsoleWithVerbose:
     """
     Get a console object.
 
     Args:
         verbose (bool, False): If set to True, the console will print verbose messages. Defaults to ``False``.
-        stderr (bool, False): If set to True, the console will print to stderr. Defaults to ``False``.
 
     Returns:
         ConsoleWithVerbose: A console object.
@@ -240,8 +245,15 @@ def get_console(verbose: bool = False, stderr: bool = False) -> ConsoleWithVerbo
         tab_size=4,
         theme=BO4ETheme,
         highlighter=HighlighterMixer(ReprHighlighter(), OptionHighlighter(), BO4EHighlighter()),
-        stderr=stderr,
     )
 
 
-CONSOLE = get_console(verbose=False)
+CONSOLE = get_console()
+
+
+def add_schemas_to_highlighter(schemas: Schemas) -> None:
+    """
+    Add the schemas to the highlighter to highlight the schema names according to their module (bo, com, enum).
+    """
+    assert isinstance(CONSOLE.highlighter, HighlighterMixer)
+    CONSOLE.highlighter.highlighters.append(get_bo4e_schema_highlighter(schemas))
