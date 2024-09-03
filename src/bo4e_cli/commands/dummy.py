@@ -3,15 +3,25 @@ Contains a dummy function to prevent linter errors while only introducing the CL
 When filled with logic, this file can be removed.
 """
 
+import json
 from typing import Any
 
-from rich import print as print_rich
+from rich.highlighter import JSONHighlighter
+
+from bo4e_cli.io.console import CONSOLE
+
+
+def serializer(obj: Any) -> Any:
+    """
+    Serialize an object.
+    """
+    return str(obj)
 
 
 def dummy(*args: Any, **kwargs: Any) -> None:
     """
     Dummy function to prevent linter errors.
     """
-    print_rich("[red]This is a dummy function to prevent linter errors.[/]")
-    print_rich(f"Arguments: {args}")
-    print_rich(f"Keyword arguments: {kwargs}")
+    CONSOLE.print("[red]This is a dummy function to prevent linter errors.[/]")
+    CONSOLE.print("Arguments:", JSONHighlighter()(json.dumps(args, default=serializer)))
+    CONSOLE.print("Keyword arguments:", JSONHighlighter()(json.dumps(kwargs, default=serializer)))

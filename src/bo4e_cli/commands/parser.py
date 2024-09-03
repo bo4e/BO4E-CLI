@@ -2,9 +2,7 @@
 Contains parser functions for custom types in the CLI.
 """
 
-from rich import print as print_rich
-
-from bo4e_cli.io.console.track import Routine, track_single
+from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.github import resolve_latest_version
 from bo4e_cli.models.meta import Version
 
@@ -14,12 +12,10 @@ def parse_version(version: str, token: str | None = None) -> Version:
     Parse a version string.
     """
     if version == "latest":
-        latest_version: Version = track_single(
-            Routine(resolve_latest_version, token=token),
-            description="Querying GitHub for latest version",
-            finish_description=lambda result: f"Resolved latest release to [bold #8cc04d]{result}[/]",
-        )
+        with CONSOLE.status("Querying GitHub for latest version", spinner="earth"):
+            latest_version = resolve_latest_version(token)
+        CONSOLE.print(f"Resolved latest release to {latest_version}")
         return latest_version
     version_obj = Version.from_str(version)
-    print_rich(f"Using version [bold #8cc04d]{version_obj}[/]")
+    CONSOLE.print(f"Using version {version_obj}")
     return version_obj

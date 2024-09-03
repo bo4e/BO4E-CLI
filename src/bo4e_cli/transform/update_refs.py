@@ -4,9 +4,10 @@ Contains logic to replace online references in the JSON-schemas with relative pa
 
 import re
 
-from rich import print as print_rich
 from rich.progress import track
 
+from bo4e_cli.io.console import CONSOLE
+from bo4e_cli.io.console.style import STYLES
 from bo4e_cli.io.github import OWNER, REPO
 from bo4e_cli.models.meta import SchemaMeta, Schemas
 from bo4e_cli.models.schema import AllOf, AnyOf, Array, Object, Reference, SchemaType
@@ -36,6 +37,7 @@ def update_reference(
     schema_cls_namespace = schemas.search_index_by_cls_name
     match = REF_ONLINE_REGEX.search(field.ref)
     if match is not None:
+        CONSOLE.print(f"Matched online reference: {field.ref}", show_only_on_verbose=True)
         if match.group("version") != str(schemas.version):
             raise ValueError(
                 "Version mismatch: References across different versions of BO4E are not allowed. "
@@ -48,6 +50,7 @@ def update_reference(
     else:
         match = REF_DEFS_REGEX.search(field.ref)
         if match is not None:
+            CONSOLE.print(f"Matched reference to definitions: {field.ref}", show_only_on_verbose=True)
             if match.group("model") not in schema_cls_namespace:
                 raise ValueError(
                     f"Could not find schema for reference {field.ref} in namespace "
@@ -55,7 +58,11 @@ def update_reference(
                 )
             reference_module_path = list(schema_cls_namespace[match.group("model")].module)
         else:
-            print_rich("Reference unchanged. Could not parse reference: %s", field.ref)
+            CONSOLE.print(
+                f"Reference unchanged. Could not parse reference: {field.ref}",
+                show_only_on_verbose=True,
+                style=STYLES["warning"],
+            )
             return
 
     relative_ref = "#"
@@ -64,6 +71,7 @@ def update_reference(
             relative_ref = "../" * (len(schema.module) - ind - 1) + "/".join(reference_module_path[ind:]) + ".json#"
             break
 
+    CONSOLE.print(f"Updated reference {field.ref} to: {relative_ref}", show_only_on_verbose=True)
     field.ref = relative_ref
 
 
@@ -107,5 +115,5 @@ def update_references_all_schemas(schemas: Schemas) -> None:
     """
     Update all references in all schemas.
     """
-    for schema in track(schemas, description="Updating references...", total=len(schemas)):
+    for schema in track(schemas, description="Updating references...", total=len(schemas), console=CONSOLE):
         update_references(schema, schemas)
