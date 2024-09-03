@@ -5,7 +5,7 @@ Contains logic related to cleansing io operations.
 import shutil
 from pathlib import Path
 
-from bo4e_cli.io.console.track import Routine, track_single
+from bo4e_cli.io.console import CONSOLE
 
 
 def clear_dir_if_needed(directory: Path) -> None:
@@ -17,10 +17,8 @@ def clear_dir_if_needed(directory: Path) -> None:
     if not directory.is_dir():
         raise ValueError(f"Expected a directory, got {directory}")
     if any(directory.iterdir()):
-        track_single(
-            Routine(shutil.rmtree, directory),
-            description=f"Clearing directory [bold #8cc04d]{directory}[/]",
-            finish_description=lambda _: f"Cleared directory [bold #8cc04d]{directory}[/]",
-        )
+        with CONSOLE.status(f"Clearing directory {directory}", spinner="grenade"):
+            shutil.rmtree(directory)
+        CONSOLE.print(f"Cleared directory {directory}")
     else:
         directory.rmdir()

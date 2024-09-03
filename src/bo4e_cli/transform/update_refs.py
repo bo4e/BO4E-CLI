@@ -4,9 +4,9 @@ Contains logic to replace online references in the JSON-schemas with relative pa
 
 import re
 
-from rich import print as print_rich
 from rich.progress import track
 
+from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.github import OWNER, REPO
 from bo4e_cli.models.meta import SchemaMeta, Schemas
 from bo4e_cli.models.schema import AllOf, AnyOf, Array, Object, Reference, SchemaType
@@ -55,7 +55,7 @@ def update_reference(
                 )
             reference_module_path = list(schema_cls_namespace[match.group("model")].module)
         else:
-            print_rich("Reference unchanged. Could not parse reference: %s", field.ref)
+            CONSOLE.print("Reference unchanged. Could not parse reference: %s", field.ref)
             return
 
     relative_ref = "#"
@@ -107,5 +107,5 @@ def update_references_all_schemas(schemas: Schemas) -> None:
     """
     Update all references in all schemas.
     """
-    for schema in track(schemas, description="Updating references...", total=len(schemas)):
+    for schema in track(schemas, description="Updating references...", total=len(schemas), console=CONSOLE):
         update_references(schema, schemas)

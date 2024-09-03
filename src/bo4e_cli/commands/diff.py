@@ -11,7 +11,7 @@ import typer
 from bo4e_cli.commands.dummy import dummy
 
 sub_app_diff = typer.Typer(
-    help="Command group for comparing JSON-schemas of different [#8cc04d]BO[/][#617d8b]4E[/] versions. "
+    help="Command group for comparing JSON-schemas of different BO4E versions. "
     "See 'diff --help' for more information."
 )
 
