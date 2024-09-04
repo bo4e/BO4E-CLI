@@ -5,8 +5,7 @@ import pytest
 
 from bo4e_cli.models.meta import SchemaMeta
 from bo4e_cli.models.schema import SchemaRootObject
-
-TEST_DIR = Path(__file__).parents[1] / "test_data/bo4e_original"
+from unittests.conftest import TEST_DIR_BO4E_ORIGINAL
 
 
 class TestSchemaMeta:
@@ -33,7 +32,7 @@ class TestSchemaMeta:
             _ = schema_meta.src_url
 
     def test_schema_parsed(self) -> None:
-        path = TEST_DIR / "bo/Angebot.json"
+        path = TEST_DIR_BO4E_ORIGINAL / "bo/Angebot.json"
         schema_meta = SchemaMeta(
             name="Angebot",
             module=("bo", "Angebot"),

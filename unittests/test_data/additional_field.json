@@ -1,0 +1,16 @@
+{
+  "pattern": "bo\\.Angebot",
+  "fieldName": "bar",
+  "fieldDef": {
+    "anyOf": [
+      {
+        "type": "string"
+      },
+      {
+        "type": "null"
+      }
+    ],
+    "default": null,
+    "title": "Bar"
+  }
+}

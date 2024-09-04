@@ -14,9 +14,13 @@ from more_itertools import take
 
 from bo4e_cli.io.github import OWNER, REPO, get_source_repo
 from bo4e_cli.io.version_file import read_version_file
+from bo4e_cli.models.meta import Version
 from bo4e_cli.transform.update_refs import REF_ONLINE_REGEX
 
-TEST_DIR = Path(__file__).parent / "test_data/bo4e_original"
+TEST_DIR = Path(__file__).parent / "test_data"
+TEST_DIR_BO4E_ORIGINAL = TEST_DIR / "bo4e_original"
+TEST_DIR_BO4E_REL_REFS = TEST_DIR / "bo4e_rel_refs"
+TEST_DATA_VERSION = Version.from_str("v202401.4.0")
 
 
 class RepoMock:
@@ -85,16 +89,18 @@ class RepoMock:
 
 
 def download_sideeffect(request: Request, version: str, sub_path: str, model: str) -> Response:
-    path = TEST_DIR / sub_path / f"{model}.json"
+    path = TEST_DIR_BO4E_ORIGINAL / sub_path / f"{model}.json"
     return Response(200, content=path.read_text())
 
 
 @pytest.fixture(scope="function")
 def mock_github(respx_mock: respx.MockRouter) -> Iterable[None]:
-    version = read_version_file(TEST_DIR)
+    version = read_version_file(TEST_DIR_BO4E_ORIGINAL)
 
     github = Mock()
-    github.return_value.get_repo.return_value = RepoMock(TEST_DIR, PurePosixPath("src/bo4e_schemas"), str(version))
+    github.return_value.get_repo.return_value = RepoMock(
+        TEST_DIR_BO4E_ORIGINAL, PurePosixPath("src/bo4e_schemas"), str(version)
+    )
     with patch("bo4e_cli.io.github.Github", new=github):
         route = respx_mock.get(url__regex=REF_ONLINE_REGEX)
         route.side_effect = download_sideeffect

@@ -1,0 +1,44 @@
+{
+  "description": "This is a class doc-string",
+  "title": "AdditionalModel",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "_typ": {
+      "default": "ANGEBOT",
+      "$ref": "../enum/Typ.json"
+    },
+    "_version": {
+      "title": " Version",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "testFieldA": {
+      "title": "TestFieldA",
+      "$ref": "Angebot.json"
+    },
+    "testFieldB": {
+      "title": "TestFieldB",
+      "$ref": "../com/Adresse.json"
+    }
+  }
+}

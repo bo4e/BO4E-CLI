@@ -1,11 +1,8 @@
-from pathlib import Path
-
 from more_itertools import one, take
 
 from bo4e_cli.io.schemas import read_schemas
 from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
-
-TEST_DIR = Path(__file__).parents[1] / "test_data/bo4e_original"
+from unittests.conftest import TEST_DIR_BO4E_ORIGINAL
 
 
 def get_disjoint_subsets(schemas: Schemas, no_subsets: int = 2) -> tuple[set[SchemaMeta], ...]:
@@ -19,14 +16,14 @@ def get_disjoint_subsets(schemas: Schemas, no_subsets: int = 2) -> tuple[set[Sch
 
 class TestSchemas:
     def test_fields(self) -> None:
-        schemas = read_schemas(TEST_DIR)
+        schemas = read_schemas(TEST_DIR_BO4E_ORIGINAL)
         assert isinstance(schemas, Schemas)
         assert isinstance(schemas.version, Version)
         assert isinstance(schemas.schemas, set)
         assert all(isinstance(schema, SchemaMeta) for schema in schemas)
 
     def test_set_methods(self) -> None:
-        schemas = read_schemas(TEST_DIR)
+        schemas = read_schemas(TEST_DIR_BO4E_ORIGINAL)
         angebot_meta = one(schema for schema in schemas if schema.name == "Angebot")
         dummy_meta = SchemaMeta(name="dummy", module=("dummy",), src="dummy")  # type: ignore[arg-type]
         # pylint: disable=unbalanced-tuple-unpacking
@@ -57,7 +54,7 @@ class TestSchemas:
         assert schemas == subset1 | subset2 | subset3 | {dummy_meta}
 
     def test_search_index_views(self) -> None:
-        schemas = read_schemas(TEST_DIR)
+        schemas = read_schemas(TEST_DIR_BO4E_ORIGINAL)
         cls_name_view = schemas.search_index_by_cls_name
         angebot_meta = one(schema for schema in schemas if schema.name == "Angebot")
 
