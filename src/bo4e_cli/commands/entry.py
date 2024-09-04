@@ -25,7 +25,7 @@ def callback(
     ] = False,
 ) -> None:
     """
-    BO4E - [#8cc04d]Business Objects[/] [#617d8b]for Energy[/]
+    BO4E - Business Objects for Energy
 
     This CLI is intended for developers working with BO4E.
     For more information see '--help' or visit
