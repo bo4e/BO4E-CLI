@@ -1,6 +1,7 @@
 """
 This module contains the config model for the `bo4e edit` command.
 """
+
 import re
 from typing import Annotated, Literal
 
