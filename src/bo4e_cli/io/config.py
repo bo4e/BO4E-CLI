@@ -1,3 +1,7 @@
+"""
+Contains functions to load the config file for `bo4e edit`.
+"""
+
 from pathlib import Path
 from typing import Iterable, Union
 
@@ -24,7 +28,7 @@ def load_config(path: Path) -> Config:
             if not reference_path.is_absolute():
                 reference_path = path.parent / reference_path
 
-            additional_fields: Union[AdditionalField, list[AdditionalField]] = TypeAdapter(  # type: ignore[assignment]
+            additional_fields: Union[AdditionalField, list[AdditionalField]] = TypeAdapter(
                 Union[AdditionalField, list[AdditionalField]]
             ).validate_json(reference_path.read_text(encoding="utf-8"))
             deletion_list.append(additional_field)

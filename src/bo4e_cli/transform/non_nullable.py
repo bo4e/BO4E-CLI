@@ -1,3 +1,7 @@
+"""
+This module contains functions to transform fields which can be null to fields which can't be null.
+"""
+
 import re
 
 from more_itertools import first_true
@@ -5,7 +9,7 @@ from more_itertools import first_true
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.models.meta import Schemas
 from bo4e_cli.models.schema import AnyOf, Null, SchemaRootObject
-from bo4e_cli.utils.field_paths import get_all_field_paths_from_schema
+from bo4e_cli.utils.fields import get_all_field_paths_from_schema
 
 
 def field_to_non_nullable(schema_parsed: SchemaRootObject, field_name: str) -> None:
@@ -53,14 +57,15 @@ def transform_all_non_nullable_fields(non_nullable_field_patters: list[str], sch
         compiled_pattern = re.compile(pattern)
         matches = 0
         for field_path, field_name, schema in field_paths:
+            schema_parsed = schema.get_schema_parsed()
             if (
                 compiled_pattern.fullmatch(field_path)
-                and isinstance(schema.get_schema_parsed(), SchemaRootObject)
-                and isinstance(schema.get_schema_parsed().properties[field_name], AnyOf)
-                and "default" in schema.get_schema_parsed().properties[field_name].__pydantic_fields_set__
+                and isinstance(schema_parsed, SchemaRootObject)
+                and isinstance(schema_parsed.properties[field_name], AnyOf)
+                and "default" in schema_parsed.properties[field_name].__pydantic_fields_set__
             ):
                 matches += 1
-                field_to_non_nullable(schema.get_schema_parsed(), field_name)
+                field_to_non_nullable(schema_parsed, field_name)
                 CONSOLE.print(f"Applied pattern '{pattern}' to field {field_path}", show_only_on_verbose=True)
         if matches == 0:
             CONSOLE.print(f"Pattern '{pattern}' did not match any fields", style="warning", show_only_on_verbose=True)

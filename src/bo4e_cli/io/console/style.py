@@ -4,10 +4,10 @@ This module contains the style definitions and highlighters for the BO4E CLI.
 
 import bisect
 import re
+from collections import defaultdict
 from collections.abc import Callable
 from typing import Iterable, TypeAlias, cast
 
-from black.trans import defaultdict
 from rich.color import Color
 from rich.highlighter import Highlighter
 from rich.style import Style
@@ -20,6 +20,9 @@ from bo4e_cli.utils.iterator import zip_cycle
 
 Priority: TypeAlias = int
 Pattern: TypeAlias = re.Pattern[str] | str
+
+
+# pylint: disable=too-few-public-methods
 
 
 class _Highlighter:
@@ -35,7 +38,7 @@ class _Highlighter:
     def __call__(self, text: Text) -> None:
         self.func(text)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<_Highlighter {self.name}>"
 
 
@@ -71,16 +74,16 @@ class RegexPriorityHighlighter(Highlighter):
 
         """
         for re_highlight, _ in self.highlights:
-            text.highlight_regex(re_highlight, style_prefix=self.base_style)
+            text.highlight_regex(re_highlight, style_prefix=self.base_style)  # type: ignore[arg-type]
+            # mypy is right, but the function in rich.Text also works with re.Pattern and is therefore wrongly annotated
 
 
-# pylint: disable=too-few-public-methods
 class BO4EHighlighter(RegexPriorityHighlighter):
     """
     Custom highlighter for this CLI.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             (re.compile(r"\b(?P<bo4e_bo>BO)(?P<bo4e_4e>4E)\b", re.IGNORECASE), 90),
             (re.compile(r"\b(?:(?P<bo>bo)|(?P<com>com)|(?P<enum>enum))\b", re.IGNORECASE), 50),
@@ -97,19 +100,21 @@ def get_bo4e_schema_highlighter(schemas: Schemas, match_fields: bool = False) ->
     their module (bo, com, enum).
     """
     names = defaultdict(set)
-    field_names = defaultdict(set)
+    field_names: defaultdict[str, set[str]] = defaultdict(set)
     for schema in schemas:
         if schema.module[0] in ("bo", "com", "enum"):
             names[schema.module[0]].add(schema.name)
             if match_fields and isinstance(schema.get_schema_parsed(), SchemaRootObject):
-                field_names[schema.module[0]].update(schema.get_schema_parsed().properties.keys())
+                field_names[schema.module[0]].update(
+                    schema.get_schema_parsed().properties.keys()  # type: ignore[union-attr]
+                )
             elif match_fields and isinstance(schema.get_schema_parsed(), SchemaRootStrEnum):
-                field_names[schema.module[0]].update(schema.get_schema_parsed().enum)
+                field_names[schema.module[0]].update(schema.get_schema_parsed().enum)  # type: ignore[union-attr]
         else:
             # Unmatched schemas
             names["bo4e_4e"].add(schema.name)
             if match_fields and isinstance(schema.get_schema_parsed(), SchemaRootObject):
-                field_names["bo4e_4e"].update(schema.get_schema_parsed().properties.keys())
+                field_names["bo4e_4e"].update(schema.get_schema_parsed().properties.keys())  # type: ignore[union-attr]
 
     names_regex = {module: f"(?:{'|'.join(cls_names)})" for module, cls_names in names.items()}
     field_names_regex = {module: f"(?:{'|'.join(mod_field_names)})" for module, mod_field_names in field_names.items()}
@@ -148,7 +153,7 @@ def get_bo4e_schema_highlighter(schemas: Schemas, match_fields: bool = False) ->
         Also highlights unmatched schemas i.e. with unmatched module names.
         """
 
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__(
                 *zip_cycle(regex_rel_path.values(), els_to_cycle=(60,)),
                 *zip_cycle(regex_mod_path.values(), els_to_cycle=(60,)),
@@ -182,14 +187,12 @@ class HighlighterMixer(Highlighter):
     @staticmethod
     def _get_executor(non_priority_highlighter: Highlighter) -> Callable[[Text], None]:
         assert not isinstance(non_priority_highlighter, RegexPriorityHighlighter)
-        return _Highlighter(
-            lambda text: non_priority_highlighter.highlight(text), type(non_priority_highlighter).__name__
-        )
+        return _Highlighter(non_priority_highlighter.highlight, type(non_priority_highlighter).__name__)
 
     @staticmethod
     def _get_executor_from_regex(pattern: Pattern, base_style: str) -> Callable[[Text], None]:
         return _Highlighter(
-            lambda text: text.highlight_regex(pattern, style_prefix=base_style),
+            lambda text: text.highlight_regex(pattern, style_prefix=base_style),  # type: ignore[arg-type]
             pattern.pattern if isinstance(pattern, re.Pattern) else pattern,
         )
 

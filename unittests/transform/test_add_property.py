@@ -8,7 +8,7 @@ from unittests.conftest import TEST_DIR, TEST_DIR_BO4E_REL_REFS
 
 
 class TestAddProperty:
-    def test_add_additional_property(self):
+    def test_add_additional_property(self) -> None:
         angebot = Object.model_validate_json((TEST_DIR_BO4E_REL_REFS / "bo/Angebot.json").read_text())
         config = load_config(TEST_DIR / "config_test.json")
         angebot_field_foo = one(

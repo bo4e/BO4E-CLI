@@ -26,7 +26,9 @@ class TestPull:
         assert angebot.get_schema_parsed().title == "Angebot"
 
     def test_explicit_version(self, tmp_path: Path, mock_github: None) -> None:
-        result = CliRunner().invoke(app, ["pull", "-o", str(tmp_path), "--no-update-refs", "-t", TEST_DATA_VERSION])
+        result = CliRunner().invoke(
+            app, ["pull", "-o", str(tmp_path), "--no-update-refs", "-t", str(TEST_DATA_VERSION)]
+        )
         assert result.exit_code == 0
 
         version_file = tmp_path / ".version"

@@ -4,7 +4,7 @@ from unittests.conftest import TEST_DATA_VERSION, TEST_DIR_BO4E_REL_REFS
 
 
 class TestNonNullable:
-    def test_field_to_non_nullable_with_default(self):
+    def test_field_to_non_nullable_with_default(self) -> None:
         angebot = SchemaRootObject.model_validate_json((TEST_DIR_BO4E_REL_REFS / "bo/Angebot.json").read_text())
         field_to_non_nullable(angebot, "_version")
         new_field = angebot.properties["_version"]
@@ -13,7 +13,7 @@ class TestNonNullable:
         assert new_field.default == TEST_DATA_VERSION.to_str_without_prefix()
         assert "_version" not in angebot.required
 
-    def test_field_to_non_nullable_without_default(self):
+    def test_field_to_non_nullable_without_default(self) -> None:
         angebot = SchemaRootObject.model_validate_json((TEST_DIR_BO4E_REL_REFS / "bo/Angebot.json").read_text())
         field_to_non_nullable(angebot, "angebotsdatum")
         new_field = angebot.properties["angebotsdatum"]

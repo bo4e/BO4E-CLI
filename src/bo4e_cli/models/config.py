@@ -1,3 +1,6 @@
+"""
+This module contains the config model for the `bo4e edit` command.
+"""
 import re
 from typing import Annotated, Literal
 
@@ -17,7 +20,7 @@ class AdditionalField(BaseModel):
 
     @field_validator("pattern")
     @classmethod
-    def validate_pattern(cls, pattern):
+    def validate_pattern(cls, pattern: str) -> str:
         """
         Validates if the pattern is compilable as a regular expression
         """
@@ -38,7 +41,7 @@ class AdditionalEnumItem(BaseModel):
 
     @field_validator("pattern")
     @classmethod
-    def validate_pattern(cls, pattern):
+    def validate_pattern(cls, pattern: str) -> str:
         """
         Validates if the pattern is compilable as a regular expression
         """
@@ -72,13 +75,13 @@ class Config(BaseModel):
 
     @field_validator("non_nullable_fields")
     @classmethod
-    def validate_non_nullable_field_patterns(cls, required_fields):
+    def validate_non_nullable_field_patterns(cls, non_nullable_fields: list[str]) -> list[str]:
         """
         Validates if the patterns are compilable as a regular expression
         """
-        for pattern in required_fields:
+        for pattern in non_nullable_fields:
             try:
                 re.compile(pattern)
             except re.error as error:
                 raise ValueError(f"Invalid regular expression: {pattern}") from error
-        return required_fields
+        return non_nullable_fields

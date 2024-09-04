@@ -1,3 +1,7 @@
+"""
+Utility functions to work with schema fields.
+"""
+
 from typing import Iterable
 
 from bo4e_cli.models.meta import SchemaMeta
@@ -12,5 +16,5 @@ def get_all_field_paths_from_schema(schema: SchemaMeta) -> Iterable[tuple[str, s
     """
     if not isinstance(schema.get_schema_parsed(), Object):
         return
-    for field_name in schema.get_schema_parsed().properties:
+    for field_name in schema.get_schema_parsed().properties:  # type: ignore[union-attr]
         yield ".".join((*schema.module, field_name)), field_name

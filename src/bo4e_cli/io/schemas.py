@@ -2,7 +2,6 @@
 This module provides functions to read and write the schemas to and from a directory.
 """
 
-import json
 from pathlib import Path
 
 from pydantic import TypeAdapter

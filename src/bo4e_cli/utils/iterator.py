@@ -14,6 +14,4 @@ def zip_cycle(
     to the end of each tuple.
     These elements are cycled through, i.e. in each tuple they will have the same value.
     """
-    els_cycle_iterators = [cycle([el]) for el in els_to_cycle]
-    for els in zip(*iterables, *els_cycle_iterators):
-        yield els
+    yield from zip(*iterables, *(cycle([el]) for el in els_to_cycle))
