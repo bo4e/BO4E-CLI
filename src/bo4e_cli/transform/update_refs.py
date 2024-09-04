@@ -7,7 +7,6 @@ import re
 from rich.progress import track
 
 from bo4e_cli.io.console import CONSOLE
-from bo4e_cli.io.console.style import STYLES
 from bo4e_cli.io.github import OWNER, REPO
 from bo4e_cli.models.meta import SchemaMeta, Schemas
 from bo4e_cli.models.schema import AllOf, AnyOf, Array, Object, Reference, SchemaType
@@ -61,7 +60,7 @@ def update_reference(
             CONSOLE.print(
                 f"Reference unchanged. Could not parse reference: {field.ref}",
                 show_only_on_verbose=True,
-                style=STYLES["warning"],
+                style="warning",
             )
             return
 

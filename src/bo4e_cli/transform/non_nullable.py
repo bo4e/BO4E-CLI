@@ -2,6 +2,7 @@ import re
 
 from more_itertools import first_true
 
+from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.models.meta import Schemas
 from bo4e_cli.models.schema import AnyOf, Null, SchemaRootObject
 from bo4e_cli.utils.field_paths import get_all_field_paths_from_schema
@@ -54,14 +55,14 @@ def transform_all_non_nullable_fields(non_nullable_field_patters: list[str], sch
         for field_path, field_name, schema in field_paths:
             if (
                 compiled_pattern.fullmatch(field_path)
-                and isinstance(schema.schema_parsed, SchemaRootObject)
-                and isinstance(schema.schema_parsed.properties[field_name], AnyOf)
-                and "default" in schema.schema_parsed.properties[field_name].__pydantic_fields_set__
+                and isinstance(schema.get_schema_parsed(), SchemaRootObject)
+                and isinstance(schema.get_schema_parsed().properties[field_name], AnyOf)
+                and "default" in schema.get_schema_parsed().properties[field_name].__pydantic_fields_set__
             ):
                 matches += 1
-                field_to_non_nullable(schema.schema_parsed, field_name)
-                # logger.info("Applied pattern '%s' to field %s", pattern, field_path)
-        # if matches == 0:
-        #     logger.warning("Pattern '%s' did not match any fields", pattern)
-        # else:
-        #     logger.info("Pattern '%s' matched %d fields", pattern, matches)
+                field_to_non_nullable(schema.get_schema_parsed(), field_name)
+                CONSOLE.print(f"Applied pattern '{pattern}' to field {field_path}", show_only_on_verbose=True)
+        if matches == 0:
+            CONSOLE.print(f"Pattern '{pattern}' did not match any fields", style="warning", show_only_on_verbose=True)
+        else:
+            CONSOLE.print(f"Pattern '{pattern}' matched {matches} fields", show_only_on_verbose=True)

@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import Iterable, Union
 
-from rich import print as print_rich
+from pydantic import TypeAdapter
 
+from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.schemas import read_parsed_schema
 from bo4e_cli.models.config import AdditionalField, Config
 from bo4e_cli.models.meta import SchemaMeta
@@ -13,7 +14,7 @@ def load_config(path: Path) -> Config:
     """
     Load the config file
     """
-    print_rich(f"Loading config from [bold #8cc04d]{path}[/]")
+    CONSOLE.print(f"Loading config from {path}")
     config = Config.model_validate_json(path.read_text())
 
     deletion_list = []
@@ -52,6 +53,7 @@ def get_additional_schemas(config: Config | None, config_path: Path | None) -> I
                 reference_path = config_path.parent / reference_path
             schema_parsed = read_parsed_schema(reference_path)
         else:
+            reference_path = None
             schema_parsed = additional_model.schema_parsed
 
         if schema_parsed.title == "":
@@ -62,4 +64,10 @@ def get_additional_schemas(config: Config | None, config_path: Path | None) -> I
             module=(additional_model.module, schema_parsed.title),
         )
         schema_meta.set_schema_parsed(schema_parsed)
+        if reference_path is not None:
+            CONSOLE.print(
+                f"Loaded additional model {schema_meta.name} from {reference_path}", show_only_on_verbose=True
+            )
+        else:
+            CONSOLE.print(f"Loaded additional model {schema_meta.name}", show_only_on_verbose=True)
         yield schema_meta

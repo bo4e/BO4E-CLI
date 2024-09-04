@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-from rich import print as print_rich
 
-from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.commands.entry import app
 from bo4e_cli.io.cleanse import clear_dir_if_needed
 from bo4e_cli.io.config import get_additional_schemas, load_config
+from bo4e_cli.io.console import CONSOLE
+from bo4e_cli.io.console.console import add_schemas_to_highlighter
 from bo4e_cli.io.schemas import read_schemas, write_schemas
 from bo4e_cli.models.schema import SchemaRootObject
-from bo4e_cli.transform.add import transform_all_additional_enum_items
+from bo4e_cli.transform.add import transform_all_additional_enum_items, transform_all_additional_fields
 from bo4e_cli.transform.non_nullable import transform_all_non_nullable_fields
 
 
@@ -68,14 +68,17 @@ def edit(
 
     if config is not None:
         schemas.update(get_additional_schemas(config, config_file))
-        print_rich("Added all additional models")
+        add_schemas_to_highlighter(schemas, match_fields=True)
+        CONSOLE.print("Added all additional models")
         transform_all_additional_fields(config.additional_fields, schemas)  # type: ignore[arg-type]
         # the load_config function ensures that the references are resolved.
-        print_rich("Added all additional fields")
+        CONSOLE.print("Added all additional fields")
         transform_all_non_nullable_fields(config.non_nullable_fields, schemas)
-        print_rich("Transformed all non nullable fields")
+        CONSOLE.print("Transformed all non nullable fields")
         transform_all_additional_enum_items(config.additional_enum_items, schemas)
-        print_rich("Added all additional enum items")
+        CONSOLE.print("Added all additional enum items")
+    else:
+        add_schemas_to_highlighter(schemas)
 
     if set_default_version:
         for schema in schemas:
@@ -84,7 +87,7 @@ def edit(
                 and "_version" in schema.get_schema_parsed().properties
             ):
                 schema.get_schema_parsed().properties["_version"].default = schemas.version.to_str_without_prefix()
-        print_rich(f"Set default versions to {schemas.version}")
+        CONSOLE.print(f"Set default versions to {schemas.version}")
 
     if clear_output:
         clear_dir_if_needed(output_dir)
