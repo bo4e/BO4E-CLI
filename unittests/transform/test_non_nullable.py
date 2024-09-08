@@ -1,5 +1,5 @@
+from bo4e_cli.edit.non_nullable import field_to_non_nullable
 from bo4e_cli.models.schema import SchemaRootObject, String
-from bo4e_cli.transform.non_nullable import field_to_non_nullable
 from unittests.conftest import TEST_DATA_VERSION, TEST_DIR_BO4E_REL_REFS
 
 

@@ -11,11 +11,11 @@ import typer
 from bo4e_cli.commands.autocompletion import version_autocompletion
 from bo4e_cli.commands.entry import app
 from bo4e_cli.commands.parser import parse_version
+from bo4e_cli.edit.update_refs import update_references_all_schemas
 from bo4e_cli.io.cleanse import clear_dir_if_needed
 from bo4e_cli.io.console.console import CONSOLE, add_schemas_to_highlighter
 from bo4e_cli.io.github import download_schemas
 from bo4e_cli.io.schemas import write_schemas
-from bo4e_cli.transform.update_refs import update_references_all_schemas
 from bo4e_cli.utils.github_cli import get_access_token_from_cli_if_installed
 
 

@@ -12,10 +12,10 @@ from github.PaginatedList import PaginatedList
 from httpx import Request, Response
 from more_itertools import take
 
+from bo4e_cli.edit.update_refs import REF_ONLINE_REGEX
 from bo4e_cli.io.github import OWNER, REPO, get_source_repo
 from bo4e_cli.io.version_file import read_version_file
 from bo4e_cli.models.meta import Version
-from bo4e_cli.transform.update_refs import REF_ONLINE_REGEX
 
 TEST_DIR = Path(__file__).parent / "test_data"
 TEST_DIR_BO4E_ORIGINAL = TEST_DIR / "bo4e_original"

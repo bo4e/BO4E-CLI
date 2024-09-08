@@ -1,9 +1,9 @@
 from more_itertools import one
 
+from bo4e_cli.edit.add import add_additional_property
 from bo4e_cli.io.config import load_config
 from bo4e_cli.models.config import AdditionalField
 from bo4e_cli.models.schema import Object
-from bo4e_cli.transform.add import add_additional_property
 from unittests.conftest import TEST_DIR, TEST_DIR_BO4E_REL_REFS
 
 

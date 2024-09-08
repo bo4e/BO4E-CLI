@@ -8,14 +8,14 @@ from typing import Annotated, Optional
 import typer
 
 from bo4e_cli.commands.entry import app
+from bo4e_cli.edit.add import transform_all_additional_enum_items, transform_all_additional_fields
+from bo4e_cli.edit.non_nullable import transform_all_non_nullable_fields
 from bo4e_cli.io.cleanse import clear_dir_if_needed
 from bo4e_cli.io.config import get_additional_schemas, load_config
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.console.console import add_schemas_to_highlighter
 from bo4e_cli.io.schemas import read_schemas, write_schemas
 from bo4e_cli.models.schema import SchemaRootObject
-from bo4e_cli.transform.add import transform_all_additional_enum_items, transform_all_additional_fields
-from bo4e_cli.transform.non_nullable import transform_all_non_nullable_fields
 
 
 @app.command()
