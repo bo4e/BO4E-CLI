@@ -46,7 +46,7 @@ pycparser==2.22
     # via cffi
 pydantic==2.9.0
     # via bo4e-cli (pyproject.toml)
-pydantic-core==2.20.1
+pydantic-core==2.23.2
     # via pydantic
 pygithub==2.3.0
     # via bo4e-cli (pyproject.toml)
