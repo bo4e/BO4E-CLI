@@ -20,7 +20,7 @@ platformdirs==4.2.0
     # via pylint
 pydantic==2.9.0
     # via pylint-pydantic
-pydantic-core==2.20.1
+pydantic-core==2.23.2
     # via pydantic
 pylint==3.2.7
     # via
