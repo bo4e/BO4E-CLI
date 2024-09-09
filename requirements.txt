@@ -44,7 +44,7 @@ mdurl==0.1.2
     # via markdown-it-py
 pycparser==2.22
     # via cffi
-pydantic==2.8.2
+pydantic==2.9.0
     # via bo4e-cli (pyproject.toml)
 pydantic-core==2.20.1
     # via pydantic
