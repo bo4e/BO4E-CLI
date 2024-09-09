@@ -70,7 +70,11 @@ class Version(BaseModel):
         return self.commit is not None
 
     def __str__(self) -> str:
-        version = f"v{self.major}.{self.functional}.{self.technical}"
+        return f"v{self.to_str_without_prefix()}"
+
+    def to_str_without_prefix(self) -> str:
+        """Return the version as a string without the 'v' prefix."""
+        version = f"{self.major}.{self.functional}.{self.technical}"
         if self.candidate is not None:
             version += f"-rc{self.candidate}"
         if self.commit is not None:
@@ -99,8 +103,8 @@ class SchemaMeta(BaseModel):
     """ E.g. 'Marktlokation' """
     module: tuple[str, ...]
     """ E.g. ('bo', 'Marktlokation') or ('ZusatzAttribut',) """
-    src: HttpUrl | Path
-    """ Either an online URL or a local file path """
+    src: HttpUrl | Path | None = None
+    """ Either an online URL or a local file path. Can be None if this schema is with no source related. """
 
     _schema: SchemaRootType | str | None = None
 
@@ -113,7 +117,7 @@ class SchemaMeta(BaseModel):
     @property
     def src_url(self) -> HttpUrl:
         """Returns the source as an online URL. Raises a ValueError if the source is not a URL."""
-        if isinstance(self.src, Path):
+        if isinstance(self.src, Path) or self.src is None:
             raise ValueError("The source is not an online URL.")
         return self.src
 
@@ -131,10 +135,19 @@ class SchemaMeta(BaseModel):
         Automatically parses the schema if `set_schema_text` has been called before.
         """
         if self._schema is None:
-            raise ValueError("The schema has not been loaded yet. Set `schema_parsed` or `schema_text` first.")
+            raise ValueError("The schema has not been loaded yet. Call `set_schema_parsed` or `set_schema_text` first.")
         if isinstance(self._schema, str):
             self._schema = TypeAdapter(SchemaRootType).validate_json(self._schema)
         return self._schema
+
+    def set_schema_parsed(self, value: SchemaRootType) -> None:
+        """Sets the parsed schema."""
+        if isinstance(self._schema, str):
+            raise ValueError(
+                "The schema has already been loaded as a string. If you are sure you want to delete overwrite "
+                "the schema text, call `del_schema` first."
+            )
+        self._schema = value
 
     def get_schema_text(self) -> str:
         """
@@ -157,6 +170,10 @@ class SchemaMeta(BaseModel):
                 "to the parsed schema, call `del_schema_parsed` first."
             )
         self._schema = value
+
+    def del_schema(self) -> None:
+        """Deletes any schema information (text or json)."""
+        self._schema = None
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"SchemaMeta(name={self.name}, module={self.module}, src={self.src})"

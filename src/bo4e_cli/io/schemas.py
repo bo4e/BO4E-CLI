@@ -4,11 +4,13 @@ This module provides functions to read and write the schemas to and from a direc
 
 from pathlib import Path
 
+from pydantic import TypeAdapter
 from rich.progress import track
 
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.version_file import create_version_file, read_version_file
 from bo4e_cli.models.meta import SchemaMeta, Schemas
+from bo4e_cli.models.schema import SchemaRootType
 
 
 def write_schemas(schemas: Schemas, output_dir: Path) -> None:
@@ -34,3 +36,10 @@ def read_schemas(input_dir: Path) -> Schemas:
         schema.set_schema_text(schema_path.read_text(encoding="utf-8"))
         schemas.add(schema)
     return schemas
+
+
+def read_parsed_schema(file: Path) -> SchemaRootType:
+    """
+    Load a parsed schema from a file.
+    """
+    return TypeAdapter(SchemaRootType).validate_json(file.read_text(encoding="utf-8"))

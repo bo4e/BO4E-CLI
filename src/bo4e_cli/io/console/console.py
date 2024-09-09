@@ -244,16 +244,20 @@ def get_console(verbose: bool = False) -> ConsoleWithVerbose:
         record=True,
         tab_size=4,
         theme=BO4ETheme,
-        highlighter=HighlighterMixer(ReprHighlighter(), OptionHighlighter(), BO4EHighlighter()),
+        highlighter=HighlighterMixer(
+            BO4EHighlighter(),
+            ReprHighlighter(),
+            OptionHighlighter(),
+        ),
     )
 
 
 CONSOLE = get_console()
 
 
-def add_schemas_to_highlighter(schemas: Schemas) -> None:
+def add_schemas_to_highlighter(schemas: Schemas, match_fields: bool = False) -> None:
     """
     Add the schemas to the highlighter to highlight the schema names according to their module (bo, com, enum).
     """
     assert isinstance(CONSOLE.highlighter, HighlighterMixer)
-    CONSOLE.highlighter.highlighters.append(get_bo4e_schema_highlighter(schemas))
+    CONSOLE.highlighter.add(get_bo4e_schema_highlighter(schemas, match_fields=match_fields))

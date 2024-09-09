@@ -2,81 +2,226 @@
 This module contains the style definitions and highlighters for the BO4E CLI.
 """
 
+import bisect
 import re
+from collections import defaultdict
+from collections.abc import Callable
+from typing import Iterable, TypeAlias, cast
 
 from rich.color import Color
-from rich.default_styles import DEFAULT_STYLES
-from rich.highlighter import Highlighter, RegexHighlighter
+from rich.highlighter import Highlighter
 from rich.style import Style
 from rich.text import Text
 from rich.theme import Theme
 
 from bo4e_cli.models.meta import Schemas
+from bo4e_cli.models.schema import SchemaRootObject, SchemaRootStrEnum
+from bo4e_cli.utils.iterator import zip_cycle
+
+Priority: TypeAlias = int
+Pattern: TypeAlias = re.Pattern[str] | str
 
 
 # pylint: disable=too-few-public-methods
-class BO4EHighlighter(RegexHighlighter):
+
+
+class _Highlighter:
+    """
+    This is an internal class to make debugging easier. When looking at the executor functions of a HighlighterMixer
+    (see below), the name of the highlighter is displayed in the repr of the executor.
+    """
+
+    def __init__(self, func: Callable[[Text], None], name: str):
+        self.func = func
+        self.name = name
+
+    def __call__(self, text: Text) -> None:
+        self.func(text)
+
+    def __repr__(self) -> str:
+        return f"<_Highlighter {self.name}>"
+
+
+class RegexPriorityHighlighter(Highlighter):
+    """
+    Applies highlighting from a list of regular expressions in the order of lowest priority to highest to enable
+    styles to be overwritten.
+    """
+
+    def __init__(
+        self, *highlights: Pattern | tuple[Pattern, Priority], base_style: str = "", default_priority: Priority = 100
+    ):
+        self.highlights = cast(
+            tuple[tuple[Pattern, Priority]],
+            tuple(
+                sorted(
+                    (
+                        highlight_ if isinstance(highlight_, tuple) else (highlight_, default_priority)
+                        for highlight_ in highlights
+                    ),
+                    key=lambda x: x[1],
+                )
+            ),
+        )
+        self.base_style = base_style
+        self.default_priority = default_priority
+
+    def highlight(self, text: Text) -> None:
+        """Highlight :class:`rich.text.Text` using regular expressions.
+
+        Args:
+            text (~Text): Text to highlight.
+
+        """
+        for re_highlight, _ in self.highlights:
+            text.highlight_regex(re_highlight, style_prefix=self.base_style)  # type: ignore[arg-type]
+            # mypy is right, but the function in rich.Text also works with re.Pattern and is therefore wrongly annotated
+
+
+class BO4EHighlighter(RegexPriorityHighlighter):
     """
     Custom highlighter for this CLI.
     """
 
-    base_style = "bo4e."
-    highlights: list[str | re.Pattern[str]] = [  # type: ignore[assignment]
-        # This is typed as string in superclass, but apparently it works without problems when using re.Pattern.
-        re.compile(r"\b(?P<bo4e_bo>BO)(?P<bo4e_4e>4E)\b", re.IGNORECASE),
-        re.compile(r"\b(?P<bo4e_bo>Business Objects) (?P<bo4e_4e>for Energy)\b", re.IGNORECASE),
-        re.compile(r"\b(?:(?P<bo>bo)|(?P<com>com)|(?P<enum>enum))\b", re.IGNORECASE),
-        re.compile(r"(?P<version>v?\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+dev\w+)?)"),
-        re.compile(r"(?P<win_path>\b[a-zA-Z]:(?:\\[-\w._+]+)*\\)(?P<filename>[-\w._+]*)"),
-        re.compile(r"\b(?P<json>JSON)\b", re.IGNORECASE),
-    ]
+    def __init__(self) -> None:
+        super().__init__(
+            (re.compile(r"\b(?P<bo4e_bo>BO)(?P<bo4e_4e>4E)\b", re.IGNORECASE), 90),
+            (re.compile(r"\b(?:(?P<bo>bo)|(?P<com>com)|(?P<enum>enum))\b", re.IGNORECASE), 50),
+            (re.compile(r"\b(?P<json>JSON)\b", re.IGNORECASE), 50),
+            (re.compile(r"(?P<version>v?\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+dev\w+)?)"), 120),
+            (re.compile(r"(?P<win_path>\b[a-zA-Z]:(?:\\[-\w._+]+)*\\)(?P<filename>[-\w._+]*)"), 120),
+            base_style="bo4e.",
+        )
 
 
-def get_bo4e_schema_highlighter(schemas: Schemas) -> Highlighter:
+def get_bo4e_schema_highlighter(schemas: Schemas, match_fields: bool = False) -> Highlighter:
     """
     Create a highlighter for the BO4E schemas. The highlighter will highlight all schema names according to
     their module (bo, com, enum).
     """
-    bo_names = []
-    com_names = []
-    enum_names = []
-    unmatched_names = []
+    names = defaultdict(set)
+    field_names: defaultdict[str, set[str]] = defaultdict(set)
     for schema in schemas:
-        if schema.module[0] == "bo":
-            bo_names.append(schema.name)
-        elif schema.module[0] == "com":
-            com_names.append(schema.name)
-        elif schema.module[0] == "enum":
-            enum_names.append(schema.name)
+        if schema.module[0] in ("bo", "com", "enum"):
+            names[schema.module[0]].add(schema.name)
+            if match_fields and isinstance(schema.get_schema_parsed(), SchemaRootObject):
+                field_names[schema.module[0]].update(
+                    schema.get_schema_parsed().properties.keys()  # type: ignore[union-attr]
+                )
+            elif match_fields and isinstance(schema.get_schema_parsed(), SchemaRootStrEnum):
+                field_names[schema.module[0]].update(schema.get_schema_parsed().enum)  # type: ignore[union-attr]
         else:
-            unmatched_names.append(schema.name)
+            # Unmatched schemas
+            names["bo4e_4e"].add(schema.name)
+            if match_fields and isinstance(schema.get_schema_parsed(), SchemaRootObject):
+                field_names["bo4e_4e"].update(schema.get_schema_parsed().properties.keys())  # type: ignore[union-attr]
 
-    class BO4ESchemaHighlighter(RegexHighlighter):
+    names_regex = {module: f"(?:{'|'.join(cls_names)})" for module, cls_names in names.items()}
+    field_names_regex = {module: f"(?:{'|'.join(mod_field_names)})" for module, mod_field_names in field_names.items()}
+
+    path_sep = r"[\\/]"
+    regex_rel_path = {
+        mod: re.compile(rf"\b(?P<{mod}>(?:\.\.{path_sep}{mod}{path_sep}|\.?{path_sep})?{mod_regex}(?:\.json#?)?)\b")
+        for mod, mod_regex in names_regex.items()
+        if mod != "bo4e_4e"
+    }
+    regex_rel_path["bo4e_4e"] = re.compile(
+        rf"\b(?P<bo4e_4e>(?:\.\.{path_sep}|\.?{path_sep})?{names_regex['bo4e_4e']}(?:\.json#?)?)\b"
+    )
+
+    if match_fields:
+        regex_mod_path = {
+            mod: re.compile(rf"\b(?P<{mod}>(?:{mod}\.)?{mod_regex}(?:\.{field_names_regex[mod]})?)\b")
+            for mod, mod_regex in names_regex.items()
+            if mod != "bo4e_4e"
+        }
+        regex_mod_path["bo4e_4e"] = re.compile(
+            rf"\b(?P<bo4e_4e>{names_regex['bo4e_4e']}(?:\.{field_names_regex['bo4e_4e']})?)\b"
+        )
+    else:
+        # This is for performance reasons. If we don't need to match fields, we can use a simpler regex.
+        regex_mod_path = {
+            mod: re.compile(rf"\b(?P<{mod}>(?:{mod}\.)?{mod_regex})\b")
+            for mod, mod_regex in names_regex.items()
+            if mod != "bo4e_4e"
+        }
+        regex_mod_path["bo4e_4e"] = re.compile(rf"\b(?P<bo4e_4e>{names_regex['bo4e_4e']})\b")
+
+    class BO4ESchemaHighlighter(RegexPriorityHighlighter):
         """
         Highlighter for BO4E schemas. Highlights BO, COM and ENUM schemas.
         Also highlights unmatched schemas i.e. with unmatched module names.
         """
 
-        base_style = "bo4e."
-        highlights: list[str | re.Pattern[str]] = [  # type: ignore[assignment]
-            re.compile(rf"(?:^|\s)(?P<bo>(?:\.\./|\./)*(?:bo/)?(?:{'|'.join(bo_names)})(?:\.json#?)?)(?:\s|$)"),
-            re.compile(rf"(?:^|\s)(?P<com>(?:\.\./|\./)*(?:com/)?(?:{'|'.join(com_names)})(?:\.json#?)?)(?:\s|$)"),
-            re.compile(rf"(?:^|\s)(?P<enum>(?:\.\./|\./)*(?:enum/)?(?:{'|'.join(enum_names)})(?:\.json#?)?)(?:\s|$)"),
-            re.compile(
-                rf"(?:^|\s)(?P<bo4e_4e>(?:\.\./|\./)*(?:\w+/)?(?:{'|'.join(unmatched_names)})(?:\.json#?)?)(?:\s|$)"
-            ),
-        ]
+        def __init__(self) -> None:
+            super().__init__(
+                *zip_cycle(regex_rel_path.values(), els_to_cycle=(60,)),
+                *zip_cycle(regex_mod_path.values(), els_to_cycle=(60,)),
+                base_style="bo4e.",
+            )
 
     return BO4ESchemaHighlighter()
 
 
 class HighlighterMixer(Highlighter):
     """
-    Mix multiple highlighters into one. They will be applied in the order they are passed to the constructor.
+    Mix multiple highlighters into one.
+    They will be applied in the order of priority. If a highlighter is an instance of RegexPriorityHighlighter,
+    instead of executing the highlighter, the patterns and its priorities will be used and sorted in an internal list.
     """
 
-    def __init__(self, *highlighters: Highlighter):
-        self.highlighters = list(highlighters)
+    def __init__(self, *highlighters: Highlighter | tuple[Highlighter, Priority], default_priority: Priority = 100):
+        self._executors: list[tuple[Callable[[Text], None], Priority]] = list(
+            sorted(
+                self._get_executors(
+                    *(
+                        highlighter if isinstance(highlighter, tuple) else (highlighter, default_priority)
+                        for highlighter in highlighters
+                    )
+                ),
+                key=lambda x: x[1],
+            )
+        )
+        self._default_priority = default_priority
+
+    @staticmethod
+    def _get_executor(non_priority_highlighter: Highlighter) -> Callable[[Text], None]:
+        assert not isinstance(non_priority_highlighter, RegexPriorityHighlighter)
+        return _Highlighter(non_priority_highlighter.highlight, type(non_priority_highlighter).__name__)
+
+    @staticmethod
+    def _get_executor_from_regex(pattern: Pattern, base_style: str) -> Callable[[Text], None]:
+        return _Highlighter(
+            lambda text: text.highlight_regex(pattern, style_prefix=base_style),  # type: ignore[arg-type]
+            pattern.pattern if isinstance(pattern, re.Pattern) else pattern,
+        )
+
+    @staticmethod
+    def _get_executors_from_regex_highlighter(
+        highlighter: RegexPriorityHighlighter,
+    ) -> Iterable[tuple[Callable[[Text], None], Priority]]:
+        for pattern, priority in highlighter.highlights:
+            yield HighlighterMixer._get_executor_from_regex(pattern, highlighter.base_style), priority
+
+    @staticmethod
+    def _get_executors(
+        *highlighters_and_priorities: tuple[Highlighter, Priority]
+    ) -> Iterable[tuple[Callable[[Text], None], Priority]]:
+        for highlighter_and_priority in highlighters_and_priorities:
+            highlighter = highlighter_and_priority[0]
+            if isinstance(highlighter, RegexPriorityHighlighter):
+                yield from HighlighterMixer._get_executors_from_regex_highlighter(highlighter)
+            else:
+                yield HighlighterMixer._get_executor(highlighter), highlighter_and_priority[1]
+
+    def add(self, highlighter: Highlighter, priority: Priority | None = None) -> None:
+        """
+        Add a highlighter to the mixer.
+        """
+        if priority is None:
+            priority = self._default_priority
+        for executor, prio in self._get_executors((highlighter, priority)):
+            bisect.insort(self._executors, (executor, prio), key=lambda x: x[1])
 
     def highlight(self, text: Text) -> None:
         """Highlight :class:`rich.text.Text` using regular expressions.
@@ -84,8 +229,8 @@ class HighlighterMixer(Highlighter):
         Args:
             text (~Text): Text to highlight.
         """
-        for highlighter in self.highlighters:
-            highlighter.highlight(text)
+        for executor, _ in self._executors:
+            executor(text)
 
 
 class ColorPalette:
@@ -106,13 +251,13 @@ class ColorPalette:
 
 
 STYLES = {
-    **DEFAULT_STYLES,
     "warning": Style(color=ColorPalette.ERROR),
     "bo4e.bo4e_bo": Style(color=ColorPalette.MAIN, bold=True),
     "bo4e.bo4e_4e": Style(color=ColorPalette.SUB, bold=True),
     "bo4e.bo": Style(color=ColorPalette.BO, bold=True),
     "bo4e.com": Style(color=ColorPalette.COM, bold=True),
     "bo4e.enum": Style(color=ColorPalette.ENUM, bold=True),
+    "bo4e.field": Style(color=ColorPalette.MAIN, bold=True),
     "bo4e.version": Style(color=ColorPalette.MAIN, bold=True),
     "bo4e.win_path": Style(color=ColorPalette.MAIN, bold=True),
     "bo4e.filename": Style(color=ColorPalette.MAIN, bold=True),
