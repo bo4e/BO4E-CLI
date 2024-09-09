@@ -60,6 +60,7 @@ def get_bo4e_data_model_types(
     def _module_name(self) -> str:
         return ".".join(self.module_path)
 
+    # pylint: disable=too-few-public-methods
     class BO4EDataModel(data_model_types.data_model):  # type: ignore[name-defined]
         # Name "data_model_types.data_model" is not defined
         """Override the data model to use create the namespace."""
@@ -71,6 +72,7 @@ def get_bo4e_data_model_types(
         setattr(_Enum, "module_path", _module_path)
         setattr(_Enum, "module_name", _module_name)
 
+    # pylint: disable=too-few-public-methods
     class BO4EDataTypeManager(data_model_types.data_type_manager):  # type: ignore[name-defined]
         """
         Override the data type manager to prevent the code generator from using the `AwareDateTime` type
@@ -80,6 +82,7 @@ def get_bo4e_data_model_types(
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
 
+            # pylint: disable=too-few-public-methods
             class DataTypeWithForwardRef(self.data_type):
                 """
                 Override the data type to replace explicit type references with forward references if the type

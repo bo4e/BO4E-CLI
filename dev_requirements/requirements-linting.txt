@@ -16,7 +16,7 @@ isort==5.13.2
     # via pylint
 mccabe==0.7.0
     # via pylint
-platformdirs==4.2.0
+platformdirs==4.3.2
     # via pylint
 pydantic==2.9.0
     # via pylint-pydantic
