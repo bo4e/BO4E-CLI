@@ -36,7 +36,7 @@ more-itertools==10.5.0
     # via jaraco-classes
 nh3==0.2.15
     # via readme-renderer
-packaging==24.0
+packaging==24.1
     # via build
 pkginfo==1.10.0
     # via twine

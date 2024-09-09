@@ -21,6 +21,8 @@ dependencies = [
     "PyGithub",
     "pydantic",
     "httpx",
+    "datamodel-code-generator",
+    "autoflake",
 ]     # add all the dependencies here
 dynamic = ["readme", "version"]
 
