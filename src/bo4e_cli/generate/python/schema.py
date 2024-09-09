@@ -26,7 +26,7 @@ class SchemaMetadata(BaseModel):
     module_path: tuple[str, ...]
     "e.g. ('bo', 'preisblatt_netznutzung') or ('zusatz_attribut')"
 
-    def save(self, content: str):
+    def save(self, content: str) -> None:
         """
         Save the content to the file defined by `output_file`. Creates parent directories if needed.
         """
@@ -43,7 +43,7 @@ class SchemaMetadata(BaseModel):
         """e.g. ('bo', 'preisblatt_netznutzung.py') or ('zusatz_attribut.py')"""
         return *self.module_path[:-1], f"{self.module_path[-1]}.py"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return ".".join(self.module_path)
 
 
@@ -90,6 +90,9 @@ def get_version(target_version: Optional[str], namespace: dict[str, SchemaMetada
         return target_version
     # The chosen class is arbitrary. All bo's and com's should contain the same version information.
     try:
-        return namespace["Angebot"].schema_parsed["properties"]["_version"]["default"]
+        default_version = namespace["Angebot"].schema_parsed["properties"]["_version"]["default"]
+        if not isinstance(default_version, str):
+            raise ValueError("Default version in Angebot is not a string")
+        return default_version
     except KeyError:
         return "unknown"

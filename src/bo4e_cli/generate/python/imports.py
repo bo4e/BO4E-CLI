@@ -13,7 +13,7 @@ from bo4e_cli.generate.python.schema import SchemaMetadata
 
 
 # pylint: disable=too-many-statements
-def monkey_patch_imports(namespace: dict[str, SchemaMetadata]):
+def monkey_patch_imports(namespace: dict[str, SchemaMetadata]) -> None:
     """
     Overwrites the behaviour how imports are rendered. They are not going through jinja templates.
     They Imports class has a __str__ method, which we will overwrite here.

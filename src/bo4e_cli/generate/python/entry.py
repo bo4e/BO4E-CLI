@@ -34,7 +34,7 @@ def generate_bo4e_schemas(
     output_type: OutputType,
     clear_output: bool = False,
     target_version: Optional[str] = None,
-):
+) -> None:
     """
     Generate all BO4E schemas from the given input directory and save them in the given output directory.
     """

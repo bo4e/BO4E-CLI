@@ -138,7 +138,7 @@ def additional_sql_arguments(
     return additional_arguments
 
 
-def return_ref(dictionary: dict[str, Union[str, dict]], target_key: str) -> str:
+def return_ref(dictionary: dict[str, Union[str, dict]], target_key: str) -> str:  # type: ignore[type-arg]
     """
     returns name of class which is referenced
     """
@@ -385,7 +385,7 @@ def format_code(code: str) -> str:
     return isort.code(code)
 
 
-def remove_unused_imports(code):
+def remove_unused_imports(code: str) -> str:
     """
     Removes unused imports from the given code using autoflake.
     """

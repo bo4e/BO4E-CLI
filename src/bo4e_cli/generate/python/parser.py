@@ -15,7 +15,7 @@ import datamodel_code_generator.reference
 from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.format import CodeFormatter
 from datamodel_code_generator.imports import IMPORT_DATETIME
-from datamodel_code_generator.model import DataModelSet, get_data_model_types
+from datamodel_code_generator.model import DataModel, DataModelSet, get_data_model_types
 from datamodel_code_generator.model.enum import Enum as _Enum
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 from datamodel_code_generator.types import DataType, StrictTypes, Types
@@ -50,18 +50,18 @@ def get_bo4e_data_model_types(
 
     @property  # type: ignore[misc]
     # "property" used with a non-method
-    def _module_path(self) -> list[str]:
+    def _module_path(self: DataModel) -> list[str]:
         if self.name not in namespace:
             raise ValueError(f"Model not in namespace: {self.name}")
         return list(namespace[self.name].module_path)
 
     @property  # type: ignore[misc]
     # "property" used with a non-method
-    def _module_name(self) -> str:
+    def _module_name(self: DataModel) -> str:
         return ".".join(self.module_path)
 
     # pylint: disable=too-few-public-methods
-    class BO4EDataModel(data_model_types.data_model):  # type: ignore[name-defined]
+    class BO4EDataModel(data_model_types.data_model):  # type: ignore[name-defined,misc]
         # Name "data_model_types.data_model" is not defined
         """Override the data model to use create the namespace."""
 
@@ -73,17 +73,17 @@ def get_bo4e_data_model_types(
         setattr(_Enum, "module_name", _module_name)
 
     # pylint: disable=too-few-public-methods
-    class BO4EDataTypeManager(data_model_types.data_type_manager):  # type: ignore[name-defined]
+    class BO4EDataTypeManager(data_model_types.data_type_manager):  # type: ignore[name-defined,misc]
         """
         Override the data type manager to prevent the code generator from using the `AwareDateTime` type
         featured in pydantic v2. Instead, the standard datetime type will be used.
         """
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
 
             # pylint: disable=too-few-public-methods
-            class DataTypeWithForwardRef(self.data_type):
+            class DataTypeWithForwardRef(self.data_type):  # type: ignore[name-defined,misc]
                 """
                 Override the data type to replace explicit type references with forward references if the type
                 is present in namespace.
@@ -93,7 +93,7 @@ def get_bo4e_data_model_types(
                 @property
                 def type_hint(self) -> str:
                     """Return the type hint for the data type."""
-                    type_ = super().type_hint
+                    type_: str = super().type_hint
                     if self.reference and type_ in namespace and namespace[type_].module_path[0] != "enum":
                         type_ = f'"{type_}"'
                     return type_
@@ -107,7 +107,7 @@ def get_bo4e_data_model_types(
             pattern_key: str,
         ) -> dict[Types, DataType]:
             """overwrite the AwareDatetime import"""
-            result = super().type_map_factory(data_type, strict_types, pattern_key)
+            result: dict[Types, DataType] = super().type_map_factory(data_type, strict_types, pattern_key)
             result[Types.date_time] = data_type.from_import(IMPORT_DATETIME)
             return result
 
@@ -123,7 +123,7 @@ def get_bo4e_data_model_types(
     )
 
 
-def monkey_patch_relative_import():
+def monkey_patch_relative_import() -> None:
     """
     Function taken from datamodel_code_generator.parser.base.
     This function is used to create the relative imports if a referenced model is used in the file.
@@ -289,7 +289,7 @@ def parse_bo4e_schemas(
         if module_path not in parse_result:
             raise KeyError(
                 f"Could not find module {'.'.join(module_path)} in results: "
-                f"{list(parse_result.keys())}"  # type: ignore[union-attr]
+                f"{list(parse_result.keys())}"
                 # Item "str" of "str | dict[tuple[str, ...], Result]" has no attribute "keys"
                 # Somehow, mypy is not good enough to understand the instance-check above
             )
