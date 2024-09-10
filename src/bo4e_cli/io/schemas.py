@@ -20,7 +20,7 @@ def write_schemas(schemas: Schemas, output_dir: Path) -> None:
     for schema in track(schemas, description="Writing schemas...", total=len(schemas), console=CONSOLE):
         file_path = output_dir / schema.relative_path
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(schema.get_schema_text(), encoding="utf-8")
+        file_path.write_text(schema.schema_text, encoding="utf-8")
     create_version_file(output_dir, schemas.version)
 
 

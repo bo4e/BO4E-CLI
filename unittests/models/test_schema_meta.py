@@ -42,6 +42,6 @@ class TestSchemaMeta:
             content = file.read()
             schema_meta.set_schema_text(content)
 
-        assert schema_meta.get_schema_text() == content
-        assert isinstance(schema_meta.get_schema_parsed(), SchemaRootObject)
-        assert json.loads(content) == json.loads(schema_meta.get_schema_text())
+        assert schema_meta.schema_text == content
+        assert isinstance(schema_meta.schema_parsed, SchemaRootObject)
+        assert json.loads(content) == json.loads(schema_meta.schema_text)

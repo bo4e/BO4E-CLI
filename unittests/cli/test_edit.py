@@ -32,7 +32,7 @@ class TestEdit:
 
         angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), src=angebot_schema_file)
         angebot.set_schema_text(angebot_schema_file.read_text())
-        angebot_schema = angebot.get_schema_parsed()
+        angebot_schema = angebot.schema_parsed
         assert angebot_schema.title == "Angebot"
         assert "foo" in angebot_schema.properties
 
@@ -40,14 +40,14 @@ class TestEdit:
             name="AdditionalModel", module=("bo", "AdditionalModel"), src=addidional_schema_file
         )
         additional_model.set_schema_text(addidional_schema_file.read_text())
-        additional_schema = additional_model.get_schema_parsed()
+        additional_schema = additional_model.schema_parsed
         assert additional_schema.title == "AdditionalModel"
         assert additional_schema.properties["_version"].default == TEST_DATA_VERSION.to_str_without_prefix()
         assert isinstance(additional_schema.properties["_version"], String)
 
         typ_model = SchemaMeta(name="Typ", module=("enum", "Typ"), src=typ_schema_file)
         typ_model.set_schema_text(typ_schema_file.read_text())
-        typ_schema = typ_model.get_schema_parsed()
+        typ_schema = typ_model.schema_parsed
         assert typ_schema.title == "Typ"
         assert "foo" in typ_schema.enum
         assert "bar" in typ_schema.enum

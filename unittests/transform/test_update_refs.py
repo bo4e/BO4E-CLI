@@ -12,7 +12,7 @@ class TestUpdateRefs:
     def test_update_reference(self) -> None:
         schemas = read_schemas(TEST_DIR)
         angebot_meta = schemas.search_index_by_cls_name["Angebot"]
-        example_ref = angebot_meta.get_schema_parsed().properties["_typ"].any_of[0]
+        example_ref = angebot_meta.schema_parsed.properties["_typ"].any_of[0]
 
         assert isinstance(example_ref, Reference)
         assert (
@@ -28,8 +28,8 @@ class TestUpdateRefs:
         angebot_meta = schemas.search_index_by_cls_name["Angebot"]
         update_references(angebot_meta, schemas)
 
-        assert angebot_meta.get_schema_parsed().properties["_typ"].any_of[0].ref == "../enum/Typ.json#"
-        assert angebot_meta.get_schema_parsed().properties["angebotsgeber"].any_of[0].ref == "Geschaeftspartner.json#"
+        assert angebot_meta.schema_parsed.properties["_typ"].any_of[0].ref == "../enum/Typ.json#"
+        assert angebot_meta.schema_parsed.properties["angebotsgeber"].any_of[0].ref == "Geschaeftspartner.json#"
 
     def test_update_reference_with_definitions(self) -> None:
         foo_schema = SchemaRootObject(properties={"bar": String(type="string")}, type="object")
@@ -45,4 +45,4 @@ class TestUpdateRefs:
 
         update_references(bar_meta, Schemas(schemas={foo_meta, bar_meta}, version=Version.from_str("v200000.0.0")))
 
-        assert bar_meta.get_schema_parsed().properties["foo"].ref == "../com/Foo.json#"
+        assert bar_meta.schema_parsed.properties["foo"].ref == "../com/Foo.json#"

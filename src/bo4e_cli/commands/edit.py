@@ -83,10 +83,10 @@ def edit(
     if set_default_version:
         for schema in schemas:
             if (
-                isinstance(schema.get_schema_parsed(), SchemaRootObject)
-                and "_version" in schema.get_schema_parsed().properties  # type: ignore[union-attr]
+                isinstance(schema.schema_parsed, SchemaRootObject)
+                and "_version" in schema.schema_parsed.properties  # type: ignore[union-attr]
             ):
-                schema.get_schema_parsed().properties[  # type: ignore[union-attr]
+                schema.schema_parsed.properties[  # type: ignore[union-attr]
                     "_version"
                 ].default = schemas.version.to_str_without_prefix()
         CONSOLE.print(f"Set default versions to {schemas.version}")

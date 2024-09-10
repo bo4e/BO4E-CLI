@@ -14,7 +14,7 @@ def get_all_field_paths_from_schema(schema: SchemaMeta) -> Iterable[tuple[str, s
     Returns an iterable of tuples with the field path and the field name.
     An element could be e.g. ("bo.Angebot.angebotsnehmer", "angebotsnehmer").
     """
-    if not isinstance(schema.get_schema_parsed(), Object):
+    if not isinstance(schema.schema_parsed, Object):
         return
-    for field_name in schema.get_schema_parsed().properties:  # type: ignore[union-attr]
+    for field_name in schema.schema_parsed.properties:  # type: ignore[union-attr]
         yield ".".join((*schema.module, field_name)), field_name
