@@ -83,7 +83,7 @@ pydantic[email]==2.9.0
     # via
     #   bo4e-cli (pyproject.toml)
     #   datamodel-code-generator
-pydantic-core==2.23.2
+pydantic-core==2.23.3
     # via pydantic
 pyflakes==3.2.0
     # via autoflake
