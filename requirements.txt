@@ -117,7 +117,7 @@ typing-extensions==4.12.2
     #   typer
 tzdata==2024.1
     # via pydantic
-urllib3==2.2.2
+urllib3==2.2.3
     # via
     #   pygithub
     #   requests
