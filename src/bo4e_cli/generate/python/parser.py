@@ -6,6 +6,7 @@ Since the used tool doesn't support all features we need, we monkey patch some f
 import itertools
 import re
 import shutil
+import tempfile
 from enum import Enum
 from pathlib import Path
 from typing import Any, Sequence, Type
@@ -13,16 +14,20 @@ from typing import Any, Sequence, Type
 import datamodel_code_generator.parser.base
 import datamodel_code_generator.reference
 from datamodel_code_generator import DataModelType, PythonVersion
-from datamodel_code_generator.format import CodeFormatter
-from datamodel_code_generator.imports import IMPORT_DATETIME
-from datamodel_code_generator.model import DataModel, DataModelSet, get_data_model_types
+from datamodel_code_generator.imports import IMPORT_DATETIME, Import
+from datamodel_code_generator.model import DataModel, DataModelFieldBase, DataModelSet, get_data_model_types
 from datamodel_code_generator.model.enum import Enum as _Enum
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 from datamodel_code_generator.types import DataType, StrictTypes, Types
 
+from bo4e_cli.generate.python import utils
 from bo4e_cli.generate.python.imports import monkey_patch_imports
-from bo4e_cli.generate.python.schema import SchemaMetadata
-from bo4e_cli.generate.python.sqlparser import adapt_parse_for_sql, remove_pydantic_field_import, write_many_many_links
+from bo4e_cli.generate.python.sql_parser import adapt_parse_for_sql_model, parse_many_many_links
+from bo4e_cli.io.cleanse import clear_dir_if_needed
+from bo4e_cli.io.schemas import write_schemas
+from bo4e_cli.models.meta import Schemas
+from bo4e_cli.models.sqlmodel import AdditionalParserKwargs, ManyToManyRelationships
+from bo4e_cli.types import GenerateType
 
 
 class OutputType(str, Enum):
@@ -38,7 +43,8 @@ class OutputType(str, Enum):
 def get_bo4e_data_model_types(
     data_model_type: DataModelType,
     target_python_version: PythonVersion,
-    namespace: dict[str, SchemaMetadata],
+    schemas: Schemas,
+    generate_type: GenerateType,
     monkey_patch_enum_type: bool = True,
 ) -> DataModelSet:
     """
@@ -51,9 +57,9 @@ def get_bo4e_data_model_types(
     @property  # type: ignore[misc]
     # "property" used with a non-method
     def _module_path(self: DataModel) -> list[str]:
-        if self.name not in namespace:
+        if self.name not in schemas.names:
             raise ValueError(f"Model not in namespace: {self.name}")
-        return list(namespace[self.name].module_path)
+        return list(schemas.names[self.name].python_module)
 
     @property  # type: ignore[misc]
     # "property" used with a non-method
@@ -94,7 +100,7 @@ def get_bo4e_data_model_types(
                 def type_hint(self) -> str:
                     """Return the type hint for the data type."""
                     type_: str = super().type_hint
-                    if self.reference and type_ in namespace and namespace[type_].module_path[0] != "enum":
+                    if self.reference and type_ in schemas.names and schemas.names[type_].module_path[0] != "enum":
                         type_ = f'"{type_}"'
                     return type_
 
@@ -111,12 +117,25 @@ def get_bo4e_data_model_types(
             result[Types.date_time] = data_type.from_import(IMPORT_DATETIME)
             return result
 
-    monkey_patch_imports(namespace)
+    # pylint: disable=too-few-public-methods
+    class SQLModelDataModelField(data_model_types.field_model):  # type: ignore[name-defined,misc]
+        """
+        Override the data type manager to prevent the code generator from using the `AwareDateTime` type
+        featured in pydantic v2. Instead, the standard datetime type will be used.
+        """
+
+        @property
+        def imports(self) -> tuple[Import, ...]:
+            return DataModelFieldBase.imports.fget(self)
+
+    monkey_patch_imports(schemas)
 
     return DataModelSet(
         data_model=BO4EDataModel,
         root_model=data_model_types.root_model,
-        field_model=data_model_types.field_model,
+        field_model=(
+            data_model_types.field_model if generate_type != GenerateType.PYTHON_SQL_MODEL else SQLModelDataModelField
+        ),
         data_type_manager=BO4EDataTypeManager,
         dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
         known_third_party=data_model_types.known_third_party,
@@ -134,6 +153,7 @@ def monkey_patch_relative_import() -> None:
     Anyway, this monkey patch changes the imports to "from ..enum.typ import Typ" which resolves the issue.
     """
 
+    # bo.angebot, bo.angebotsteil.Angebotsteil
     def relative(current_module: str, reference: str) -> tuple[str, str]:
         """Find relative module path."""
 
@@ -163,6 +183,7 @@ def monkey_patch_relative_import() -> None:
         return left, right
 
     datamodel_code_generator.parser.base.relative = relative
+    utils.relative = relative
 
 
 def bo4e_version_file_content(version: str) -> str:
@@ -174,7 +195,7 @@ def bo4e_version_file_content(version: str) -> str:
 
 INIT_FILE_COMMENT = '''
 """
-BO4E v{version} - Generated Python implementation of the BO4E standard
+BO4E {version} - Generated Python implementation of the BO4E standard
 
 BO4E is a standard for the exchange of business objects in the energy industry.
 All our software used to generate this BO4E-implementation is open-source and released under the Apache-2.0 license.
@@ -184,19 +205,19 @@ The BO4E version can be queried using `bo4e.__version__`.
 '''
 
 
-def bo4e_init_file_content(namespace: dict[str, SchemaMetadata], version: str) -> str:
+def bo4e_init_file_content(schemas: Schemas) -> str:
     """
     Create __init__.py files in all subdirectories of the given output directory and in the directory itself.
     """
-    init_file_content = INIT_FILE_COMMENT.strip().format(version=version)
+    init_file_content = INIT_FILE_COMMENT.strip().format(version=str(schemas.version))
 
     init_file_content += "\n\n__all__ = [\n"
-    for class_name in sorted(itertools.chain(namespace, ["__version__"])):
+    for class_name in sorted(itertools.chain(schemas.names, ["__version__"])):
         init_file_content += f'    "{class_name}",\n'
     init_file_content += "]\n\n"
 
-    for schema_metadata in namespace.values():
-        init_file_content += f"from .{'.'.join(schema_metadata.module_path)} import {schema_metadata.class_name}\n"
+    for schema in schemas:
+        init_file_content += f"from .{'.'.join(schema.module)} import {schema.name}\n"
     init_file_content += "\nfrom .__version__ import __version__\n"
 
     init_file_content += (
@@ -226,32 +247,39 @@ def remove_model_rebuild(python_code: str, class_name: str) -> str:
     return re.sub(rf"{class_name}\.model_rebuild\(\)\n", "", python_code)
 
 
-def parse_bo4e_schemas(
-    input_directory: Path, namespace: dict[str, SchemaMetadata], output_type: OutputType
-) -> dict[Path, str]:
+def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Path, str]:
     """
     Generate all BO4E schemas from the given input directory. Returns all file contents as dictionary:
     file path (relative to arbitrary output directory) => file content.
     """
+    tmp_dir_final = tmp_bo4e_dir = Path(tempfile.gettempdir()) / "bo4e" / "schemas_for_generate_python"
+    clear_dir_if_needed(tmp_dir_final)
+    write_schemas(schemas, tmp_bo4e_dir, include_version_file=False, enable_tracker=False)
+
     data_model_types = get_bo4e_data_model_types(
-        (
+        data_model_type=(
             DataModelType.PydanticBaseModel
-            if output_type is OutputType.PYDANTIC_V1.name
+            if generate_type == OutputType.PYDANTIC_V1
             else DataModelType.PydanticV2BaseModel
         ),
-        target_python_version=PythonVersion.PY_311,
-        namespace=namespace,
+        target_python_version=PythonVersion.PY_312,
+        schemas=schemas,
+        generate_type=generate_type,
     )
     monkey_patch_relative_import()
 
     additional_arguments: dict[str, Any] = {}
+    additional_parser_kwargs: AdditionalParserKwargs | None = None
+    links: ManyToManyRelationships = []
 
-    if output_type is OutputType.SQL_MODEL.name:
+    if generate_type == GenerateType.PYTHON_SQL_MODEL:
         # adapt input for SQLModel classes
-        namespace, additional_arguments, input_directory, links = adapt_parse_for_sql(input_directory, namespace)
+        schemas, additional_parser_kwargs, tmp_bo4e_dir, links = adapt_parse_for_sql_model(tmp_bo4e_dir, schemas)
+        additional_arguments = additional_parser_kwargs.model_dump(mode="python", by_alias=True)
+        additional_arguments["extra_template_data"]["#all#"] = {}
 
     parser = JsonSchemaParser(
-        input_directory,
+        tmp_bo4e_dir,
         data_model_type=data_model_types.data_model,
         data_model_root_type=data_model_types.root_model,
         data_model_field_type=data_model_types.field_model,
@@ -268,7 +296,7 @@ def parse_bo4e_schemas(
         snake_case_field=True,
         field_constraints=True,
         capitalise_enum_members=True,
-        base_path=input_directory,
+        base_path=tmp_bo4e_dir,
         remove_special_field_name_prefix=True,
         allow_extra_fields=False,
         allow_population_by_field_name=True,
@@ -280,11 +308,8 @@ def parse_bo4e_schemas(
     if not isinstance(parse_result, dict):
         raise ValueError(f"Unexpected type of parse result: {type(parse_result)}")
     file_contents = {}
-    for schema_metadata in namespace.values():
-        module_path = schema_metadata.module_path_with_extension
-        if schema_metadata.module_name.startswith("_"):
-            # Because somehow the generator uses the prefix also on the module name. Don't know why.
-            module_path = *module_path[:-1], f"field{module_path[-1]}"
+    for schema in schemas:
+        module_path = schema.python_module_with_suffix
 
         if module_path not in parse_result:
             raise KeyError(
@@ -295,34 +320,19 @@ def parse_bo4e_schemas(
             )
 
         python_code = remove_future_import(parse_result.pop(module_path).body)
-        python_code = remove_model_rebuild(python_code, schema_metadata.class_name)
-        if output_type is OutputType.SQL_MODEL.name:
-            # remove pydantic field
-            python_code = remove_pydantic_field_import(python_code)
+        python_code = remove_model_rebuild(python_code, schema.name)
 
-        file_contents[schema_metadata.output_file] = python_code
+        file_contents[schema.python_relative_path] = python_code
 
     file_contents.update({Path(*module_path): result.body for module_path, result in parse_result.items()})
 
     # add SQLModel classes for many-to-many relationships in "many.py"
-    if output_type is OutputType.SQL_MODEL.name:
-        shutil.rmtree(input_directory)  # remove intermediate dir of schemas
-        if links:
-            file_contents[Path("many.py")] = write_many_many_links(links)
+    if generate_type == GenerateType.PYTHON_SQL_MODEL:
+        shutil.rmtree(tmp_bo4e_dir)  # remove intermediate dir of schemas
+        if len(links) > 0:
+            assert additional_parser_kwargs is not None, "Internal error: additional_parser_kwargs is None"
+            file_contents[Path("many.py")] = parse_many_many_links(links, additional_parser_kwargs.custom_template_dir)
+
+    shutil.rmtree(tmp_dir_final)  # remove temporary dir of schemas
 
     return file_contents
-
-
-def get_formatter() -> CodeFormatter:
-    """
-    Returns a formatter to apply black and isort
-    """
-    return CodeFormatter(
-        PythonVersion.PY_311,
-        None,
-        None,
-        skip_string_normalization=False,
-        known_third_party=None,
-        custom_formatters=None,
-        custom_formatters_kwargs=None,
-    )

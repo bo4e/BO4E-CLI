@@ -3,7 +3,7 @@ This module contains classes to model json files which are formatted as "json sc
 https://json-schema.org/draft/2019-09/json-schema-validation
 Note that this actually supports mainly our BO4E-Schemas, but not necessarily the full json schema validation standard.
 """
-
+import re
 from typing import Annotated
 from typing import Any as _Any
 from typing import Literal, Optional, Union
@@ -21,6 +21,13 @@ class TypeBase(BaseModel):
     default: _Any = None
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        raise NotImplementedError("This method must be implemented by the subclasses.")
 
 
 class SchemaRootTypeBase(BaseModel):
@@ -48,6 +55,15 @@ class Object(TypeBase):
     type: Literal["object"]
     required: list[str] = Field(default_factory=list)
 
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        if "title" not in self.model_fields_set:
+            raise ValueError("Object must have a title.")
+        return self.title
+
 
 class StrEnum(TypeBase):
     """
@@ -56,6 +72,15 @@ class StrEnum(TypeBase):
 
     enum: list[str]
     type: Literal["string"]
+
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        if "title" not in self.model_fields_set:
+            raise ValueError("Enum must have a title.")
+        return self.title
 
 
 class SchemaRootObject(Object, SchemaRootTypeBase):
@@ -78,6 +103,13 @@ class Array(TypeBase):
     items: "SchemaType"
     type: Literal["array"]
 
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return f"list[{self.items.python_type_hint}]"
+
 
 class AnyOf(TypeBase):
     """
@@ -85,6 +117,13 @@ class AnyOf(TypeBase):
     """
 
     any_of: Annotated[list["SchemaType"], Field(alias="anyOf")]
+
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return " | ".join(sub_field.python_type_hint for sub_field in self.any_of)
 
 
 class AllOf(TypeBase):
@@ -124,6 +163,13 @@ class String(TypeBase):
         ]
     ] = None
 
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return "str"
+
 
 class Number(TypeBase):
     """
@@ -131,6 +177,13 @@ class Number(TypeBase):
     """
 
     type: Literal["number"]
+
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return "float"
 
 
 class Decimal(TypeBase):
@@ -141,6 +194,13 @@ class Decimal(TypeBase):
     type: Literal["string", "number"]
     format: Literal["decimal"]
 
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return "Decimal"
+
 
 class Integer(TypeBase):
     """
@@ -148,6 +208,13 @@ class Integer(TypeBase):
     """
 
     type: Literal["integer"]
+
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return "int"
 
 
 class Boolean(TypeBase):
@@ -157,6 +224,13 @@ class Boolean(TypeBase):
 
     type: Literal["boolean"]
 
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return "bool"
+
 
 class Null(TypeBase):
     """
@@ -165,11 +239,29 @@ class Null(TypeBase):
 
     type: Literal["null"]
 
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return "None"
+
 
 class Any(TypeBase):
     """
     This pydantic class models the "any" type in a json schema validation file.
     """
+
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        return "Any"
+
+
+REGEX_REL_REFERENCE = re.compile(r"^(?:\.\.[/\\](?:(?:bo|com|enum)[/\\])?|\.[/\\]|[/\\]|)(?P<cls_name>\w+)\.json#?$")
+# Here is what will be matched by this regex: https://regex101.com/r/B36QY8/1
 
 
 class Reference(TypeBase):
@@ -178,6 +270,16 @@ class Reference(TypeBase):
     """
 
     ref: Annotated[str, Field(alias="$ref")]
+
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Return the python type hint for this type.
+        """
+        match = REGEX_REL_REFERENCE.fullmatch(self.ref)
+        if match is None:
+            raise ValueError(f"Unsupported reference type to construct python type hint: {self.ref}")
+        return match.group("cls_name")
 
 
 SchemaType = Union[
