@@ -23,7 +23,7 @@ class TestPull:
         assert angebot_schema.exists()
         angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), src=angebot_schema)
         angebot.set_schema_text(angebot_schema.read_text())
-        assert angebot.get_schema_parsed().title == "Angebot"
+        assert angebot.schema_parsed.title == "Angebot"
 
     def test_explicit_version(self, tmp_path: Path, mock_github: None) -> None:
         result = CliRunner().invoke(
@@ -38,7 +38,7 @@ class TestPull:
         assert angebot_schema.exists()
         angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), src=angebot_schema)
         angebot.set_schema_text(angebot_schema.read_text())
-        assert angebot.get_schema_parsed().title == "Angebot"
+        assert angebot.schema_parsed.title == "Angebot"
 
     def test_update_refs(self, tmp_path: Path, mock_github: None) -> None:
         result = CliRunner().invoke(app, ["pull", "-o", str(tmp_path)])
@@ -51,5 +51,5 @@ class TestPull:
         assert angebot_schema.exists()
         angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), src=angebot_schema)
         angebot.set_schema_text(angebot_schema.read_text())
-        assert angebot.get_schema_parsed().title == "Angebot"
-        assert angebot.get_schema_parsed().properties["_typ"].any_of[0].ref == "../enum/Typ.json#"
+        assert angebot.schema_parsed.title == "Angebot"
+        assert angebot.schema_parsed.properties["_typ"].any_of[0].ref == "../enum/Typ.json#"

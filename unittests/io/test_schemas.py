@@ -14,7 +14,7 @@ class TestSchemas:
         schemas = read_schemas(TEST_DIR_BO4E_ORIGINAL)
         assert len(schemas) > 100
         assert schemas.version.major == 202401
-        assert one(schema for schema in schemas if schema.name == "Angebot").get_schema_parsed().title == "Angebot"
+        assert one(schema for schema in schemas if schema.name == "Angebot").schema_parsed.title == "Angebot"
 
     def test_write_schemas(self, tmp_path: Path) -> None:
         schemas = read_schemas(TEST_DIR_BO4E_ORIGINAL)

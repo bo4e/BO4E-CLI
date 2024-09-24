@@ -128,7 +128,8 @@ class SchemaMeta(BaseModel):
             raise ValueError("The source is not a local file path.")
         return self.src
 
-    def get_schema_parsed(self) -> SchemaRootType:
+    @property
+    def schema_parsed(self) -> SchemaRootType:
         """
         Returns the parsed schema.
         Raises a ValueError if the schema has not been loaded yet.
@@ -149,7 +150,8 @@ class SchemaMeta(BaseModel):
             )
         self._schema = value
 
-    def get_schema_text(self) -> str:
+    @property
+    def schema_text(self) -> str:
         """
         Returns the schema as a JSON string.
         Raises a ValueError if the schema has not been loaded yet.
@@ -232,7 +234,7 @@ class Schemas(BaseModel):
         The equality type can be either 'meta' or 'structure'.
         'meta' means that the schemas are equal if they have the same metadata (except the source path).
         'structure' means that the schemas are equal if they have the same metadata and the
-        same structure (see `get_schema_parsed()`).
+        same structure (see `schema_parsed`).
         """
         if self.version != other.version:
             return False
@@ -242,7 +244,7 @@ class Schemas(BaseModel):
             if schema_self.name != schema_other.name or schema_self.module != schema_other.module:
                 return False
             if equality_type == "structure":
-                if schema_self.get_schema_parsed() != schema_other.get_schema_parsed():
+                if schema_self.schema_parsed != schema_other.schema_parsed:
                     return False
         return True
 

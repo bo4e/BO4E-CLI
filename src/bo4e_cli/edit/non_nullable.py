@@ -57,7 +57,7 @@ def transform_all_non_nullable_fields(non_nullable_field_patters: list[str], sch
         compiled_pattern = re.compile(pattern)
         matches = 0
         for field_path, field_name, schema in field_paths:
-            schema_parsed = schema.get_schema_parsed()
+            schema_parsed = schema.schema_parsed
             if (
                 compiled_pattern.fullmatch(field_path)
                 and isinstance(schema_parsed, SchemaRootObject)

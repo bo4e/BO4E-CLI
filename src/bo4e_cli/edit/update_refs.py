@@ -107,7 +107,7 @@ def update_references(schema: SchemaMeta, schemas: Schemas) -> None:
     def iter_array(_object: Array) -> None:
         update_or_iter(_object.items)
 
-    update_or_iter(schema.get_schema_parsed())
+    update_or_iter(schema.schema_parsed)
 
 
 def update_references_all_schemas(schemas: Schemas) -> None:
