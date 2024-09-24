@@ -87,7 +87,7 @@ pydantic-core==2.23.2
     # via pydantic
 pyflakes==3.2.0
     # via autoflake
-pygithub==2.3.0
+pygithub==2.4.0
     # via bo4e-cli (pyproject.toml)
 pygments==2.18.0
     # via rich
@@ -117,7 +117,7 @@ typing-extensions==4.12.2
     #   typer
 tzdata==2024.1
     # via pydantic
-urllib3==2.2.2
+urllib3==2.2.3
     # via
     #   pygithub
     #   requests
