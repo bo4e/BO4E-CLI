@@ -105,14 +105,14 @@ def get_bo4e_schema_highlighter(schemas: Schemas, match_fields: bool = False) ->
         if schema.module[0] in ("bo", "com", "enum"):
             names[schema.module[0]].add(schema.name)
             if match_fields and isinstance(schema.schema_parsed, SchemaRootObject):
-                field_names[schema.module[0]].update(schema.schema_parsed.properties.keys())  # type: ignore[union-attr]
+                field_names[schema.module[0]].update(schema.schema_parsed.properties.keys())
             elif match_fields and isinstance(schema.schema_parsed, SchemaRootStrEnum):
-                field_names[schema.module[0]].update(schema.schema_parsed.enum)  # type: ignore[union-attr]
+                field_names[schema.module[0]].update(schema.schema_parsed.enum)
         else:
             # Unmatched schemas
             names["bo4e_4e"].add(schema.name)
             if match_fields and isinstance(schema.schema_parsed, SchemaRootObject):
-                field_names["bo4e_4e"].update(schema.schema_parsed.properties.keys())  # type: ignore[union-attr]
+                field_names["bo4e_4e"].update(schema.schema_parsed.properties.keys())
 
     names_regex = {module: f"(?:{'|'.join(cls_names)})" for module, cls_names in names.items()}
     field_names_regex = {module: f"(?:{'|'.join(mod_field_names)})" for module, mod_field_names in field_names.items()}

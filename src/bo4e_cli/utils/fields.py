@@ -16,5 +16,5 @@ def get_all_field_paths_from_schema(schema: SchemaMeta) -> Iterable[tuple[str, s
     """
     if not isinstance(schema.schema_parsed, Object):
         return
-    for field_name in schema.schema_parsed.properties:  # type: ignore[union-attr]
+    for field_name in schema.schema_parsed.properties:
         yield ".".join((*schema.module, field_name)), field_name

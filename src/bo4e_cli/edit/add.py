@@ -42,18 +42,18 @@ def transform_all_additional_fields(additional_fields: list[AdditionalField], sc
             if compiled_pattern.fullmatch(schema_path) and isinstance(schema.schema_parsed, Object):
                 matches += 1
                 add_additional_property(
-                    schema.schema_parsed,  # type: ignore[arg-type]
+                    schema.schema_parsed,
                     additional_field.field_def,
                     additional_field.field_name,
                 )
 
                 if (
                     "default" not in additional_field.field_def.__pydantic_fields_set__
-                    and additional_field.field_name not in schema.schema_parsed.required  # type: ignore[union-attr]
+                    and additional_field.field_name not in schema.schema_parsed.required
                 ):
                     if "required" not in schema.schema_parsed.__pydantic_fields_set__:
-                        schema.schema_parsed.required = []  # type: ignore[union-attr]
-                    schema.schema_parsed.required.append(additional_field.field_name)  # type: ignore[union-attr]
+                        schema.schema_parsed.required = []
+                    schema.schema_parsed.required.append(additional_field.field_name)
                 CONSOLE.print(
                     f"Applied pattern '{additional_field.pattern}' to schema {schema_path}. " f"Added field",
                     Text(additional_field.field_name, style="bo4e.field"),
@@ -80,7 +80,7 @@ def transform_all_additional_enum_items(additional_enum_items: list[AdditionalEn
             schema_path = ".".join(schema.module)
             if compiled_pattern.fullmatch(schema_path) and isinstance(schema.schema_parsed, StrEnum):
                 matches += 1
-                add_additional_enum_items(schema.schema_parsed, additional_item.items)  # type: ignore[arg-type]
+                add_additional_enum_items(schema.schema_parsed, additional_item.items)
                 CONSOLE.print(
                     f"Applied pattern '{additional_item.pattern}' to schema {schema_path}. " "Added enum items",
                     JSONHighlighter()(json.dumps(additional_item.items, indent=2)),
