@@ -1,3 +1,6 @@
+"""
+Contains utility functions used mainly in the Python code generation.
+"""
 from typing import Optional, TypeVar
 
 from datamodel_code_generator.imports import Import
