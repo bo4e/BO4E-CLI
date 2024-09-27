@@ -21,3 +21,12 @@ class TestGeneratePython:
             catch_exceptions=False,
         )
         assert result.exit_code == 0
+
+    def test_generate_python_pydantic_v2(self, tmp_path: Path) -> None:
+        OUTPUT_DIR = Path(__file__).parents[1] / "output"
+        result = CliRunner().invoke(
+            app,
+            ["generate", "-i", str(TEST_DIR_BO4E_REL_REFS), "-o", str(OUTPUT_DIR), "-t", "python-pydantic-v2"],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0

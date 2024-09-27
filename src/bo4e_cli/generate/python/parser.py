@@ -20,10 +20,10 @@ from datamodel_code_generator.model.enum import Enum as _Enum
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 from datamodel_code_generator.types import DataType, StrictTypes, Types
 
-from bo4e_cli.generate.python import utils
 from bo4e_cli.generate.python.imports import monkey_patch_imports
 from bo4e_cli.generate.python.sql_parser import adapt_parse_for_sql_model, parse_many_many_links
 from bo4e_cli.io.cleanse import clear_dir_if_needed
+from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.schemas import write_schemas
 from bo4e_cli.models.meta import Schemas
 from bo4e_cli.models.sqlmodel import AdditionalParserKwargs, ManyToManyRelationships
@@ -100,7 +100,7 @@ def get_bo4e_data_model_types(
                 def type_hint(self) -> str:
                     """Return the type hint for the data type."""
                     type_: str = super().type_hint
-                    if self.reference and type_ in schemas.names and schemas.names[type_].module_path[0] != "enum":
+                    if self.reference and type_ in schemas.names and schemas.names[type_].module[0] != "enum":
                         type_ = f'"{type_}"'
                     return type_
 
@@ -183,7 +183,6 @@ def monkey_patch_relative_import() -> None:
         return left, right
 
     datamodel_code_generator.parser.base.relative = relative
-    utils.relative = relative
 
 
 def bo4e_version_file_content(version: str) -> str:
@@ -217,7 +216,7 @@ def bo4e_init_file_content(schemas: Schemas) -> str:
     init_file_content += "]\n\n"
 
     for schema in schemas:
-        init_file_content += f"from .{'.'.join(schema.module)} import {schema.name}\n"
+        init_file_content += f"from .{'.'.join(schema.python_module)} import {schema.name}\n"
     init_file_content += "\nfrom .__version__ import __version__\n"
 
     init_file_content += (
@@ -252,7 +251,7 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
     Generate all BO4E schemas from the given input directory. Returns all file contents as dictionary:
     file path (relative to arbitrary output directory) => file content.
     """
-    tmp_dir_final = tmp_bo4e_dir = Path(tempfile.gettempdir()) / "bo4e" / "schemas_for_generate_python"
+    tmp_dir_final = tmp_bo4e_dir = Path(tempfile.gettempdir()).resolve() / "bo4e" / "schemas_for_generate_python"
     clear_dir_if_needed(tmp_dir_final)
     write_schemas(schemas, tmp_bo4e_dir, include_version_file=False, enable_tracker=False)
 
@@ -272,66 +271,72 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
     additional_parser_kwargs: AdditionalParserKwargs | None = None
     links: ManyToManyRelationships = []
 
-    if generate_type == GenerateType.PYTHON_SQL_MODEL:
-        # adapt input for SQLModel classes
-        schemas, additional_parser_kwargs, tmp_bo4e_dir, links = adapt_parse_for_sql_model(tmp_bo4e_dir, schemas)
-        additional_arguments = additional_parser_kwargs.model_dump(mode="python", by_alias=True)
-        additional_arguments["extra_template_data"]["#all#"] = {}
+    with CONSOLE.status("Parsing schemas into Python classes", spinner="squish"):
+        if generate_type == GenerateType.PYTHON_SQL_MODEL:
+            # adapt input for SQLModel classes
+            schemas, additional_parser_kwargs, tmp_bo4e_dir, links = adapt_parse_for_sql_model(tmp_bo4e_dir, schemas)
+            additional_arguments = additional_parser_kwargs.model_dump(mode="python", by_alias=True)
+            additional_arguments["extra_template_data"]["#all#"] = {}
 
-    parser = JsonSchemaParser(
-        tmp_bo4e_dir,
-        data_model_type=data_model_types.data_model,
-        data_model_root_type=data_model_types.root_model,
-        data_model_field_type=data_model_types.field_model,
-        data_type_manager_type=data_model_types.data_type_manager,
-        dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
-        # use_annotated=OutputType is not OutputType.PYDANTIC_V1.name,
-        use_double_quotes=True,
-        use_schema_description=True,
-        use_subclass_enum=True,
-        use_standard_collections=True,
-        use_union_operator=False,
-        use_field_description=True,
-        set_default_enum_member=True,
-        snake_case_field=True,
-        field_constraints=True,
-        capitalise_enum_members=True,
-        base_path=tmp_bo4e_dir,
-        remove_special_field_name_prefix=True,
-        allow_extra_fields=False,
-        allow_population_by_field_name=True,
-        use_default_kwarg=True,
-        strict_nullable=True,
-        **additional_arguments,
-    )
-    parse_result = parser.parse()
-    if not isinstance(parse_result, dict):
-        raise ValueError(f"Unexpected type of parse result: {type(parse_result)}")
-    file_contents = {}
-    for schema in schemas:
-        module_path = schema.python_module_with_suffix
+        parser = JsonSchemaParser(
+            tmp_bo4e_dir,
+            data_model_type=data_model_types.data_model,
+            data_model_root_type=data_model_types.root_model,
+            data_model_field_type=data_model_types.field_model,
+            data_type_manager_type=data_model_types.data_type_manager,
+            dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
+            # use_annotated=OutputType is not OutputType.PYDANTIC_V1.name,
+            use_double_quotes=True,
+            use_schema_description=True,
+            use_subclass_enum=True,
+            use_standard_collections=True,
+            use_union_operator=False,
+            use_field_description=True,
+            set_default_enum_member=True,
+            snake_case_field=True,
+            field_constraints=True,
+            capitalise_enum_members=True,
+            base_path=tmp_bo4e_dir,
+            remove_special_field_name_prefix=True,
+            allow_extra_fields=False,
+            allow_population_by_field_name=True,
+            use_default_kwarg=True,
+            strict_nullable=True,
+            **additional_arguments,
+        )
+    CONSOLE.print("Parsed schemas into Python classes")
 
-        if module_path not in parse_result:
-            raise KeyError(
-                f"Could not find module {'.'.join(module_path)} in results: "
-                f"{list(parse_result.keys())}"
-                # Item "str" of "str | dict[tuple[str, ...], Result]" has no attribute "keys"
-                # Somehow, mypy is not good enough to understand the instance-check above
-            )
+    with CONSOLE.status("Validating generated Python code", spinner="squish"):
+        parse_result = parser.parse()
+        if not isinstance(parse_result, dict):
+            raise ValueError(f"Unexpected type of parse result: {type(parse_result)}")
+        file_contents = {}
+        for schema in schemas:
+            module_path = schema.python_module_with_suffix
 
-        python_code = remove_future_import(parse_result.pop(module_path).body)
-        python_code = remove_model_rebuild(python_code, schema.name)
+            if module_path not in parse_result:
+                raise KeyError(
+                    f"Could not find module {'.'.join(module_path)} in results: " f"{list(parse_result.keys())}"
+                )
 
-        file_contents[schema.python_relative_path] = python_code
+            python_code = remove_future_import(parse_result.pop(module_path).body)
+            python_code = remove_model_rebuild(python_code, schema.name)
 
-    file_contents.update({Path(*module_path): result.body for module_path, result in parse_result.items()})
+            file_contents[schema.python_relative_path] = python_code
+
+        file_contents.update({Path(*module_path): result.body for module_path, result in parse_result.items()})
+    CONSOLE.print("Validated generated Python code")
 
     # add SQLModel classes for many-to-many relationships in "many.py"
     if generate_type == GenerateType.PYTHON_SQL_MODEL:
         shutil.rmtree(tmp_bo4e_dir)  # remove intermediate dir of schemas
         if len(links) > 0:
             assert additional_parser_kwargs is not None, "Internal error: additional_parser_kwargs is None"
-            file_contents[Path("many.py")] = parse_many_many_links(links, additional_parser_kwargs.custom_template_dir)
+            with CONSOLE.status("Parsing many-to-many relationships into Python classes", spinner="squish"):
+                file_contents[Path("many.py")] = parse_many_many_links(
+                    links, additional_parser_kwargs.custom_template_dir
+                )
+            CONSOLE.print("Parsed many-to-many relationships into Python classes")
 
     shutil.rmtree(tmp_dir_final)  # remove temporary dir of schemas
 

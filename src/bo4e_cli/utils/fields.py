@@ -3,13 +3,14 @@ Utility functions to work with schema fields.
 """
 
 from collections.abc import Iterator
-from typing import Iterable, TypeVar, Union
+from typing import Iterable, Optional, TypeVar, Union
 
+from more_itertools import one
 from mypyc.irbuild.builder import overload
 from pydantic import BaseModel
 
-from bo4e_cli.models.meta import SchemaMeta
-from bo4e_cli.models.schema import AllOf, AnyOf, Array, Object, Reference, SchemaType
+from bo4e_cli.models.meta import SchemaMeta, Schemas
+from bo4e_cli.models.schema import AllOf, AnyOf, Array, Null, Object, Reference, SchemaType
 
 
 def get_all_field_paths_from_schema(schema: SchemaMeta) -> Iterable[tuple[str, str]]:
@@ -94,3 +95,53 @@ def iter_schema_type(schema_type: SchemaType, *yield_types: type[SchemaType]) ->
             yield from iter_base(item)
 
     yield from iter_base(schema_type)
+
+
+def extract_docstring(field: SchemaType) -> Optional[str]:
+    """
+    Extract the docstring from a SchemaType. Returns None, if no docstring was defined.
+    """
+    return field.description if "description" in field.model_fields_set else None
+
+
+def is_nullable(field: AnyOf, other_type: Optional[type[SchemaType]] = None) -> bool:
+    """
+    Check if a AnyOf field represents a nullable field. If other_type is provided, check if the field is nullable
+    and of the given type.
+    """
+    if len(field.any_of) == 2:
+        if any(isinstance(sub_field, Null) for sub_field in field.any_of):
+            return other_type is None or any(isinstance(sub_field, other_type) for sub_field in field.any_of)
+    return False
+
+
+def is_nullable_array(field: AnyOf, other_type: type[SchemaType]) -> bool:
+    """
+    Check if a AnyOf field represents a nullable array. If other_type is provided, check if the field is a nullable
+    array and of the given type.
+    """
+    if len(field.any_of) == 2:
+        if not any(isinstance(sub_field, Null) for sub_field in field.any_of):
+            return False
+        return any(
+            isinstance(sub_field, Array) and isinstance(sub_field.items, other_type) for sub_field in field.any_of
+        )
+    return False
+
+
+def is_enum_reference(field: Reference | AnyOf | Array, schemas: Schemas) -> bool:
+    """
+    Check if a field contains an enum reference.
+    """
+    if isinstance(field, Array):
+        assert isinstance(field.items, Reference), "Internal error: Array.items should be a Reference"
+        field = field.items
+    if isinstance(field, Reference):
+        assert (
+            field.python_type_hint in schemas.names
+        ), "Internal error: Reference.python_type_hint should be in schemas"
+        return schemas.names[field.python_type_hint].module[0] == "enum"
+    if isinstance(field, AnyOf):
+        ref = one(sub_field for sub_field in field.any_of if isinstance(sub_field, (Reference, Array)))
+        return is_enum_reference(ref, schemas)
+    raise ValueError(f"Unexpected field type {type(field)}")

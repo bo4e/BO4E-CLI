@@ -5,15 +5,6 @@ from jinja2 import Environment, FileSystemLoader
 from more_itertools import one
 from sqlalchemy import types as sqlalchemy_types
 
-from bo4e_cli.generate.python.utils import (
-    construct_id_field_name,
-    extract_docstring,
-    is_enum_reference,
-    is_optional,
-    is_optional_array,
-    pydantic_field_name,
-    relative_import,
-)
 from bo4e_cli.io.schemas import write_schemas
 from bo4e_cli.models import schema as schema_models
 from bo4e_cli.models.meta import SchemaMeta, Schemas
@@ -23,8 +14,9 @@ from bo4e_cli.models.sqlmodel import (
     ManyToManyRelationships,
     SQLModelField,
 )
-from bo4e_cli.utils.fields import iter_schema_type
-from bo4e_cli.utils.strings import camel_to_snake, snake_to_pascal
+from bo4e_cli.utils.fields import extract_docstring, is_enum_reference, is_nullable, is_nullable_array, iter_schema_type
+from bo4e_cli.utils.imports import relative_import
+from bo4e_cli.utils.strings import camel_to_snake, construct_id_field_name, pydantic_field_name, snake_to_pascal
 
 SCHEMA_TYPE_AS_SQLALCHEMY_TYPE: dict[type[schema_models.SchemaType], type[sqlalchemy_types.TypeEngine]] = {
     schema_models.String: sqlalchemy_types.String,
@@ -65,11 +57,11 @@ def adapt_parse_for_sql_model(
                     handle_any_field(schema, field, field_name, additional_parser_kwargs)
                 case schema_models.Array(items=schema_models.Any()):  # List[Any] field
                     handle_any_field(schema, field.items, field_name, additional_parser_kwargs, is_list=True)
-                case schema_models.AnyOf() as field_obj if is_optional(
+                case schema_models.AnyOf() as field_obj if is_nullable(
                     field_obj, schema_models.Any
                 ):  # Optional[Any] field
                     handle_any_field(schema, field_obj, field_name, additional_parser_kwargs, is_nullable=True)
-                case schema_models.AnyOf() as field_obj if is_optional_array(
+                case schema_models.AnyOf() as field_obj if is_nullable_array(
                     field_obj, schema_models.Any
                 ):  # Optional[List[Any]] field
                     handle_any_field(
@@ -89,7 +81,7 @@ def adapt_parse_for_sql_model(
                     handle_reference_enum_field(
                         schema, field, ref, ref_schema, field_name, additional_parser_kwargs, is_list=True
                     )
-                case schema_models.AnyOf() as field_obj if is_optional(
+                case schema_models.AnyOf() as field_obj if is_nullable(
                     field_obj, schema_models.Reference
                 ) and is_enum_reference(field_obj, schemas):
                     # Optional[Reference] field referencing an enum
@@ -100,7 +92,7 @@ def adapt_parse_for_sql_model(
                     handle_reference_enum_field(
                         schema, field_obj, ref, ref_schema, field_name, additional_parser_kwargs, is_nullable=True
                     )
-                case schema_models.AnyOf() as field_obj if is_optional_array(
+                case schema_models.AnyOf() as field_obj if is_nullable_array(
                     field_obj, schema_models.Reference
                 ) and is_enum_reference(field_obj, schemas):
                     # Optional[List[Reference]] field containing references to enums
@@ -136,7 +128,7 @@ def adapt_parse_for_sql_model(
                         additional_parser_kwargs,
                         many_to_many_relationships,
                     )
-                case schema_models.AnyOf() as field_obj if is_optional(field_obj, schema_models.Reference):
+                case schema_models.AnyOf() as field_obj if is_nullable(field_obj, schema_models.Reference):
                     # Optional[Reference] field
                     ref: schema_models.Reference = one(
                         sub_field for sub_field in field_obj.any_of if isinstance(sub_field, schema_models.Reference)
@@ -145,7 +137,7 @@ def adapt_parse_for_sql_model(
                     handle_reference_field(
                         schema, field_obj, ref, ref_schema, field_name, additional_parser_kwargs, is_nullable=True
                     )
-                case schema_models.AnyOf() as field_obj if is_optional_array(field_obj, schema_models.Reference):
+                case schema_models.AnyOf() as field_obj if is_nullable_array(field_obj, schema_models.Reference):
                     # Optional[List[Reference]] field containing references
                     ref: schema_models.Reference = one(
                         sub_field.items for sub_field in field_obj.any_of if isinstance(sub_field, schema_models.Array)
@@ -170,7 +162,7 @@ def adapt_parse_for_sql_model(
                         field_name,
                         additional_parser_kwargs,
                     )
-                case schema_models.AnyOf() as field_obj if is_optional(field_obj, schema_models.Array):
+                case schema_models.AnyOf() as field_obj if is_nullable(field_obj, schema_models.Array):
                     # Optional[List] field without containing Reference or Any fields
                     handle_array_field(
                         schema,

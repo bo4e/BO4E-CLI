@@ -49,8 +49,8 @@ class {{ class_name }}({% if base_class %}{{ base_class }}{% endif %}{% if SQL %
     {{ method }}
 {%- endfor -%}
 {%- endfor -%}
-{%- if SQL and SQL['fields'] %}
-{%- for field_name, field in SQL['fields'].items() %}
+{%- if SQL and SQL.fields %}
+{%- for field_name, field in SQL.fields.items() %}
     {{ field_name }}: {{ field.annotation }} = {{ field.definition }}
     {%- if field.description %}
     """
