@@ -20,11 +20,12 @@ def snake_to_pascal(name: str) -> str:
     return "".join(word.capitalize() for word in name.split("_"))
 
 
-def pydantic_field_name(field_name: str) -> str:
+def pydantic_field_name(field_name: str) -> tuple[str, str]:
     """
     Convert a field name to a Pydantic compatible field name.
+    Returns a tuple of the snake case field name and the original field name (which should be used as alias).
     """
-    return camel_to_snake(field_name.lstrip("_"))
+    return camel_to_snake(field_name.lstrip("_")), field_name
 
 
 def construct_id_field_name(relationship_field_name: str) -> str:
@@ -33,3 +34,14 @@ def construct_id_field_name(relationship_field_name: str) -> str:
     Used during the sqlmodel generation.
     """
     return f"{relationship_field_name}_id"
+
+
+def escaped(string: str) -> str:
+    """
+    Escape a string for use as a string literal in Python code.
+    """
+    escaped_string = repr(string)
+
+    # Convert single quoting style to double quoting style
+    escaped_string = '"' + escaped_string[1:-1].replace('"', '\\"').replace("\\'", "'") + '"'
+    return escaped_string

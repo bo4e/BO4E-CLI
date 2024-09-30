@@ -1,3 +1,4 @@
+import itertools
 from pathlib import Path
 
 from datamodel_code_generator.imports import Import
@@ -16,7 +17,13 @@ from bo4e_cli.models.sqlmodel import (
 )
 from bo4e_cli.utils.fields import extract_docstring, is_enum_reference, is_nullable, is_nullable_array, iter_schema_type
 from bo4e_cli.utils.imports import relative_import
-from bo4e_cli.utils.strings import camel_to_snake, construct_id_field_name, pydantic_field_name, snake_to_pascal
+from bo4e_cli.utils.strings import (
+    camel_to_snake,
+    construct_id_field_name,
+    escaped,
+    pydantic_field_name,
+    snake_to_pascal,
+)
 
 SCHEMA_TYPE_AS_SQLALCHEMY_TYPE: dict[type[schema_models.SchemaType], type[sqlalchemy_types.TypeEngine]] = {
     schema_models.String: sqlalchemy_types.String,
@@ -200,6 +207,31 @@ def add_id_field(
     )
 
 
+def build_field_definition(
+    field_name: str,
+    field: schema_models.SchemaType | None,
+    **options: str,
+) -> str:
+    if "default" not in options and field is not None:
+        options["default"] = "..." if "default" not in field.model_fields_set else repr(field.default)
+    if "title" not in options and field is not None and "title" in field.model_fields_set:
+        options["title"] = escaped(field.title)
+    if "alias" not in options:
+        pyd_field_name, alias = pydantic_field_name(field_name)
+        if pyd_field_name != alias:
+            options["alias"] = escaped(alias)
+
+    items = itertools.chain(
+        [(key, options.pop(key)) for key in ("default", "title", "alias") if key in options],
+        sorted(options.items()),
+    )
+
+    field_def = "Field("
+    field_def += ", ".join(f"{k}={v}" for k, v in items if v is not None)
+    field_def += ")"
+    return field_def
+
+
 def handle_any_field(
     schema: SchemaMeta,
     field: schema_models.SchemaType,
@@ -211,17 +243,20 @@ def handle_any_field(
     """
     Handle the case where a field is of type Any.
     """
-    default_value = "..." if "default" not in field.model_fields_set else str(field.default)
-    field_name = pydantic_field_name(field_name)
+    pyd_field_name, _ = pydantic_field_name(field_name)
     if is_list:
-        field_definition = (
-            f"Field(default={default_value}, sa_column=Column(ARRAY(PickleType), nullable={is_nullable}))"
+        field_definition = build_field_definition(
+            field_name,
+            field,
+            sa_column=f"Column(ARRAY(PickleType), nullable={is_nullable})",
         )
         additional_parser_kwargs.extra_template_data[schema.name].sql.imports.add(
             Import.from_full_path("sqlalchemy.ARRAY")
         )
     else:
-        field_definition = f"Field(default={default_value}, sa_column=Column(PickleType, nullable={is_nullable}))"
+        field_definition = build_field_definition(
+            field_name, field, sa_column=f"Column(PickleType, nullable={is_nullable})"
+        )
     additional_parser_kwargs.extra_template_data[schema.name].sql.imports.update(
         [
             Import.from_full_path("typing.Any"),
@@ -229,8 +264,8 @@ def handle_any_field(
             Import.from_full_path("sqlalchemy.PickleType"),
         ]
     )
-    additional_parser_kwargs.extra_template_data[schema.name].sql.fields[field_name] = SQLModelField(
-        name=field_name,
+    additional_parser_kwargs.extra_template_data[schema.name].sql.fields[pyd_field_name] = SQLModelField(
+        name=pyd_field_name,
         annotation=field.python_type_hint,
         definition=field_definition,
         description=extract_docstring(field),
@@ -251,8 +286,8 @@ def handle_reference_field(
     """
     default_value = "..." if "default" not in field.model_fields_set else str(field.default)
     assert default_value in ("None", "..."), f"Unexpected default value {default_value}"
-    field_name = pydantic_field_name(field_name)
-    field_name_id = construct_id_field_name(field_name)
+    pyd_field_name, _ = pydantic_field_name(field_name)
+    field_name_id = construct_id_field_name(pyd_field_name)
     annotation_field_name_id = "uuid_pkg.UUID"
     annotation_field_name = reference.python_type_hint
     reference_name = reference.python_type_hint
@@ -260,12 +295,14 @@ def handle_reference_field(
     if is_nullable:
         annotation_field_name_id += " | None"
         annotation_field_name += " | None"
-        field_id_definition = (
-            f'Field(default={default_value}, foreign_key="{reference_table_name}.id", ondelete="SET NULL")'
+        field_id_definition = build_field_definition(
+            field_name_id, field, foreign_key=escaped(f"{reference_table_name}.id"), ondelete=escaped("SET NULL")
         )
     else:
         assert default_value == "...", f"Unexpected default value {default_value}"
-        field_id_definition = f'Field(default={default_value}, foreign_key="{reference_table_name}.id")'
+        field_id_definition = build_field_definition(
+            field_name_id, field, foreign_key=escaped(f"{reference_table_name}.id")
+        )
 
     additional_parser_kwargs.extra_template_data[schema.name].sql.imports.update(
         [
@@ -277,10 +314,10 @@ def handle_reference_field(
         name=field_name_id,
         annotation=annotation_field_name_id,
         definition=field_id_definition,
-        description=f"The id to implement the relationship (field {field_name} references {reference_name}).",
+        description=f"The id to implement the relationship (field {pyd_field_name} references {reference_name}).",
     )
-    additional_parser_kwargs.extra_template_data[schema.name].sql.fields[field_name] = SQLModelField(
-        name=field_name,
+    additional_parser_kwargs.extra_template_data[schema.name].sql.fields[pyd_field_name] = SQLModelField(
+        name=pyd_field_name,
         annotation=annotation_field_name,
         definition=f'Relationship(sa_relationship_kwargs={{"foreign_keys": ["{schema.name}.{field_name_id}"]}})',
         description=extract_docstring(field),
@@ -302,10 +339,10 @@ def handle_reference_list_field(
     """
     default_value = "..." if "default" not in field.model_fields_set else str(field.default)
     assert default_value in ("None", "..."), f"Unexpected default value {default_value}"
-    field_name = pydantic_field_name(field_name)
+    pyd_field_name, _ = pydantic_field_name(field_name)
     annotation_field_name = f"list[{reference.python_type_hint}]"
     reference_name = reference.python_type_hint
-    link_table_name = f"{schema.name}{snake_to_pascal(field_name)}Link"
+    link_table_name = f"{schema.name}{snake_to_pascal(pyd_field_name)}Link"
     if is_nullable:
         annotation_field_name += " | None"
     else:
@@ -318,8 +355,8 @@ def handle_reference_list_field(
             relative_import(schema.python_module_path, referenced_schema.python_class_path),
         ]
     )
-    additional_parser_kwargs.extra_template_data[schema.name].sql.fields[field_name] = SQLModelField(
-        name=field_name,
+    additional_parser_kwargs.extra_template_data[schema.name].sql.fields[pyd_field_name] = SQLModelField(
+        name=pyd_field_name,
         annotation=annotation_field_name,
         definition=f"Relationship(link_model={link_table_name})",
         description=extract_docstring(field),
@@ -329,7 +366,7 @@ def handle_reference_list_field(
             table_name=link_table_name,
             cls1=schema.name,
             cls2=reference_name,
-            rel_field_name1=field_name,
+            rel_field_name1=pyd_field_name,
             rel_field_name2=None,
             id_field_name1=f"{camel_to_snake(schema.name)}_id",
             id_field_name2=f"{camel_to_snake(reference_name)}_id",
@@ -358,10 +395,15 @@ def handle_reference_enum_field(
         assert default_value == "None" and is_nullable, f"Unexpected default value {default_value}"
     else:
         default_value = "..."
-    field_name = pydantic_field_name(field_name)
+    pyd_field_name, _ = pydantic_field_name(field_name)
     annotation_field_name = reference_name
     if is_list:
-        field_definition = f'Field(default={default_value}, sa_column=Column(ARRAY(Enum({reference_name}, name="{reference_name.lower()}"))))'
+        field_definition = build_field_definition(
+            field_name,
+            field,
+            default=default_value,
+            sa_column=f'Column(ARRAY(Enum({reference_name}, name="{reference_name.lower()}")))',
+        )
         annotation_field_name = f"list[{annotation_field_name}]"
         additional_parser_kwargs.extra_template_data[schema.name].sql.imports.update(
             [
@@ -371,15 +413,15 @@ def handle_reference_enum_field(
             ]
         )
     else:
-        field_definition = f"Field(default={default_value})"
+        field_definition = build_field_definition(field_name, field, default=default_value)
     if is_nullable:
         annotation_field_name += " | None"
 
     additional_parser_kwargs.extra_template_data[schema.name].sql.imports.add(
         relative_import(schema.python_module_path, referenced_schema.python_class_path)
     )
-    additional_parser_kwargs.extra_template_data[schema.name].sql.fields[field_name] = SQLModelField(
-        name=field_name,
+    additional_parser_kwargs.extra_template_data[schema.name].sql.fields[pyd_field_name] = SQLModelField(
+        name=pyd_field_name,
         annotation=annotation_field_name,
         definition=field_definition,
         description=extract_docstring(field),
@@ -397,8 +439,6 @@ def handle_array_field(
     """
     Handle the case where a field is of type List or Optional[List].
     """
-    default_value = "..." if "default" not in field.model_fields_set else str(field.default)
-    assert default_value in ("None", "..."), f"Unexpected default value {default_value}"
     annotation_field_name = f"list[{array_field.items.python_type_hint}]"
     if is_nullable:
         annotation_field_name += " | None"
@@ -420,7 +460,7 @@ def handle_array_field(
     additional_parser_kwargs.extra_template_data[schema.name].sql.fields[field_name] = SQLModelField(
         name=field_name,
         annotation=annotation_field_name,
-        definition=f"Field(default={default_value}, sa_column=Column(ARRAY({sa_type.__name__})))",
+        definition=build_field_definition(field_name, field, sa_column=f"Column(ARRAY({sa_type.__name__}))"),
         description=extract_docstring(field),
     )
 

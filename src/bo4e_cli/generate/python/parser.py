@@ -120,12 +120,13 @@ def get_bo4e_data_model_types(
     # pylint: disable=too-few-public-methods
     class SQLModelDataModelField(data_model_types.field_model):  # type: ignore[name-defined,misc]
         """
-        Override the data type manager to prevent the code generator from using the `AwareDateTime` type
-        featured in pydantic v2. Instead, the standard datetime type will be used.
+        Override the data model field to not use the Field class from pydantic. This class will be used only for
+        sqlmodel output. In this case, the Field class from sqlmodel will be used.
         """
 
         @property
         def imports(self) -> tuple[Import, ...]:
+            """Return the imports needed for the data model field."""
             return DataModelFieldBase.imports.fget(self)
 
     monkey_patch_imports(schemas)
