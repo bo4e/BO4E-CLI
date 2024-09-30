@@ -20,7 +20,7 @@ from typing import (
     overload,
 )
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, computed_field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
 
 from bo4e_cli.models.schema import SchemaRootObject, SchemaRootStrEnum, SchemaRootType
 from bo4e_cli.models.weakref import WeakCollection
