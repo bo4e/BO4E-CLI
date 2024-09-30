@@ -252,7 +252,8 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
     file path (relative to arbitrary output directory) => file content.
     """
     tmp_dir_final = tmp_bo4e_dir = Path(tempfile.gettempdir()).resolve() / "bo4e" / "schemas_for_generate_python"
-    clear_dir_if_needed(tmp_dir_final)
+    with CONSOLE.capture():
+        clear_dir_if_needed(tmp_dir_final)
     write_schemas(schemas, tmp_bo4e_dir, include_version_file=False, enable_tracker=False)
 
     data_model_types = get_bo4e_data_model_types(
@@ -306,7 +307,7 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
         )
     CONSOLE.print("Parsed schemas into Python classes")
 
-    with CONSOLE.status("Validating generated Python code", spinner="squish"):
+    with CONSOLE.status("Validating generated Python modules", spinner="squish"):
         parse_result = parser.parse()
         if not isinstance(parse_result, dict):
             raise ValueError(f"Unexpected type of parse result: {type(parse_result)}")
@@ -325,7 +326,7 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
             file_contents[schema.python_relative_path] = python_code
 
         file_contents.update({Path(*module_path): result.body for module_path, result in parse_result.items()})
-    CONSOLE.print("Validated generated Python code")
+    CONSOLE.print("Validated generated Python modules")
 
     # add SQLModel classes for many-to-many relationships in "many.py"
     if generate_type == GenerateType.PYTHON_SQL_MODEL:

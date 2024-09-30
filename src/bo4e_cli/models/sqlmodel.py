@@ -4,13 +4,13 @@ This module contains the models used for the SQLModel generation
 import inspect
 from importlib import import_module
 from pathlib import Path
-from typing import Collection, Iterable, Iterator
+from typing import Any, Collection, Iterable, Iterator
 
 from black.trans import defaultdict
 from datamodel_code_generator.imports import Import
 from mypy.nodes import TypeAlias
 from pydantic import BaseModel, Field, GetCoreSchemaHandler
-from pydantic_core import CoreSchema
+from pydantic_core import CoreSchema, core_schema
 
 from bo4e_cli.utils.data_structures import RootModelDict
 
@@ -78,7 +78,8 @@ class Imports(Collection[Import]):
         for import_ in imports:
             self.add(import_)
 
-    def __get_pydantic_core_schema__(self, handler: GetCoreSchemaHandler) -> CoreSchema:
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
         """Get the core schema for this collection
 
         This method is used by pydantic to serialize and validate the collection
@@ -86,7 +87,17 @@ class Imports(Collection[Import]):
         Args:
             handler: The handler to use to get the core schema
         """
-        return handler(list)
+        list_schema = core_schema.list_schema(Import.__pydantic_core_schema__)
+        return core_schema.json_or_python_schema(
+            json_schema=list_schema,
+            python_schema=core_schema.union_schema(
+                [
+                    # check if it's an instance first before doing any further work
+                    core_schema.is_instance_schema(Imports),
+                    list_schema,
+                ]
+            ),
+        )
 
 
 class SQLModelField(BaseModel):

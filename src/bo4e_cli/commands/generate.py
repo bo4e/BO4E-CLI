@@ -7,7 +7,6 @@ from typing import Annotated
 
 import typer
 
-from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.commands.entry import app
 from bo4e_cli.generate.python.entry import generate_bo4e_schemas
 from bo4e_cli.io.console import CONSOLE
