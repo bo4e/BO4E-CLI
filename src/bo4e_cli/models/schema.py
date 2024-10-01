@@ -3,6 +3,7 @@ This module contains classes to model json files which are formatted as "json sc
 https://json-schema.org/draft/2019-09/json-schema-validation
 Note that this actually supports mainly our BO4E-Schemas, but not necessarily the full json schema validation standard.
 """
+
 import re
 from typing import Annotated
 from typing import Any as _Any

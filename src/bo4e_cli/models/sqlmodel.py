@@ -1,6 +1,7 @@
 """
 This module contains the models used for the SQLModel generation
 """
+
 import inspect
 from collections import defaultdict
 from importlib import import_module

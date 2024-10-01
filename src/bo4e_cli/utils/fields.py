@@ -41,22 +41,19 @@ T4 = TypeVar("T4", bound=SchemaType)
 
 
 @overload
-def iter_schema_type(schema_type: SchemaType, yield_type_1: type[T1]) -> Iterator[T1]:
-    ...
+def iter_schema_type(schema_type: SchemaType, yield_type_1: type[T1]) -> Iterator[T1]: ...
 
 
 @overload
 def iter_schema_type(
     schema_type: SchemaType, yield_type_1: type[T1], yield_type_2: type[T2]
-) -> Iterator[Union[T1, T2]]:
-    ...
+) -> Iterator[Union[T1, T2]]: ...
 
 
 @overload
 def iter_schema_type(
     schema_type: SchemaType, yield_type_1: type[T1], yield_type_2: type[T2], yield_type_3: type[T3]
-) -> Iterator[Union[T1, T2, T3]]:
-    ...
+) -> Iterator[Union[T1, T2, T3]]: ...
 
 
 @overload
@@ -66,13 +63,11 @@ def iter_schema_type(
     yield_type_2: type[T2],
     yield_type_3: type[T3],
     yield_type_4: type[T4],
-) -> Iterator[Union[T1, T2, T3, T4]]:
-    ...
+) -> Iterator[Union[T1, T2, T3, T4]]: ...
 
 
 @overload
-def iter_schema_type(schema_type: SchemaType, *yield_types: type[SchemaType]) -> Iterator[SchemaType]:
-    ...
+def iter_schema_type(schema_type: SchemaType, *yield_types: type[SchemaType]) -> Iterator[SchemaType]: ...
 
 
 def iter_schema_type(  # type: ignore[misc]

@@ -1,6 +1,7 @@
 """
 This module contains the models for the GitHub API queries.
 """
+
 import functools
 import re
 from collections.abc import Hashable

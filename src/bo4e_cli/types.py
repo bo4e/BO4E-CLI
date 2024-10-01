@@ -1,6 +1,7 @@
 """
 This module contains custom types for the CLI.
 """
+
 from enum import StrEnum
 
 
