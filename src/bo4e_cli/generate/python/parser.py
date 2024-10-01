@@ -7,7 +7,6 @@ import itertools
 import re
 import shutil
 import tempfile
-from enum import Enum
 from pathlib import Path
 from typing import Any, Sequence, Type
 
