@@ -202,6 +202,11 @@ def adapt_parse_for_sql_model(
         for field_name in del_fields:
             del schema.schema_parsed.properties[field_name]
 
+        if "_id" not in del_fields:
+            add_id_field(
+                schema, additional_parser_kwargs, schema_models.String.model_construct(title="Primary key ID-Field")
+            )
+
     # parsed_arguments = additional_parser_kwargs.model_dump(mode="python")
     tmp_path = input_directory / "intermediate"
     write_schemas(schemas, tmp_path, include_version_file=False, enable_tracker=False)
