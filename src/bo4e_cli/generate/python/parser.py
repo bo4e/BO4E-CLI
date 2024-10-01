@@ -233,7 +233,9 @@ def remove_model_rebuild(python_code: str, class_name: str) -> str:
     """
     Remove the model_rebuild call from the generated code.
     """
-    return re.sub(rf"{class_name}\.model_rebuild\(\)\n", "", python_code)
+    return re.sub(rf"{class_name}\.(?:model_rebuild|update_forward_refs)\(\)\n", "", python_code)
+    # This line will be created for pydantic v2/v1 output if the model contains forward refs.
+    # In pydantic v2 it's the function model_rebuild, in pydantic v1 it's update_forward_refs.
 
 
 def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Path, str]:
