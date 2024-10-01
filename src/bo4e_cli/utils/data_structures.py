@@ -2,7 +2,8 @@
 Contains custom data structures that are used in the CLI.
 """
 
-from typing import Generic, Hashable, ItemsView, Iterator, KeysView, Mapping, TypeVar, ValuesView
+from collections.abc import Hashable
+from typing import Generic, ItemsView, Iterator, KeysView, Mapping, TypeVar, ValuesView
 
 from pydantic import RootModel
 

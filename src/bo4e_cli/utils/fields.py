@@ -3,10 +3,9 @@ Utility functions to work with schema fields.
 """
 
 from collections.abc import Iterator
-from typing import Iterable, Optional, TypeVar, Union
+from typing import Iterable, Optional, TypeVar, Union, overload
 
 from more_itertools import one
-from mypyc.irbuild.builder import overload
 from pydantic import BaseModel
 
 from bo4e_cli.models.meta import SchemaMeta, Schemas
@@ -32,6 +31,9 @@ def is_unset(model: BaseModel, field_name: str) -> bool:
     return field_name not in model.model_fields_set
 
 
+# pylint: disable=invalid-name
+# Apparently, pylint doesn't support numbers in its regex. To play around with the regex:
+# https://regex101.com/r/1Hja8E/1
 T1 = TypeVar("T1", bound=SchemaType)
 T2 = TypeVar("T2", bound=SchemaType)
 T3 = TypeVar("T3", bound=SchemaType)
