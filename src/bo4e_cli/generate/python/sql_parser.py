@@ -1,3 +1,8 @@
+"""
+Contains code to generate SQLModel classes from json schemas.
+Since the used tool doesn't support all features we need, we monkey patch some functions.
+"""
+
 import itertools
 from pathlib import Path
 
@@ -15,7 +20,13 @@ from bo4e_cli.models.sqlmodel import (
     ManyToManyRelationships,
     SQLModelField,
 )
-from bo4e_cli.utils.fields import extract_docstring, is_enum_reference, is_nullable, is_nullable_array, iter_schema_type
+from bo4e_cli.utils.fields import (
+    extract_docstring,
+    is_enum_reference,
+    is_nullable_array,
+    is_nullable_field,
+    iter_schema_type,
+)
 from bo4e_cli.utils.imports import relative_import
 from bo4e_cli.utils.strings import (
     camel_to_snake,
@@ -34,15 +45,19 @@ SCHEMA_TYPE_AS_SQLALCHEMY_TYPE: dict[type[schema_models.SchemaType], type[sqlalc
 }
 
 
-# TODO: Set titles of Fields
-
-
 def adapt_parse_for_sql_model(
     input_directory: Path, schemas: Schemas
-) -> tuple[Schemas, AdditionalParserKwargs, Path, ManyToManyRelationships]:
-    """
+) -> tuple[AdditionalParserKwargs, Path, ManyToManyRelationships]:
+    """Adapt the parser of datamodel-code-generator to suit the needs of SQLModel.
+
     Scans fields of parsed classes to modify them to meet the SQLModel specifics and to introduce relationships.
-    Returns additional information, an input path with modified json schemas and arguments for the parser
+
+    Args:
+        input_directory: The directory containing the JSON files with the schemas.
+        schemas: The schemas to adapt. Should correspond to the JSON files in the input directory.
+    Returns:
+        Additional kwargs for the datamodel-code-generator parser, the path to the intermediate JSON files which
+         should be parsed instead and the many-to-many relationships.
     """
     additional_parser_kwargs = AdditionalParserKwargs()
     many_to_many_relationships: ManyToManyRelationships = []
@@ -64,7 +79,7 @@ def adapt_parse_for_sql_model(
                     handle_any_field(schema, field, field_name, additional_parser_kwargs)
                 case schema_models.Array(items=schema_models.Any()):  # List[Any] field
                     handle_any_field(schema, field.items, field_name, additional_parser_kwargs, is_list=True)
-                case schema_models.AnyOf() as field_obj if is_nullable(
+                case schema_models.AnyOf() as field_obj if is_nullable_field(
                     field_obj, schema_models.Any
                 ):  # Optional[Any] field
                     handle_any_field(schema, field_obj, field_name, additional_parser_kwargs, is_nullable=True)
@@ -88,7 +103,7 @@ def adapt_parse_for_sql_model(
                     handle_reference_enum_field(
                         schema, field, ref, ref_schema, field_name, additional_parser_kwargs, is_list=True
                     )
-                case schema_models.AnyOf() as field_obj if is_nullable(
+                case schema_models.AnyOf() as field_obj if is_nullable_field(
                     field_obj, schema_models.Reference
                 ) and is_enum_reference(field_obj, schemas):
                     # Optional[Reference] field referencing an enum
@@ -135,7 +150,7 @@ def adapt_parse_for_sql_model(
                         additional_parser_kwargs,
                         many_to_many_relationships,
                     )
-                case schema_models.AnyOf() as field_obj if is_nullable(field_obj, schema_models.Reference):
+                case schema_models.AnyOf() as field_obj if is_nullable_field(field_obj, schema_models.Reference):
                     # Optional[Reference] field
                     ref: schema_models.Reference = one(
                         sub_field for sub_field in field_obj.any_of if isinstance(sub_field, schema_models.Reference)
@@ -169,7 +184,7 @@ def adapt_parse_for_sql_model(
                         field_name,
                         additional_parser_kwargs,
                     )
-                case schema_models.AnyOf() as field_obj if is_nullable(field_obj, schema_models.Array):
+                case schema_models.AnyOf() as field_obj if is_nullable_field(field_obj, schema_models.Array):
                     # Optional[List] field without containing Reference or Any fields
                     handle_array_field(
                         schema,
@@ -190,14 +205,18 @@ def adapt_parse_for_sql_model(
     # parsed_arguments = additional_parser_kwargs.model_dump(mode="python")
     tmp_path = input_directory / "intermediate"
     write_schemas(schemas, tmp_path, include_version_file=False, enable_tracker=False)
-    return schemas, additional_parser_kwargs, tmp_path, many_to_many_relationships
+    return additional_parser_kwargs, tmp_path, many_to_many_relationships
 
 
 def add_id_field(
     schema: SchemaMeta, additional_parser_kwargs: AdditionalParserKwargs, id_field: schema_models.SchemaType
 ) -> None:
-    """
-    Add an id field to the schema.
+    """Add an id field to the schema.
+
+    Args:
+        schema: The schema to add the id field to
+        additional_parser_kwargs: The additional parser kwargs
+        id_field: The field object to use as the id field
     """
     additional_parser_kwargs.extra_template_data[schema.name].sql.fields["id"] = SQLModelField(
         name="id",
@@ -212,6 +231,16 @@ def build_field_definition(
     field: schema_models.SchemaType | None,
     **options: str,
 ) -> str:
+    """Build the field definition for a SQLModel field.
+
+    If not overridden by the options, the default value, title and alias are added to the field definition using the
+    field name and the field object. If the field object is None, the default value and the title will not be loaded.
+
+    Args:
+        field_name: The name of the field
+        field: The field object
+        options: Additional options for the field definition
+    """
     if "default" not in options and field is not None:
         options["default"] = "..." if "default" not in field.model_fields_set else repr(field.default)
     if "title" not in options and field is not None and "title" in field.model_fields_set:
@@ -232,6 +261,7 @@ def build_field_definition(
     return field_def
 
 
+# pylint: disable=too-many-arguments
 def handle_any_field(
     schema: SchemaMeta,
     field: schema_models.SchemaType,

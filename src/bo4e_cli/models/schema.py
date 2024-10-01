@@ -133,6 +133,13 @@ class AllOf(TypeBase):
 
     all_of: Annotated[list["SchemaType"], Field(alias="allOf")]
 
+    @property
+    def python_type_hint(self) -> str:
+        """
+        Unsupported. This features needs a more complex implementation than a simple type hint.
+        """
+        raise NotImplementedError("Simple python type hint not supported for allOf.")
+
 
 class String(TypeBase):
     """

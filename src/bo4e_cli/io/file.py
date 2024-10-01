@@ -1,3 +1,7 @@
+"""
+This module contains functions to read or write files to the file system.
+"""
+
 from pathlib import Path
 from typing import Optional
 

@@ -1,3 +1,7 @@
+"""
+Contains custom data structures that are used in the CLI.
+"""
+
 from typing import Generic, Hashable, ItemsView, Iterator, KeysView, Mapping, TypeVar, ValuesView
 
 from pydantic import RootModel
@@ -7,6 +11,10 @@ V = TypeVar("V")
 
 
 class RootModelDict(Mapping[K, V], RootModel[dict[K, V]], Generic[K, V]):
+    """
+    This pydantic RootModel is a dict-like object and implements the corresponding methods.
+    """
+
     root: dict[K, V]
 
     def __getitem__(self, k: K) -> V:
@@ -25,6 +33,11 @@ class RootModelDict(Mapping[K, V], RootModel[dict[K, V]], Generic[K, V]):
         return k in self.root
 
     def items(self) -> ItemsView[K, V]:
+        """Return a new view of the dictionary's items (key, value).
+
+        Returns:
+            ItemsView: A view of the dictionary's items.
+        """
         return self.root.items()
 
     def keys(self) -> KeysView[K]:

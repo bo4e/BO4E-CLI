@@ -276,7 +276,7 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
     with CONSOLE.status("Parsing schemas into Python classes", spinner="squish"):
         if generate_type == GenerateType.PYTHON_SQL_MODEL:
             # adapt input for SQLModel classes
-            schemas, additional_parser_kwargs, tmp_bo4e_dir, links = adapt_parse_for_sql_model(tmp_bo4e_dir, schemas)
+            additional_parser_kwargs, tmp_bo4e_dir, links = adapt_parse_for_sql_model(tmp_bo4e_dir, schemas)
             additional_arguments = additional_parser_kwargs.model_dump(mode="python", by_alias=True)
             additional_arguments["extra_template_data"]["#all#"] = {}
 

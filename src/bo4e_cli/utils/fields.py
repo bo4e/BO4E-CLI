@@ -104,7 +104,7 @@ def extract_docstring(field: SchemaType) -> Optional[str]:
     return field.description if "description" in field.model_fields_set else None
 
 
-def is_nullable(field: AnyOf, other_type: Optional[type[SchemaType]] = None) -> bool:
+def is_nullable_field(field: AnyOf, other_type: Optional[type[SchemaType]] = None) -> bool:
     """
     Check if a AnyOf field represents a nullable field. If other_type is provided, check if the field is nullable
     and of the given type.

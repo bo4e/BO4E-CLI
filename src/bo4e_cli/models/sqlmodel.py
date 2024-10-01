@@ -2,13 +2,12 @@
 This module contains the models used for the SQLModel generation
 """
 import inspect
+from collections import defaultdict
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Collection, Iterable, Iterator
+from typing import Any, Collection, Iterable, Iterator, TypeAlias
 
-from black.trans import defaultdict
 from datamodel_code_generator.imports import Import
-from mypy.nodes import TypeAlias
 from pydantic import BaseModel, Field, GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
 
@@ -78,6 +77,7 @@ class Imports(Collection[Import]):
         for import_ in imports:
             self.add(import_)
 
+    # pylint: disable=unused-argument
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
         """Get the core schema for this collection
