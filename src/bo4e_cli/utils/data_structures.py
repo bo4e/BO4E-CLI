@@ -24,7 +24,8 @@ class RootModelDict(Mapping[K, V], RootModel[dict[K, V]], Generic[K, V]):
     def __setitem__(self, k: K, v: V) -> None:
         self.root[k] = v
 
-    def __iter__(self) -> Iterator[K]:
+    def __iter__(self) -> Iterator[K]:  # type: ignore[override]
+        # Don't care about the implementation of the BaseModel iterator
         return iter(self.root)
 
     def __len__(self) -> int:

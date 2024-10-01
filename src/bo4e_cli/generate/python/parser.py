@@ -30,16 +30,6 @@ from bo4e_cli.models.sqlmodel import AdditionalParserKwargs, ManyToManyRelations
 from bo4e_cli.types import GenerateType
 
 
-class OutputType(str, Enum):
-    """
-    enum to specify the output type
-    """
-
-    PYDANTIC_V2 = "pydantic_v2"
-    PYDANTIC_V1 = "pydantic_v1"
-    SQL_MODEL = "sql_model"
-
-
 def get_bo4e_data_model_types(
     data_model_type: DataModelType,
     target_python_version: PythonVersion,
@@ -127,7 +117,7 @@ def get_bo4e_data_model_types(
         @property
         def imports(self) -> tuple[Import, ...]:
             """Return the imports needed for the data model field."""
-            return DataModelFieldBase.imports.fget(self)
+            return DataModelFieldBase.imports.fget(self)  # type: ignore[no-any-return,attr-defined]
 
     monkey_patch_imports(schemas)
 
@@ -260,7 +250,7 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
     data_model_types = get_bo4e_data_model_types(
         data_model_type=(
             DataModelType.PydanticBaseModel
-            if generate_type == OutputType.PYDANTIC_V1
+            if generate_type == GenerateType.PYTHON_PYDANTIC_V1
             else DataModelType.PydanticV2BaseModel
         ),
         target_python_version=PythonVersion.PY_312,

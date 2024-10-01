@@ -75,7 +75,12 @@ def iter_schema_type(schema_type: SchemaType, *yield_types: type[SchemaType]) ->
     ...
 
 
-def iter_schema_type(schema_type: SchemaType, *yield_types: type[SchemaType]) -> Iterator[SchemaType]:
+def iter_schema_type(  # type: ignore[misc]
+    # Overloaded function implementation does not accept all possible arguments of signature 1
+    # mypy doesn't understand that the *yield_types argument covers all overloaded signatures
+    schema_type: SchemaType,
+    *yield_types: type[SchemaType],
+) -> Iterator[SchemaType]:
     """
     Iterate recursively through the schema type. Yields all objects of the given types.
     """
