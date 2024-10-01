@@ -104,7 +104,7 @@ pyyaml==6.0.2
     # via datamodel-code-generator
 requests==2.32.3
     # via pygithub
-rich==13.8.0
+rich==13.8.1
     # via typer
 shellingham==1.5.4
     # via typer
