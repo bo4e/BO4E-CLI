@@ -9,16 +9,18 @@ from typing import Iterable, List, Optional, Set, Union
 from datamodel_code_generator.imports import Import
 from datamodel_code_generator.imports import Imports as _Imports
 
-from bo4e_cli.generate.python.schema import SchemaMetadata
+from bo4e_cli.models.meta import Schemas
 
 
 # pylint: disable=too-many-statements
-def monkey_patch_imports(namespace: dict[str, SchemaMetadata]) -> None:
+def monkey_patch_imports(schemas: Schemas) -> None:
     """
     Overwrites the behaviour how imports are rendered. They are not going through jinja templates.
     They Imports class has a __str__ method, which we will overwrite here.
     """
-    namespace = {k: v for k, v in namespace.items() if v.module_path[0] != "enum"}
+    filtered_schemas = Schemas.model_validate(
+        {"schemas": filter(lambda schema: schema.module[0] != "enum", schemas), "version": schemas.version}
+    )
     # "Typ" and "Landescode" must not be wrapped inside the "if TYPE_CHECKING" block because they are used explicitly
     # to set default values. Generally, enums can be excluded since they cannot cause circular reference issues.
     import_type_checking = Import.from_full_path("typing.TYPE_CHECKING")
@@ -48,7 +50,7 @@ def monkey_patch_imports(namespace: dict[str, SchemaMetadata]) -> None:
             imports_no_type_checking = defaultdict(set)
             for from_, imports in self.items():
                 for import_ in imports:
-                    if import_ in namespace:
+                    if import_ in filtered_schemas.names:
                         imports_type_checking[from_].add(import_)
                     else:
                         imports_no_type_checking[from_].add(import_)
@@ -113,7 +115,9 @@ def monkey_patch_imports(namespace: dict[str, SchemaMetadata]) -> None:
                             import_type_checking.from_ in self
                             and import_type_checking.import_ in self[import_type_checking.from_]
                             and not any(
-                                imp_str in namespace for imp_str_sets in self.values() for imp_str in imp_str_sets
+                                imp_str in filtered_schemas.names
+                                for imp_str_sets in self.values()
+                                for imp_str in imp_str_sets
                             )
                         ):
                             self.remove(

@@ -55,7 +55,7 @@ class TestSchemas:
 
     def test_search_index_views(self) -> None:
         schemas = read_schemas(TEST_DIR_BO4E_ORIGINAL)
-        cls_name_view = schemas.search_index_by_cls_name
+        cls_name_view = schemas.names
         angebot_meta = one(schema for schema in schemas if schema.name == "Angebot")
 
         assert len(cls_name_view) == len(schemas)
@@ -68,8 +68,8 @@ class TestSchemas:
         assert cls_name_view.get("dummy") is None
 
         schemas.add(angebot_meta)
-        assert cls_name_view == schemas.search_index_by_cls_name
-        assert cls_name_view != schemas.search_index_by_module
+        assert cls_name_view == schemas.names
+        assert cls_name_view != schemas.modules
         assert set(cls_name_view.values()) == schemas
         assert set(cls_name_view.keys()) == {schema.name for schema in schemas}
         assert set(cls_name_view.items()) == set(zip(cls_name_view.keys(), cls_name_view.values()))

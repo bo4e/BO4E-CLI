@@ -1,0 +1,19 @@
+"""
+File containing all linking classes for many-many relations in the BO4E version
+"""
+import uuid as uuid_pkg
+
+from sqlalchemy import Column, ForeignKey
+from sqlmodel import Field, SQLModel
+
+{%- for link in links %}
+class {{ link.table_name }}(SQLModel, table=True):
+    """
+    class linking m-n relation of tables {{ link.cls1 }} and {{ link.cls2 }} for field {{ link.rel_field_name1 }}.
+    """
+    {{ link.id_field_name1 }}: uuid_pkg.UUID = Field(..., primary_key=True, foreign_key="{{ link.cls1.lower() }}.id", ondelete="CASCADE")
+    """Id linking to {{ link.cls1 }}."""
+    {{ link.id_field_name2 }}: uuid_pkg.UUID = Field(..., primary_key=True, foreign_key="{{ link.cls2.lower() }}.id", ondelete="CASCADE")
+    """Id linking to {{ link.cls2 }}."""
+
+{%- endfor -%}
