@@ -143,7 +143,6 @@ def monkey_patch_relative_import() -> None:
     Anyway, this monkey patch changes the imports to "from ..enum.typ import Typ" which resolves the issue.
     """
 
-    # bo.angebot, bo.angebotsteil.Angebotsteil
     def relative(current_module: str, reference: str) -> tuple[str, str]:
         """Find relative module path."""
 
