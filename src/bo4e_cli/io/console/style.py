@@ -74,8 +74,12 @@ class RegexPriorityHighlighter(Highlighter):
 
         """
         for re_highlight, _ in self.highlights:
-            text.highlight_regex(re_highlight, style_prefix=self.base_style)  # type: ignore[arg-type]
+            text.highlight_regex(re_highlight, style_prefix=self.base_style)
+            # previously mypy correctly reported an error here (arg-type).
             # mypy is right, but the function in rich.Text also works with re.Pattern and is therefore wrongly annotated
+            # Since upgrade from mypy v1.11.2 -> v1.12.0 this error is not reported anymore (False-negative).
+            # See PR https://github.com/bo4e/BO4E-CLI/pull/32
+            # Maybe this will be fixed in a future version of mypy then you will need the type-ignore again.
 
 
 class BO4EHighlighter(RegexPriorityHighlighter):
