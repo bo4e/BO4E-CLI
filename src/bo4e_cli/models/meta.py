@@ -2,6 +2,7 @@
 This module contains the models for the GitHub API queries.
 """
 
+import functools
 import re
 from collections.abc import Hashable
 from pathlib import Path
@@ -20,10 +21,11 @@ from typing import (
     overload,
 )
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, computed_field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
 
 from bo4e_cli.models.schema import SchemaRootObject, SchemaRootStrEnum, SchemaRootType
 from bo4e_cli.models.weakref import WeakCollection
+from bo4e_cli.utils.strings import camel_to_snake
 
 REGEX_VERSION = re.compile(
     r"^v(?P<major>\d{6})\."
@@ -108,11 +110,35 @@ class SchemaMeta(BaseModel):
 
     _schema: SchemaRootType | str | None = None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def python_module(self) -> tuple[str, ...]:
+        """e.g. ('bo', 'preisblatt_netznutzung') or ('zusatz_attribut')"""
+        return *self.module[:-1], camel_to_snake(self.module[-1])
+
+    @property
+    def python_module_with_suffix(self) -> tuple[str, ...]:
+        """e.g. ('bo', 'preisblatt_netznutzung.py') or ('zusatz_attribut.py')"""
+        return *self.module[:-1], f"{camel_to_snake(self.module[-1])}.py"
+
+    @property
+    def python_module_path(self) -> str:
+        """e.g. 'bo.preisblatt_netznutzung' or 'zusatz_attribut'"""
+        return ".".join(self.python_module)
+
+    @property
+    def python_class_path(self) -> str:
+        """e.g. 'bo.preisblatt_netznutzung.PreisblattNetznutzung' or 'zusatz_attribut.ZusatzAttribut'"""
+        return ".".join(self.python_module) + "." + self.name
+
     @property
     def relative_path(self) -> Path:
         """E.g. 'bo/Marktlokation.json' or 'ZusatzAttribut.json'"""
         return Path(*self.module).with_suffix(".json")
+
+    @property
+    def python_relative_path(self) -> Path:
+        """E.g. 'bo/preisblatt_netznutzung.py' or 'zusatz_attribut.py'"""
+        return Path(*self.python_module_with_suffix)
 
     @property
     def src_url(self) -> HttpUrl:
@@ -140,6 +166,17 @@ class SchemaMeta(BaseModel):
         if isinstance(self._schema, str):
             self._schema = TypeAdapter(SchemaRootType).validate_json(self._schema)
         return self._schema
+
+    @property
+    def object_schema_parsed(self) -> SchemaRootObject:
+        """
+        Returns the parsed schema and checks if it's a SchemaRootObject.
+        Raises a ValueError if the schema has not been loaded yet.
+        Automatically parses the schema if `set_schema_text` has been called before.
+        """
+        if not isinstance(self.schema_parsed, SchemaRootObject):
+            raise ValueError("The schema is not an object schema.")
+        return self.schema_parsed
 
     def set_schema_parsed(self, value: SchemaRootType) -> None:
         """Sets the parsed schema."""
@@ -204,15 +241,15 @@ class Schemas(BaseModel):
     removed from this collection.
     """
 
-    @property
-    def search_index_by_cls_name(self) -> "SearchIndex[str]":
+    @functools.cached_property
+    def names(self) -> "SearchIndex[str]":
         """Returns a search index with the schema names as key."""
         search_index = SearchIndex(self, key_func=lambda schema: schema.name)
         self._search_indices.add(search_index)
         return search_index
 
-    @property
-    def search_index_by_module(self) -> "SearchIndex[tuple[str, ...]]":
+    @functools.cached_property
+    def modules(self) -> "SearchIndex[tuple[str, ...]]":
         """Returns a search index with the schema modules (as tuple) as key."""
         search_index = SearchIndex(self, key_func=lambda schema: schema.module)
         self._search_indices.add(search_index)

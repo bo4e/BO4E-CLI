@@ -11,7 +11,7 @@ TEST_DIR = Path(__file__).parents[1] / "test_data/bo4e_original"
 class TestUpdateRefs:
     def test_update_reference(self) -> None:
         schemas = read_schemas(TEST_DIR)
-        angebot_meta = schemas.search_index_by_cls_name["Angebot"]
+        angebot_meta = schemas.names["Angebot"]
         example_ref = angebot_meta.schema_parsed.properties["_typ"].any_of[0]
 
         assert isinstance(example_ref, Reference)
@@ -25,7 +25,7 @@ class TestUpdateRefs:
 
     def test_update_references(self) -> None:
         schemas = read_schemas(TEST_DIR)
-        angebot_meta = schemas.search_index_by_cls_name["Angebot"]
+        angebot_meta = schemas.names["Angebot"]
         update_references(angebot_meta, schemas)
 
         assert angebot_meta.schema_parsed.properties["_typ"].any_of[0].ref == "../enum/Typ.json#"

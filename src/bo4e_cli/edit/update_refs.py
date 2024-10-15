@@ -9,7 +9,8 @@ from rich.progress import track
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.github import OWNER, REPO
 from bo4e_cli.models.meta import SchemaMeta, Schemas
-from bo4e_cli.models.schema import AllOf, AnyOf, Array, Object, Reference, SchemaType
+from bo4e_cli.models.schema import Reference
+from bo4e_cli.utils.fields import iter_schema_type
 
 REF_ONLINE_REGEX = re.compile(
     rf"^https://raw\.githubusercontent\.com/(?:{OWNER.upper()}|{OWNER.lower()}|{OWNER.capitalize()}|Hochfrequenz)/"
@@ -33,7 +34,7 @@ def update_reference(
     Example of reference to definitions:
     #/$defs/Angebot
     """
-    schema_cls_namespace = schemas.search_index_by_cls_name
+    schema_cls_namespace = schemas.names
     match = REF_ONLINE_REGEX.search(field.ref)
     if match is not None:
         CONSOLE.print(f"Matched online reference: {field.ref}", show_only_on_verbose=True)
@@ -80,34 +81,8 @@ def update_references(schema: SchemaMeta, schemas: Schemas) -> None:
     on every Reference object.
     """
 
-    def update_or_iter(_object: SchemaType) -> None:
-        if isinstance(_object, Object):
-            iter_object(_object)
-        elif isinstance(_object, AnyOf):
-            iter_any_of(_object)
-        elif isinstance(_object, AllOf):
-            iter_all_of(_object)
-        elif isinstance(_object, Array):
-            iter_array(_object)
-        elif isinstance(_object, Reference):
-            update_reference(_object, schema, schemas)
-
-    def iter_object(_object: Object) -> None:
-        for prop in _object.properties.values():
-            update_or_iter(prop)
-
-    def iter_any_of(_object: AnyOf) -> None:
-        for item in _object.any_of:
-            update_or_iter(item)
-
-    def iter_all_of(_object: AllOf) -> None:
-        for item in _object.all_of:
-            update_or_iter(item)
-
-    def iter_array(_object: Array) -> None:
-        update_or_iter(_object.items)
-
-    update_or_iter(schema.schema_parsed)
+    for reference in iter_schema_type(schema.schema_parsed, Reference):
+        update_reference(reference, schema, schemas)
 
 
 def update_references_all_schemas(schemas: Schemas) -> None:

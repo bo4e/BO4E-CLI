@@ -23,6 +23,8 @@ dependencies = [
     "httpx",
     "datamodel-code-generator",
     "autoflake",
+    "more_itertools",
+    "sqlmodel",
 ]     # add all the dependencies here
 dynamic = ["readme", "version"]
 

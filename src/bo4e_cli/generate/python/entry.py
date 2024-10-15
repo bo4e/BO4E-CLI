@@ -2,61 +2,35 @@
 This module is the entry point for the CLI bo4e-generator.
 """
 
-import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Literal
 
-from bo4e_cli.generate.python.parser import (
-    OutputType,
-    bo4e_init_file_content,
-    bo4e_version_file_content,
-    get_formatter,
-    parse_bo4e_schemas,
-)
-from bo4e_cli.generate.python.schema import get_namespace, get_version
-from bo4e_cli.generate.python.sqlparser import remove_unused_imports
-
-
-def resolve_paths(input_directory: Path, output_directory: Path) -> tuple[Path, Path]:
-    """
-    Resolve the input and output paths. The data-model-parser have problems with handling relative paths.
-    """
-    if not input_directory.is_absolute():
-        input_directory = input_directory.resolve()
-    if not output_directory.is_absolute():
-        output_directory = output_directory.resolve()
-    return input_directory, output_directory
+from bo4e_cli.generate.python.format import post_process_files
+from bo4e_cli.generate.python.parser import bo4e_init_file_content, bo4e_version_file_content, parse_bo4e_schemas
+from bo4e_cli.io.cleanse import clear_dir_if_needed
+from bo4e_cli.io.file import write_file_contents
+from bo4e_cli.models.meta import Schemas
+from bo4e_cli.types import GenerateType
 
 
 def generate_bo4e_schemas(
-    input_directory: Path,
+    schemas: Schemas,
     output_directory: Path,
-    output_type: OutputType,
-    clear_output: bool = False,
-    target_version: Optional[str] = None,
+    generate_type: Literal[
+        GenerateType.PYTHON_PYDANTIC_V1,
+        GenerateType.PYTHON_PYDANTIC_V2,
+        GenerateType.PYTHON_SQL_MODEL,
+    ],
+    clear_output: bool = True,
 ) -> None:
     """
     Generate all BO4E schemas from the given input directory and save them in the given output directory.
     """
-    input_directory, output_directory = resolve_paths(input_directory, output_directory)
-    namespace = get_namespace(input_directory)
-    file_contents = parse_bo4e_schemas(input_directory, namespace, output_type)
-    version = get_version(target_version, namespace)
-    file_contents[Path("__version__.py")] = bo4e_version_file_content(version)
-    file_contents[Path("__init__.py")] = bo4e_init_file_content(namespace, version)
-    if clear_output and output_directory.exists():
-        shutil.rmtree(output_directory)
+    file_contents = parse_bo4e_schemas(schemas, generate_type)
+    file_contents[Path("__version__.py")] = bo4e_version_file_content(schemas.version.to_str_without_prefix())
+    file_contents[Path("__init__.py")] = bo4e_init_file_content(schemas)
 
-    formatter = get_formatter()
-    for relative_file_path, file_content in file_contents.items():
-        file_path = output_directory / relative_file_path
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        if (
-            relative_file_path.name not in ["__init__.py", "__version__.py"]
-            and OutputType[output_type] == OutputType.SQL_MODEL
-        ):
-            file_content = remove_unused_imports(file_content)
-        file_content = formatter.format_code(file_content)
-        file_path.write_text(file_content, encoding="utf-8")
-        print(f"Created {file_path}")
-    print("Done.")
+    post_process_files(file_contents)
+    if clear_output:
+        clear_dir_if_needed(output_directory)
+    write_file_contents(file_contents, base_path=output_directory)

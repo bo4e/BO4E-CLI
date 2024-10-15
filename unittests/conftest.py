@@ -1,6 +1,8 @@
 import os
+import sys
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
-from typing import Iterable, cast
+from typing import Iterable, Iterator, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -106,3 +108,18 @@ def mock_github(respx_mock: respx.MockRouter) -> Iterable[None]:
         route.side_effect = download_sideeffect
         get_source_repo.cache_clear()
         yield
+
+
+@contextmanager
+def patch_python_path(path: Path) -> Iterator[str]:
+    """A context manager to temporarily add a path to the python path.
+
+    Args:
+        path: The path to add to the python path.
+    Yields:
+        The path as a string.
+    """
+    path_str = str(path)
+    sys.path.append(path_str)
+    yield path_str
+    sys.path.remove(path_str)

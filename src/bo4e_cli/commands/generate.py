@@ -2,24 +2,16 @@
 This module contains the generate command.
 """
 
-from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.commands.entry import app
-
-
-class GenerateType(StrEnum):
-    """
-    A custom type for the generate command.
-    """
-
-    PYTHON_PYDANTIC_V1 = "python-pydantic-v1"
-    PYTHON_PYDANTIC_V2 = "python-pydantic-v2"
-    PYTHON_SQL_MODEL = "python-sql-model"
+from bo4e_cli.generate.python.entry import generate_bo4e_schemas
+from bo4e_cli.io.console import CONSOLE
+from bo4e_cli.io.schemas import read_schemas
+from bo4e_cli.types import GenerateType
 
 
 @app.command()
@@ -44,4 +36,9 @@ def generate(
 
     Several output types are available, see --output-type.
     """
-    dummy(input_dir=input_dir, output_dir=output_dir, output_type=output_type, clear_output=clear_output)
+    schemas = read_schemas(input_dir)
+    if output_type in (GenerateType.PYTHON_PYDANTIC_V1, GenerateType.PYTHON_PYDANTIC_V2, GenerateType.PYTHON_SQL_MODEL):
+        generate_bo4e_schemas(schemas, output_dir, output_type, clear_output)
+    else:
+        CONSOLE.print(f"Output type {output_type} is not supported yet.")
+        raise typer.Exit(1)

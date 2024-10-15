@@ -13,7 +13,7 @@ class TestEdit:
     A class with pytest unit tests.
     """
 
-    def test_edit(self, tmp_path: Path, mock_github: None) -> None:
+    def test_edit(self, tmp_path: Path) -> None:
         result = CliRunner().invoke(
             app,
             ["edit", "-i", str(TEST_DIR_BO4E_REL_REFS), "-o", str(tmp_path), "-c", str(TEST_DIR / "config_test.json")],
