@@ -281,7 +281,7 @@ def build_field_definition(
     return field_def
 
 
-# pylint: disable=too-many-arguments
+# pylint: disable=too-many-arguments,too-many-positional-arguments
 def handle_any_field(
     schema: SchemaMeta,
     field: schema_models.SchemaType,
