@@ -116,7 +116,7 @@ sqlalchemy==2.0.36
     # via sqlmodel
 sqlmodel==0.0.22
     # via bo4e-cli (pyproject.toml)
-typer==0.12.5
+typer==0.13.0
     # via bo4e-cli (pyproject.toml)
 typing-extensions==4.12.2
     # via
