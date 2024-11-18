@@ -35,7 +35,7 @@ cryptography==43.0.3
     # via pyjwt
 datamodel-code-generator==0.26.1
     # via bo4e-cli (pyproject.toml)
-deprecated==1.2.14
+deprecated==1.2.15
     # via pygithub
 dnspython==2.7.0
     # via email-validator
