@@ -57,7 +57,7 @@ idna==3.10
     #   email-validator
     #   httpx
     #   requests
-inflect==5.6.2
+inflect==7.5.0
     # via datamodel-code-generator
 isort==5.13.2
     # via datamodel-code-generator
