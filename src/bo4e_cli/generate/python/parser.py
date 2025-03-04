@@ -12,7 +12,8 @@ from typing import Any, Sequence, Type
 
 import datamodel_code_generator.parser.base
 import datamodel_code_generator.reference
-from datamodel_code_generator import DataModelType, DatetimeClassType, PythonVersion
+from datamodel_code_generator import DataModelType, PythonVersion
+from datamodel_code_generator.format import DatetimeClassType
 from datamodel_code_generator.imports import IMPORT_DATETIME, Import
 from datamodel_code_generator.model import DataModel, DataModelFieldBase, DataModelSet, get_data_model_types
 from datamodel_code_generator.model.enum import Enum as _Enum
