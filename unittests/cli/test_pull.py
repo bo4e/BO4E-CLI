@@ -13,7 +13,7 @@ class TestPull:
     """
 
     def test_latest(self, tmp_path: Path, mock_github: None) -> None:
-        result = CliRunner().invoke(app, ["pull", "-o", str(tmp_path), "--no-update-refs"])
+        result = CliRunner().invoke(app, ["pull", "-o", str(tmp_path), "--no-update-refs"], catch_exceptions=False)
         assert result.exit_code == 0
 
         version_file = tmp_path / ".version"
@@ -27,7 +27,7 @@ class TestPull:
 
     def test_explicit_version(self, tmp_path: Path, mock_github: None) -> None:
         result = CliRunner().invoke(
-            app, ["pull", "-o", str(tmp_path), "--no-update-refs", "-t", str(TEST_DATA_VERSION)]
+            app, ["pull", "-o", str(tmp_path), "--no-update-refs", "-t", str(TEST_DATA_VERSION)], catch_exceptions=False
         )
         assert result.exit_code == 0
 
@@ -41,7 +41,7 @@ class TestPull:
         assert angebot.schema_parsed.title == "Angebot"
 
     def test_update_refs(self, tmp_path: Path, mock_github: None) -> None:
-        result = CliRunner().invoke(app, ["pull", "-o", str(tmp_path)])
+        result = CliRunner().invoke(app, ["pull", "-o", str(tmp_path)], catch_exceptions=False)
         assert result.exit_code == 0
 
         version_file = tmp_path / ".version"
