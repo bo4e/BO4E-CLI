@@ -13,6 +13,7 @@ from typing import Any, Sequence, Type
 import datamodel_code_generator.parser.base
 import datamodel_code_generator.reference
 from datamodel_code_generator import DataModelType, PythonVersion
+from datamodel_code_generator.format import DatetimeClassType
 from datamodel_code_generator.imports import IMPORT_DATETIME, Import
 from datamodel_code_generator.model import DataModel, DataModelFieldBase, DataModelSet, get_data_model_types
 from datamodel_code_generator.model.enum import Enum as _Enum
@@ -100,9 +101,12 @@ def get_bo4e_data_model_types(
             data_type: Type[DataType],
             strict_types: Sequence[StrictTypes],
             pattern_key: str,
+            target_datetime_class: DatetimeClassType,  # noqa: ARG002
         ) -> dict[Types, DataType]:
             """overwrite the AwareDatetime import"""
-            result: dict[Types, DataType] = super().type_map_factory(data_type, strict_types, pattern_key)
+            result: dict[Types, DataType] = super().type_map_factory(
+                data_type, strict_types, pattern_key, target_datetime_class
+            )
             result[Types.date_time] = data_type.from_import(IMPORT_DATETIME)
             return result
 
