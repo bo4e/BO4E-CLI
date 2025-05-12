@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any as _Any
 from typing import Mapping, Sequence
 
-from . import change_schemas
+import bo4e_cli.models.changes
+
+from . import filters
 
 
 class ChangeSymbol(StrEnum):
@@ -26,14 +28,14 @@ class ChangeSymbol(StrEnum):
 
 
 def determine_symbol(
-    changes: Sequence[change_schemas.Change], namespace: Sequence[tuple[str, ...]], cls: tuple[str, ...]
+    changes: Sequence[bo4e_cli.models.changes.Change], namespace: Sequence[tuple[str, ...]], cls: tuple[str, ...]
 ) -> ChangeSymbol:
     """
     Determine the symbol of a change.
     """
-    if len(changes) == 1 and changes[0].type == change_schemas.ChangeType.CLASS_REMOVED:
+    if len(changes) == 1 and changes[0].type == bo4e_cli.models.changes.ChangeType.CLASS_REMOVED:
         return ChangeSymbol.REMOVED
-    if len(changes) == 1 and changes[0].type == change_schemas.ChangeType.CLASS_ADDED:
+    if len(changes) == 1 and changes[0].type == bo4e_cli.models.changes.ChangeType.CLASS_ADDED:
         return ChangeSymbol.ADDED
     if cls not in namespace:
         return ChangeSymbol.NON_EXISTENT
@@ -41,7 +43,8 @@ def determine_symbol(
         return ChangeSymbol.CHANGE_NONE
 
     assert all(
-        change.type not in (change_schemas.ChangeType.CLASS_ADDED, change_schemas.ChangeType.CLASS_REMOVED)
+        change.type
+        not in (bo4e_cli.models.changes.ChangeType.CLASS_ADDED, bo4e_cli.models.changes.ChangeType.CLASS_REMOVED)
         for change in changes
     ), "Internal error: CLASS_ADDED and CLASS_REMOVED must be the only change per class if present."
     if any(change_schemas.is_change_critical(change) for change in changes):
@@ -53,7 +56,7 @@ def create_compatibility_matrix_csv(
     output: Path,
     versions: Sequence[str],
     namespaces: Mapping[str, Sequence[tuple[str, ...]]],
-    changes: Mapping[tuple[str, str], Sequence[change_schemas.Change]],
+    changes: Mapping[tuple[str, str], Sequence[bo4e_cli.models.changes.Change]],
 ) -> None:
     """
     Create a compatibility matrix csv file from the given changes.

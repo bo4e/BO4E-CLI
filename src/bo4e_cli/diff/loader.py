@@ -13,7 +13,9 @@ from bost.pull import SchemaMetadata
 from bost.schema import SchemaRootType
 from pydantic import TypeAdapter
 
-from . import change_schemas
+import bo4e_cli.models.changes
+
+from . import filters
 
 BO4E_BASE_DIR = Path(__file__).parents[2] / "tmp/bo4e_json_schemas"
 LOCAL_JSON_SCHEMA_DIR = Path(__file__).parents[2] / "json_schemas"
@@ -27,20 +29,20 @@ def load_schema_file(path: Path) -> SchemaRootType:
     # mypy has problems to infer the Union type here.
 
 
-def load_changes(path: Path) -> list[change_schemas.Change]:
+def load_changes(path: Path) -> list[bo4e_cli.models.changes.Change]:
     """
     Load a changes file and return the parsed changes
     """
-    return TypeAdapter(list[change_schemas.Change]).validate_json(path.read_text("utf-8"))
+    return TypeAdapter(list[bo4e_cli.models.changes.Change]).validate_json(path.read_text("utf-8"))
 
 
-def save_changes(path: Path, changes: Iterable[change_schemas.Change]) -> None:
+def save_changes(path: Path, changes: Iterable[bo4e_cli.models.changes.Change]) -> None:
     """
     Save the changes to a file
     """
     with open(path, "w", encoding="utf-8") as file:
         json.dump(
-            TypeAdapter(list[change_schemas.Change]).dump_python(list(changes), mode="json"),
+            TypeAdapter(list[bo4e_cli.models.changes.Change]).dump_python(list(changes), mode="json"),
             file,
         )
 

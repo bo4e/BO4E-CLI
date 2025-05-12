@@ -8,18 +8,27 @@ import re
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from bost.schema import AllOf, AnyOf, Array, Object, Reference, SchemaRootType, SchemaType, StrEnum, String, TypeBase
-
-from . import change_schemas, loader
+from bo4e_cli.diff.filters import filter_non_crit
+from bo4e_cli.models.changes import Change, ChangeType
+from bo4e_cli.models.schema import (
+    AllOf,
+    AnyOf,
+    Array,
+    Object,
+    Reference,
+    SchemaRootType,
+    SchemaType,
+    StrEnum,
+    String,
+    TypeBase,
+)
 
 logger = logging.getLogger(__name__)
 
 REGEX_IGNORE_VERSION = re.compile(r"v\d+\.\d+\.\d+(-rc\d+)?")
 
 
-def _diff_type_base(
-    schema_old: TypeBase, schema_new: TypeBase, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+def _diff_type_base(schema_old: TypeBase, schema_new: TypeBase, old_trace: str, new_trace: str) -> Iterable[Change]:
     """
     This function compares two type base schemas and yields the changes.
     """
@@ -35,8 +44,8 @@ def _diff_type_base(
             old_trace,
             new_trace,
         )
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.FIELD_TITLE_CHANGED,
+        yield Change(
+            type=ChangeType.FIELD_TITLE_CHANGED,
             old=schema_old.title,
             new=schema_new.title,
             old_trace=old_trace,
@@ -45,16 +54,16 @@ def _diff_type_base(
     if REGEX_IGNORE_VERSION.sub(schema_old.description, "{__gh_version__}") != REGEX_IGNORE_VERSION.sub(
         schema_new.description, "{__gh_version__}"
     ):
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.FIELD_DESCRIPTION_CHANGED,
+        yield Change(
+            type=ChangeType.FIELD_DESCRIPTION_CHANGED,
             old=schema_old.description,
             new=schema_new.description,
             old_trace=old_trace,
             new_trace=new_trace,
         )
     if schema_old.default != schema_new.default and schema_old.title != " Version" and schema_new.title != " Version":
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.FIELD_DEFAULT_CHANGED,
+        yield Change(
+            type=ChangeType.FIELD_DEFAULT_CHANGED,
             old=schema_old.default,
             new=schema_new.default,
             old_trace=old_trace,
@@ -62,17 +71,15 @@ def _diff_type_base(
         )
 
 
-def _diff_enum_schemas(
-    schema_old: StrEnum, schema_new: StrEnum, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+def _diff_enum_schemas(schema_old: StrEnum, schema_new: StrEnum, old_trace: str, new_trace: str) -> Iterable[Change]:
     """
     This function compares two enum schemas and yields the changes.
     """
     new_enum_values = set(schema_new.enum)
     for old_enum_value in schema_old.enum:
         if old_enum_value not in new_enum_values:
-            yield change_schemas.Change(
-                type=change_schemas.ChangeType.ENUM_VALUE_REMOVED,
+            yield Change(
+                type=ChangeType.ENUM_VALUE_REMOVED,
                 old=old_enum_value,
                 new=None,
                 old_trace=old_trace,
@@ -81,8 +88,8 @@ def _diff_enum_schemas(
         else:
             new_enum_values.remove(old_enum_value)
     for new_enum_value in new_enum_values:
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.ENUM_VALUE_ADDED,
+        yield Change(
+            type=ChangeType.ENUM_VALUE_ADDED,
             old=None,
             new=new_enum_value,
             old_trace=old_trace,
@@ -90,17 +97,15 @@ def _diff_enum_schemas(
         )
 
 
-def _diff_object_schemas(
-    schema_old: Object, schema_new: Object, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+def _diff_object_schemas(schema_old: Object, schema_new: Object, old_trace: str, new_trace: str) -> Iterable[Change]:
     """
     This function compares two object schemas and yields the changes.
     """
     new_properties = set(schema_new.properties.keys())
     for key, value in schema_old.properties.items():
         if key not in schema_new.properties:
-            yield change_schemas.Change(
-                type=change_schemas.ChangeType.FIELD_REMOVED,
+            yield Change(
+                type=ChangeType.FIELD_REMOVED,
                 old=value,
                 new=None,
                 old_trace=f"{old_trace}.properties['{key}']",
@@ -117,8 +122,8 @@ def _diff_object_schemas(
                 f"{new_trace}.properties['{key}']",
             )
     for key in new_properties:
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.FIELD_ADDED,
+        yield Change(
+            type=ChangeType.FIELD_ADDED,
             old=None,
             new=schema_new.properties[key],
             old_trace=old_trace,
@@ -126,17 +131,15 @@ def _diff_object_schemas(
         )
 
 
-def _diff_ref_schemas(
-    schema_old: Reference, schema_new: Reference, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+def _diff_ref_schemas(schema_old: Reference, schema_new: Reference, old_trace: str, new_trace: str) -> Iterable[Change]:
     """
     This function compares two reference schemas and yields a change if the references are different.
     Even if the referenced schema only got renamed or moved, the reference will be treated as different
     because in any client application you would have to update the references.
     """
     if schema_old.ref != schema_new.ref:
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.FIELD_REFERENCE_CHANGED,
+        yield Change(
+            type=ChangeType.FIELD_REFERENCE_CHANGED,
             old=schema_old.ref,
             new=schema_new.ref,
             old_trace=old_trace,
@@ -144,9 +147,7 @@ def _diff_ref_schemas(
         )
 
 
-def _diff_array_schemas(
-    schema_old: Array, schema_new: Array, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+def _diff_array_schemas(schema_old: Array, schema_new: Array, old_trace: str, new_trace: str) -> Iterable[Change]:
     """
     This function compares two array schemas and yields the changes.
     """
@@ -155,7 +156,7 @@ def _diff_array_schemas(
 
 def _diff_any_of_or_all_of_schemas(
     schema_old: AnyOf | AllOf, schema_new: AnyOf | AllOf, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+) -> Iterable[Change]:
     """
     This function compares two anyOf or allOf schemas and yields the changes.
     """
@@ -173,7 +174,7 @@ def _diff_any_of_or_all_of_schemas(
                     old_type, new_type, f"{old_trace}.{query_str}[{old_index}]", f"{new_trace}.{query_str}[{new_index}]"
                 )
             )
-            if not any(change_schemas.filter_non_crit(changes)):
+            if not any(filter_non_crit(changes)):
                 # The types are equal (except for non-critical changes), yield the non-critical changes
                 found_old_in_new = True
                 assert new_index not in found_new_types, "Internal error: Duplicate type in anyOf"
@@ -181,11 +182,11 @@ def _diff_any_of_or_all_of_schemas(
                 yield from changes
                 break
         if not found_old_in_new:
-            yield change_schemas.Change(
+            yield Change(
                 type=(
-                    change_schemas.ChangeType.FIELD_ANY_OF_TYPE_REMOVED
+                    ChangeType.FIELD_ANY_OF_TYPE_REMOVED
                     if isinstance(schema_old, AnyOf)
-                    else change_schemas.ChangeType.FIELD_ALL_OF_TYPE_REMOVED
+                    else ChangeType.FIELD_ALL_OF_TYPE_REMOVED
                 ),
                 old=old_type,
                 new=None,
@@ -194,11 +195,11 @@ def _diff_any_of_or_all_of_schemas(
             )
     not_found_indices = set(range(len(getattr(schema_new, query_str)))) - found_new_types
     for new_index in not_found_indices:
-        yield change_schemas.Change(
+        yield Change(
             type=(
-                change_schemas.ChangeType.FIELD_ANY_OF_TYPE_ADDED
+                ChangeType.FIELD_ANY_OF_TYPE_ADDED
                 if isinstance(schema_old, AnyOf)
-                else change_schemas.ChangeType.FIELD_ALL_OF_TYPE_ADDED
+                else ChangeType.FIELD_ALL_OF_TYPE_ADDED
             ),
             old=None,
             new=getattr(schema_new, query_str)[new_index],
@@ -207,15 +208,13 @@ def _diff_any_of_or_all_of_schemas(
         )
 
 
-def _diff_string_schemas(
-    schema_old: String, schema_new: String, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+def _diff_string_schemas(schema_old: String, schema_new: String, old_trace: str, new_trace: str) -> Iterable[Change]:
     """
     This function compares two string schemas and yields the changes.
     """
     if schema_old.format != schema_new.format:
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.FIELD_STRING_FORMAT_CHANGED,
+        yield Change(
+            type=ChangeType.FIELD_STRING_FORMAT_CHANGED,
             old=schema_old.format,
             new=schema_new.format,
             old_trace=old_trace,
@@ -225,7 +224,7 @@ def _diff_string_schemas(
 
 def _diff_schema_differing_types(
     schema_old: SchemaType, schema_new: SchemaType, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+) -> Iterable[Change]:
     """
     This function compares two differing schema types and yields the changes.
     """
@@ -240,11 +239,11 @@ def _diff_schema_differing_types(
     else:
         sub_changes = None
 
-    if sub_changes is None or any(change_schemas.filter_non_crit(sub_changes)):
+    if sub_changes is None or any(filter_non_crit(sub_changes)):
         # Treat the types as equal iff there are no critical changes between the types
         # In if-Block, the types are different
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.FIELD_TYPE_CHANGED,
+        yield Change(
+            type=ChangeType.FIELD_TYPE_CHANGED,
             old=schema_old,
             new=schema_new,
             old_trace=old_trace,
@@ -255,8 +254,8 @@ def _diff_schema_differing_types(
         # plus a change in cardinality
         yield from sub_changes
         # If the type of one schema is equal to the items type of the other, there is a change in cardinality
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.FIELD_CARDINALITY_CHANGED,
+        yield Change(
+            type=ChangeType.FIELD_CARDINALITY_CHANGED,
             old=schema_old,
             new=schema_new,
             old_trace=old_trace,
@@ -266,7 +265,7 @@ def _diff_schema_differing_types(
 
 def _diff_schema_type(
     schema_old: SchemaType, schema_new: SchemaType, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+) -> Iterable[Change]:
     """
     This function compares two schema types and yields the changes.
     """
@@ -296,16 +295,14 @@ def _diff_schema_type(
 
 def _diff_root_schemas(
     schema_old: SchemaRootType, schema_new: SchemaRootType, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+) -> Iterable[Change]:
     """
     This function compares two root schemas and yields the changes.
     """
     yield from _diff_schema_type(schema_old, schema_new, old_trace, new_trace)
 
 
-def diff_schemas(
-    schemas_old: Path, schemas_new: Path, old_trace: str, new_trace: str
-) -> Iterable[change_schemas.Change]:
+def diff_schemas(schemas_old: Path, schemas_new: Path, old_trace: str, new_trace: str) -> Iterable[Change]:
     """
     This function compares two BO4E versions and yields the changes.
     Note: The paths to the old and the new schemas should correspond to the same root node of the tree structure.
@@ -315,16 +312,16 @@ def diff_schemas(
     new_schema_files = {file.relative_to(schemas_new) for file in schemas_new.rglob("*.json")}
 
     for schema_file in old_schema_files - new_schema_files:
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.CLASS_REMOVED,
+        yield Change(
+            type=ChangeType.CLASS_REMOVED,
             old=loader.load_schema_file(schemas_old / schema_file),
             new=None,
             old_trace=f"{old_trace}/{'/'.join(schema_file.with_suffix('').parts)}#",
             new_trace=f"{new_trace}/#",
         )
     for schema_file in new_schema_files - old_schema_files:
-        yield change_schemas.Change(
-            type=change_schemas.ChangeType.CLASS_ADDED,
+        yield Change(
+            type=ChangeType.CLASS_ADDED,
             old=None,
             new=loader.load_schema_file(schemas_new / schema_file),
             old_trace=f"{old_trace}/#",
@@ -341,7 +338,7 @@ def diff_schemas(
 
 def compare_bo4e_versions(
     version_old: str, version_new: str, gh_token: str | None = None, from_local: bool = False
-) -> Iterable[change_schemas.Change]:
+) -> Iterable[Change]:
     """
     Compare the old version with the new version.
     If version_new is None use the BO4E version of the checkout working directory by assuming the compiled json
@@ -355,7 +352,7 @@ def compare_bo4e_versions(
 
 def compare_bo4e_versions_iteratively(
     versions: Sequence[str], cur_version: str | None = None, gh_token: str | None = None
-) -> dict[tuple[str, str], Iterable[change_schemas.Change]]:
+) -> dict[tuple[str, str], Iterable[Change]]:
     """
     Compare the versions iteratively. Each version at index i will be compared to the version at index i+1.
     Additionally, if cur_version is provided, the last version in the list will be compared to the version

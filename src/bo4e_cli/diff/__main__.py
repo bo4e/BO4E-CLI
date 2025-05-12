@@ -7,28 +7,14 @@ if you're testing locally.
 """
 
 import logging
-import re
 from pathlib import Path
 
-import bost.operations
-from bost.pull import OWNER, REPO
-
-from . import diff, loader, matrix, versioning
+from bo4e_cli.diff.diff import compare_bo4e_versions_iteratively
+from bo4e_cli.diff.loader import BO4E_BASE_DIR, get_namespace
+from bo4e_cli.diff.matrix import create_compatibility_matrix_csv
+from bo4e_cli.io.git import get_last_n_tags
 
 logger = logging.getLogger(__name__)
-
-REGEX_RELEASE_VERSION = re.compile(r"^v(\d{6}\.\d+\.\d+)$")
-REGEX_RELEASE_CANDIDATE_VERSION = re.compile(r"^v(\d{6}\.\d+\.\d+)-rc\d+$")
-
-
-def _monkey_patch_bost_regex_if_local_testing(version: str) -> None:
-    regex_expected_version = re.compile(r"^v\d+\.\d+\.\d+(?:-rc\d+)?$")
-    if not regex_expected_version.fullmatch(version):
-        bost.operations.REF_ONLINE_REGEX = re.compile(
-            rf"^https://raw\.githubusercontent\.com/(?:{OWNER.upper()}|{OWNER.lower()}|Hochfrequenz)/{REPO}/"
-            rf"(?P<version>[^/]+)/"
-            r"src/bo4e_schemas/(?P<sub_path>(?:\w+/)*)(?P<model>\w+)\.json#?$"
-        )
 
 
 def create_tables_for_doc(
@@ -49,21 +35,16 @@ def create_tables_for_doc(
     Note: Only functional releases will be compared since technical releases are enforced to be fully compatible.
     See https://github.com/bo4e/BO4E-python/issues/784
     """
-    _monkey_patch_bost_regex_if_local_testing(gh_version)
     logger.info("Retrieving the last %d release versions", last_n_versions)
-    versions = list(
-        reversed(list(versioning.get_last_n_tags(last_n_versions, ref=gh_version, exclude_technical_bumps=True)))
-    )
+    versions = list(reversed(list(get_last_n_tags(last_n_versions, ref=gh_version, exclude_technical_bumps=True))))
     logger.info("Comparing versions iteratively: %s", " -> ".join([*versions, gh_version]))
-    changes_iterables = diff.compare_bo4e_versions_iteratively(versions, gh_version, gh_token=gh_token)
+    changes_iterables = compare_bo4e_versions_iteratively(versions, gh_version, gh_token=gh_token)
     logger.info("Building namespaces")
     changes = {key: list(value) for key, value in changes_iterables.items()}
-    namespaces = {version: list(loader.get_namespace(loader.BO4E_BASE_DIR / version)) for version in versions}
-    namespaces[gh_version] = list(loader.get_namespace(loader.BO4E_BASE_DIR / gh_version))
+    namespaces = {version: list(get_namespace(BO4E_BASE_DIR / version)) for version in versions}
+    namespaces[gh_version] = list(get_namespace(BO4E_BASE_DIR / gh_version))
     logger.info("Creating compatibility matrix")
-    matrix.create_compatibility_matrix_csv(
-        compatibility_matrix_output_file, [*versions, gh_version], namespaces, changes
-    )
+    create_compatibility_matrix_csv(compatibility_matrix_output_file, [*versions, gh_version], namespaces, changes)
 
 
 def test_create_tables_for_doc() -> None:
