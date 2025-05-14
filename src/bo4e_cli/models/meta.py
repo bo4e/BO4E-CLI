@@ -250,6 +250,22 @@ class SchemaMeta(BaseModel):
     def __repr__(self) -> str:  # pragma: no cover
         return f"SchemaMeta(name={self.name}, module={self.module}, src={self.src})"
 
+    def __hash__(self) -> int:
+        """
+        Hashes the schema meta data object.
+        This is needed to use the object in a set or as a key in a dictionary.
+        """
+        return hash((self.name, self.module))
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Compares the schema meta data object to another object.
+        This is needed to use the object in a set or as a key in a dictionary.
+        """
+        if isinstance(other, SchemaMeta):
+            return self.name == other.name and self.module == other.module
+        return NotImplemented
+
 
 T_co = TypeVar("T_co", bound=Hashable, covariant=True)
 
