@@ -138,7 +138,7 @@ class SchemaMeta(BaseModel):
     """ E.g. 'Marktlokation' """
     module: tuple[str, ...]
     """ E.g. ('bo', 'Marktlokation') or ('ZusatzAttribut',) """
-    _src: HttpUrl | Path | None = None
+    src: HttpUrl | Path | None = None
     """ Either an online URL or a local file path. Can be None if this schema is with no source related. """
 
     _schema: SchemaRootType | str | None = None
@@ -176,16 +176,16 @@ class SchemaMeta(BaseModel):
     @property
     def src_url(self) -> HttpUrl:
         """Returns the source as an online URL. Raises a ValueError if the source is not a URL."""
-        if isinstance(self._src, Path) or self._src is None:
+        if isinstance(self.src, Path) or self.src is None:
             raise ValueError("The source is not an online URL.")
-        return self._src
+        return self.src
 
     @property
     def src_path(self) -> Path:
         """Returns the source as a local file path. Raises a ValueError if the source is not a path."""
-        if not isinstance(self._src, Path):
+        if not isinstance(self.src, Path):
             raise ValueError("The source is not a local file path.")
-        return self._src
+        return self.src
 
     @property
     def schema_parsed(self) -> SchemaRootType:
@@ -248,7 +248,7 @@ class SchemaMeta(BaseModel):
         self._schema = None
 
     def __repr__(self) -> str:  # pragma: no cover
-        return f"SchemaMeta(name={self.name}, module={self.module}, src={self._src})"
+        return f"SchemaMeta(name={self.name}, module={self.module}, src={self.src})"
 
 
 T_co = TypeVar("T_co", bound=Hashable, covariant=True)
