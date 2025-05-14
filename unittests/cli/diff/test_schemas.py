@@ -50,9 +50,10 @@ class TestDiffSchemas:
             changes = Changes.model_validate_json(file.read())
 
         assert changes.old_version < changes.new_version
-        assert len(changes.changes) == 3
+        assert len(changes.changes) == 4
         assert set(change.type for change in changes.changes) == {
             ChangeType.CLASS_REMOVED,
-            ChangeType.FIELD_TYPE_CHANGED,
             ChangeType.FIELD_REMOVED,
+            ChangeType.FIELD_ANY_OF_TYPE_REMOVED,
+            ChangeType.FIELD_ANY_OF_TYPE_ADDED,
         }
