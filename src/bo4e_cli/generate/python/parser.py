@@ -12,7 +12,7 @@ from typing import Any, Sequence, Type
 
 import datamodel_code_generator.parser.base
 import datamodel_code_generator.reference
-from datamodel_code_generator import DataModelType, PythonVersion
+from datamodel_code_generator import DataModelType, LiteralType, PythonVersion
 from datamodel_code_generator.format import DatetimeClassType
 from datamodel_code_generator.imports import IMPORT_DATETIME, Import
 from datamodel_code_generator.model import DataModel, DataModelFieldBase, DataModelSet, get_data_model_types
@@ -298,12 +298,13 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
             allow_population_by_field_name=True,
             use_default_kwarg=True,
             strict_nullable=True,
+            enum_field_as_literal=LiteralType.One,
             **additional_arguments,
         )
+        parse_result = parser.parse()
     CONSOLE.print("Parsed schemas into Python classes")
 
     with CONSOLE.status("Validating generated Python modules", spinner="squish"):
-        parse_result = parser.parse()
         if not isinstance(parse_result, dict):
             raise ValueError(f"Unexpected type of parse result: {type(parse_result)}")
         file_contents = {}
@@ -311,9 +312,7 @@ def parse_bo4e_schemas(schemas: Schemas, generate_type: GenerateType) -> dict[Pa
             module_path = schema.python_module_with_suffix
 
             if module_path not in parse_result:
-                raise KeyError(
-                    f"Could not find module {'.'.join(module_path)} in results: " f"{list(parse_result.keys())}"
-                )
+                raise KeyError(f"Could not find module {'.'.join(module_path)} in results: {list(parse_result.keys())}")
 
             python_code = remove_future_import(parse_result.pop(module_path).body)
             python_code = remove_model_rebuild(python_code, schema.name)
