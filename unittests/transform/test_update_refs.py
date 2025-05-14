@@ -38,9 +38,9 @@ class TestUpdateRefs:
             properties={"foo": Reference(ref="#/$defs/Foo")},
             type="object",
         )
-        foo_meta = SchemaMeta(name="Foo", module=("com", "Foo"), src=Path())
+        foo_meta = SchemaMeta(name="Foo", module=("com", "Foo"), _src=Path())
         foo_meta.set_schema_text(foo_schema.model_dump_json())
-        bar_meta = SchemaMeta(name="Bar", module=("bo", "Bar"), src=Path())
+        bar_meta = SchemaMeta(name="Bar", module=("bo", "Bar"), _src=Path())
         bar_meta.set_schema_text(bar_schema.model_dump_json())
 
         update_references(bar_meta, Schemas(schemas={foo_meta, bar_meta}, version=Version.from_str("v200000.0.0")))

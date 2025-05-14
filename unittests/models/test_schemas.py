@@ -25,7 +25,7 @@ class TestSchemas:
     def test_set_methods(self) -> None:
         schemas = read_schemas(TEST_DIR_BO4E_ORIGINAL)
         angebot_meta = one(schema for schema in schemas if schema.name == "Angebot")
-        dummy_meta = SchemaMeta(name="dummy", module=("dummy",), src="dummy")  # type: ignore[arg-type]
+        dummy_meta = SchemaMeta(name="dummy", module=("dummy",), _src="dummy")  # type: ignore[arg-type]
         # pylint: disable=unbalanced-tuple-unpacking
         subset1, subset2, subset3 = get_disjoint_subsets(schemas, 3)
 

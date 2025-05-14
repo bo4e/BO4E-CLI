@@ -21,7 +21,7 @@ class TestPull:
         assert version_file.exists()
         assert version_file.read_text() == TEST_DATA_VERSION
         assert angebot_schema.exists()
-        angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), src=angebot_schema)
+        angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), _src=angebot_schema)
         angebot.set_schema_text(angebot_schema.read_text())
         assert angebot.schema_parsed.title == "Angebot"
 
@@ -36,7 +36,7 @@ class TestPull:
         assert version_file.exists()
         assert version_file.read_text() == TEST_DATA_VERSION
         assert angebot_schema.exists()
-        angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), src=angebot_schema)
+        angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), _src=angebot_schema)
         angebot.set_schema_text(angebot_schema.read_text())
         assert angebot.schema_parsed.title == "Angebot"
 
@@ -49,7 +49,7 @@ class TestPull:
         assert version_file.exists()
         assert version_file.read_text() == TEST_DATA_VERSION
         assert angebot_schema.exists()
-        angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), src=angebot_schema)
+        angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), _src=angebot_schema)
         angebot.set_schema_text(angebot_schema.read_text())
         assert angebot.schema_parsed.title == "Angebot"
         assert angebot.schema_parsed.properties["_typ"].any_of[0].ref == "../enum/Typ.json#"

@@ -4,22 +4,9 @@ This module contains the models for the GitHub API queries.
 
 import functools
 import re
-from collections.abc import Hashable
+from collections.abc import Hashable, Set
 from pathlib import Path
-from typing import (
-    AbstractSet,
-    Callable,
-    Generic,
-    ItemsView,
-    Iterable,
-    Iterator,
-    KeysView,
-    Literal,
-    Set,
-    TypeVar,
-    ValuesView,
-    overload,
-)
+from typing import Callable, Generic, ItemsView, Iterable, Iterator, KeysView, Literal, TypeVar, ValuesView, overload
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
 
@@ -151,7 +138,7 @@ class SchemaMeta(BaseModel):
     """ E.g. 'Marktlokation' """
     module: tuple[str, ...]
     """ E.g. ('bo', 'Marktlokation') or ('ZusatzAttribut',) """
-    src: HttpUrl | Path | None = None
+    _src: HttpUrl | Path | None = None
     """ Either an online URL or a local file path. Can be None if this schema is with no source related. """
 
     _schema: SchemaRootType | str | None = None
@@ -189,16 +176,16 @@ class SchemaMeta(BaseModel):
     @property
     def src_url(self) -> HttpUrl:
         """Returns the source as an online URL. Raises a ValueError if the source is not a URL."""
-        if isinstance(self.src, Path) or self.src is None:
+        if isinstance(self._src, Path) or self._src is None:
             raise ValueError("The source is not an online URL.")
-        return self.src
+        return self._src
 
     @property
     def src_path(self) -> Path:
         """Returns the source as a local file path. Raises a ValueError if the source is not a path."""
-        if not isinstance(self.src, Path):
+        if not isinstance(self._src, Path):
             raise ValueError("The source is not a local file path.")
-        return self.src
+        return self._src
 
     @property
     def schema_parsed(self) -> SchemaRootType:
@@ -261,7 +248,7 @@ class SchemaMeta(BaseModel):
         self._schema = None
 
     def __repr__(self) -> str:  # pragma: no cover
-        return f"SchemaMeta(name={self.name}, module={self.module}, src={self.src})"
+        return f"SchemaMeta(name={self.name}, module={self.module}, src={self._src})"
 
 
 T_co = TypeVar("T_co", bound=Hashable, covariant=True)
@@ -342,11 +329,11 @@ class Schemas(BaseModel):
     def __len__(self) -> int:
         return self.schemas.__len__()
 
-    def __le__(self, other: AbstractSet[object]) -> bool:
-        return self.schemas.__le__(other)
+    def __le__(self, other: "Schemas") -> bool:
+        return self.schemas.__le__(other.schemas)
 
-    def __lt__(self, other: AbstractSet[object]) -> bool:
-        return self.schemas.__lt__(other)
+    def __lt__(self, other: "Schemas") -> bool:
+        return self.schemas.__lt__(other.schemas)
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Schemas):
@@ -356,22 +343,22 @@ class Schemas(BaseModel):
     def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
 
-    def __gt__(self, other: AbstractSet[object]) -> bool:
-        return self.schemas.__gt__(other)
+    def __gt__(self, other: "Schemas") -> bool:
+        return self.schemas.__gt__(other.schemas)
 
-    def __ge__(self, other: AbstractSet[object]) -> bool:
-        return self.schemas.__ge__(other)
+    def __ge__(self, other: "Schemas") -> bool:
+        return self.schemas.__ge__(other.schemas)
 
-    def __and__(self, other: AbstractSet[object]) -> Set[SchemaMeta]:
-        return self.schemas.__and__(other)
+    def __and__(self, other: "Schemas") -> set[SchemaMeta]:
+        return self.schemas.__and__(other.schemas)
 
-    def __or__(self, other: AbstractSet[T_co]) -> Set[SchemaMeta | T_co]:
+    def __or__(self, other: set[T_co]) -> set[SchemaMeta | T_co]:
         return self.schemas.__or__(other)
 
-    def __sub__(self, other: AbstractSet[SchemaMeta | None]) -> Set[SchemaMeta]:
-        return self.schemas.__sub__(other)
+    def __sub__(self, other: "Schemas") -> set[SchemaMeta]:
+        return self.schemas.__sub__(other.schemas)
 
-    def __xor__(self, other: AbstractSet[T_co]) -> Set[SchemaMeta | T_co]:
+    def __xor__(self, other: set[T_co]) -> set[SchemaMeta | T_co]:
         return self.schemas.__xor__(other)
 
     def isdisjoint(self, other: Iterable[object]) -> bool:

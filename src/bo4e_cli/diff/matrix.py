@@ -6,12 +6,11 @@ import csv
 import itertools
 from enum import StrEnum
 from pathlib import Path
-from typing import Any as _Any
 from typing import Mapping, Sequence
 
-import bo4e_cli.models.changes
-
-from . import filters
+from bo4e_cli.diff.filters import is_change_critical
+from bo4e_cli.models.changes import Change, Changes, ChangeType
+from bo4e_cli.models.meta import Schemas, Version
 
 
 class ChangeSymbol(StrEnum):
@@ -27,36 +26,32 @@ class ChangeSymbol(StrEnum):
     REMOVED = "➖"
 
 
-def determine_symbol(
-    changes: Sequence[bo4e_cli.models.changes.Change], namespace: Sequence[tuple[str, ...]], cls: tuple[str, ...]
-) -> ChangeSymbol:
+def determine_symbol(changes: Sequence[Change], schemas: Schemas, cls: tuple[str, ...]) -> ChangeSymbol:
     """
     Determine the symbol of a change.
     """
-    if len(changes) == 1 and changes[0].type == bo4e_cli.models.changes.ChangeType.CLASS_REMOVED:
+    if len(changes) == 1 and changes[0].type == ChangeType.CLASS_REMOVED:
         return ChangeSymbol.REMOVED
-    if len(changes) == 1 and changes[0].type == bo4e_cli.models.changes.ChangeType.CLASS_ADDED:
+    if len(changes) == 1 and changes[0].type == ChangeType.CLASS_ADDED:
         return ChangeSymbol.ADDED
-    if cls not in namespace:
+    if cls not in schemas.modules:
         return ChangeSymbol.NON_EXISTENT
     if len(changes) == 0:
         return ChangeSymbol.CHANGE_NONE
 
     assert all(
-        change.type
-        not in (bo4e_cli.models.changes.ChangeType.CLASS_ADDED, bo4e_cli.models.changes.ChangeType.CLASS_REMOVED)
-        for change in changes
+        change.type not in (ChangeType.CLASS_ADDED, ChangeType.CLASS_REMOVED) for change in changes
     ), "Internal error: CLASS_ADDED and CLASS_REMOVED must be the only change per class if present."
-    if any(change_schemas.is_change_critical(change) for change in changes):
+    if any(is_change_critical(change) for change in changes):
         return ChangeSymbol.CHANGE_CRITICAL
     return ChangeSymbol.CHANGE_NON_CRITICAL
 
 
 def create_compatibility_matrix_csv(
     output: Path,
-    versions: Sequence[str],
-    namespaces: Mapping[str, Sequence[tuple[str, ...]]],
-    changes: Mapping[tuple[str, str], Sequence[bo4e_cli.models.changes.Change]],
+    versions: Sequence[Version],
+    schemas_per_version: Mapping[Version, Schemas],
+    changes_per_versions: Mapping[tuple[Version, Version], Changes],
 ) -> None:
     """
     Create a compatibility matrix csv file from the given changes.
@@ -65,7 +60,9 @@ def create_compatibility_matrix_csv(
     with open(output, "w", encoding="utf-8") as file:
         csv_writer = csv.writer(file, delimiter=",", lineterminator="\n", escapechar="/")
         csv_writer.writerow(("", *versions[1:]))
-        all_classes: set[tuple[str, ...]] = set(itertools.chain.from_iterable(namespaces.values()))
+        all_classes: set[tuple[str, ...]] = set(
+            schema.module for schemas in schemas_per_version.values() for schema in schemas
+        )
 
         for class_path in sorted(all_classes, key=lambda cls: tuple(cls_part.lower() for cls_part in cls)):
             row = [class_path[-1]]
@@ -73,8 +70,10 @@ def create_compatibility_matrix_csv(
             for version_old, version_new in itertools.pairwise(versions):
                 changes_related_to_class = [
                     change
-                    for change in changes[(version_old, version_new)]
+                    for change in changes_per_versions[(version_old, version_new)].changes
                     if change.old_trace.startswith(class_path_str) or change.new_trace.startswith(class_path_str)
                 ]
-                row.append(determine_symbol(changes_related_to_class, namespaces[version_new], class_path).value)
+                row.append(
+                    determine_symbol(changes_related_to_class, schemas_per_version[version_new], class_path).value
+                )
             csv_writer.writerow(row)

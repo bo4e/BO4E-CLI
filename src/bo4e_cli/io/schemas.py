@@ -52,7 +52,7 @@ def read_schemas(input_dir: Path, *, enable_tracker: bool = True) -> Schemas:
             name = snake_to_pascal(relative_path.name)
         else:
             name = relative_path.name
-        schema = SchemaMeta(name=name, module=relative_path.parts, src=schema_path)
+        schema = SchemaMeta(name=name, module=relative_path.parts, _src=schema_path)
         schema.set_schema_text(schema_path.read_text(encoding="utf-8"))
         schemas.add(schema)
     return schemas

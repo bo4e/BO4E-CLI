@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from bo4e_cli.diff.filters import filter_non_crit
-from bo4e_cli.models.changes import Change, ChangeType
+from bo4e_cli.models.changes import Change, Changes, ChangeType
+from bo4e_cli.models.meta import Schemas
 from bo4e_cli.models.schema import (
     AllOf,
     AnyOf,
@@ -302,78 +303,89 @@ def _diff_root_schemas(
     yield from _diff_schema_type(schema_old, schema_new, old_trace, new_trace)
 
 
-def diff_schemas(schemas_old: Path, schemas_new: Path, old_trace: str, new_trace: str) -> Iterable[Change]:
+def _diff_schemas(schemas_old: Schemas, schemas_new: Schemas, old_trace: str, new_trace: str) -> Iterable[Change]:
     """
     This function compares two BO4E versions and yields the changes.
     Note: The paths to the old and the new schemas should correspond to the same root node of the tree structure.
     I.e. the direct subdirectories should be "bo", "com" and "enum".
     """
-    old_schema_files = {file.relative_to(schemas_old) for file in schemas_old.rglob("*.json")}
-    new_schema_files = {file.relative_to(schemas_new) for file in schemas_new.rglob("*.json")}
 
-    for schema_file in old_schema_files - new_schema_files:
+    for schema in schemas_old - schemas_new:
         yield Change(
             type=ChangeType.CLASS_REMOVED,
-            old=loader.load_schema_file(schemas_old / schema_file),
+            old=schema.relative_path,
             new=None,
-            old_trace=f"{old_trace}/{'/'.join(schema_file.with_suffix('').parts)}#",
+            old_trace=f"{old_trace}/{Path(*schema.module)}#",
             new_trace=f"{new_trace}/#",
         )
-    for schema_file in new_schema_files - old_schema_files:
+    for schema in schemas_new - schemas_old:
         yield Change(
             type=ChangeType.CLASS_ADDED,
             old=None,
-            new=loader.load_schema_file(schemas_new / schema_file),
+            new=schema.relative_path,
             old_trace=f"{old_trace}/#",
-            new_trace=f"{new_trace}/{'/'.join(schema_file.with_suffix('').parts)}#",
+            new_trace=f"{new_trace}/{Path(*schema.module)}#",
         )
-    for schema_file in old_schema_files & new_schema_files:
+    for schema in schemas_old & schemas_new:
+        schema_old = schemas_old.modules[schema.module]
+        schema_new = schemas_new.modules[schema.module]
         yield from _diff_root_schemas(
-            loader.load_schema_file(schemas_old / schema_file),
-            loader.load_schema_file(schemas_new / schema_file),
-            f"{old_trace}/{'/'.join(schema_file.with_suffix('').parts)}#",
-            f"{new_trace}/{'/'.join(schema_file.with_suffix('').parts)}#",
+            schema_old.schema_parsed,
+            schema_new.schema_parsed,
+            f"{old_trace}/{Path(*schema_old.module)}#",
+            f"{new_trace}/{Path(*schema_new.module)}#",
         )
 
 
-def compare_bo4e_versions(
-    version_old: str, version_new: str, gh_token: str | None = None, from_local: bool = False
-) -> Iterable[Change]:
+def diff_schemas(schemas_old: Schemas, schemas_new: Schemas) -> Changes:
     """
-    Compare the old version with the new version.
-    If version_new is None use the BO4E version of the checkout working directory by assuming the compiled json
-    schemas in /json_schemas.
+    This function compares two BO4E versions and yields the changes.
     """
-    dir_old_schemas = loader.pull_or_reuse_bo4e_version(version_old, gh_token)
-    dir_new_schemas = loader.pull_or_reuse_bo4e_version(version_new, gh_token, from_local=from_local)
-    print(f"Comparing {version_old} with {version_new}")
-    yield from diff_schemas(dir_old_schemas, dir_new_schemas, version_old, version_new)
+    return Changes(
+        changes=list(_diff_schemas(schemas_old, schemas_new, str(schemas_old.version), str(schemas_new.version))),
+        old_version=schemas_old.version,
+        new_version=schemas_new.version,
+    )
 
 
-def compare_bo4e_versions_iteratively(
-    versions: Sequence[str], cur_version: str | None = None, gh_token: str | None = None
-) -> dict[tuple[str, str], Iterable[Change]]:
-    """
-    Compare the versions iteratively. Each version at index i will be compared to the version at index i+1.
-    Additionally, if cur_version is provided, the last version in the list will be compared to the version
-    in the checkout working directory. The value of cur_version will be used to set the key in the returned
-    dict.
-    Note:
-        - versions must contain at least one element.
-        - versions should be sorted in ascending order.
-        - if using cur_version, ensure that the json schemas of the checkout working directory
-          were build on beforehand. They should be located in /json_schemas.
-    """
-    print(f"Comparing versions {versions} with cur_version {cur_version}")
-    if len(versions) == 0:
-        print("No versions to compare.")
-        return {}
-    changes = {}
-    last_version: str = versions[0]  # This value is never used but makes mypy and pylint happy
-    for version_old, version_new in itertools.pairwise(versions):
-        last_version = version_new
-        changes[version_old, version_new] = compare_bo4e_versions(version_old, version_new, gh_token)
-    if cur_version is not None:
-        changes[last_version, cur_version] = compare_bo4e_versions(last_version, cur_version, gh_token, from_local=True)
-    print("Comparisons finished.")
-    return changes
+# def compare_bo4e_versions(
+#     version_old: str, version_new: str, gh_token: str | None = None, from_local: bool = False
+# ) -> Iterable[Change]:
+#     """
+#     Compare the old version with the new version.
+#     If version_new is None use the BO4E version of the checkout working directory by assuming the compiled json
+#     schemas in /json_schemas.
+#     """
+#     dir_old_schemas = loader.pull_or_reuse_bo4e_version(version_old, gh_token)
+#     dir_new_schemas = loader.pull_or_reuse_bo4e_version(version_new, gh_token, from_local=from_local)
+#     print(f"Comparing {version_old} with {version_new}")
+#     yield from diff_schemas(dir_old_schemas, dir_new_schemas, version_old, version_new)
+
+
+# def compare_bo4e_versions_iteratively(
+#     versions: Sequence[str], cur_version: str | None = None, gh_token: str | None = None
+# ) -> dict[tuple[str, str], Iterable[Change]]:
+#     """
+#     Compare the versions iteratively. Each version at index i will be compared to the version at index i+1.
+#     Additionally, if cur_version is provided, the last version in the list will be compared to the version
+#     in the checkout working directory. The value of cur_version will be used to set the key in the returned
+#     dict.
+#     Note:
+#         - versions must contain at least one element.
+#         - versions should be sorted in ascending order.
+#         - if using cur_version, ensure that the json schemas of the checkout working directory
+#           were build on beforehand. They should be located in /json_schemas.
+#     """
+#     print(f"Comparing versions {versions} with cur_version {cur_version}")
+#     if len(versions) == 0:
+#         print("No versions to compare.")
+#         return {}
+#     changes = {}
+#     last_version: str = versions[0]  # This value is never used but makes mypy and pylint happy
+#     for version_old, version_new in itertools.pairwise(versions):
+#         last_version = version_new
+#         changes[version_old, version_new] = compare_bo4e_versions(version_old, version_new, gh_token)
+#     if cur_version is not None:
+#         changes[last_version, cur_version] = compare_bo4e_versions(last_version, cur_version, gh_token, from_local=True)
+#     print("Comparisons finished.")
+#     return changes

@@ -14,7 +14,7 @@ class TestSchemaMeta:
         schema_meta = SchemaMeta(
             name="Angebot",
             module=("bo", "Angebot"),
-            src=url,  # type: ignore[arg-type]
+            _src=url,  # type: ignore[arg-type]
         )
         assert str(schema_meta.src_url) == url
         with pytest.raises(ValueError):
@@ -25,7 +25,7 @@ class TestSchemaMeta:
         schema_meta = SchemaMeta(
             name="Angebot",
             module=("bo", "Angebot"),
-            src=path,  # type: ignore[arg-type]
+            _src=path,  # type: ignore[arg-type]
         )
         assert schema_meta.src_path == Path(path)
         with pytest.raises(ValueError):
@@ -36,7 +36,7 @@ class TestSchemaMeta:
         schema_meta = SchemaMeta(
             name="Angebot",
             module=("bo", "Angebot"),
-            src=path,
+            _src=path,
         )
         with open(path, "r", encoding="utf-8") as file:
             content = file.read()

@@ -9,8 +9,6 @@ if you're testing locally.
 import logging
 from pathlib import Path
 
-from bo4e_cli.diff.diff import compare_bo4e_versions_iteratively
-from bo4e_cli.diff.loader import BO4E_BASE_DIR, get_namespace
 from bo4e_cli.diff.matrix import create_compatibility_matrix_csv
 from bo4e_cli.io.git import get_last_n_tags
 

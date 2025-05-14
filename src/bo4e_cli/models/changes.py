@@ -3,10 +3,12 @@ Contains the classes to model changes between two BO4E versions.
 """
 
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
+from bo4e_cli.models.meta import Version
 from bo4e_cli.models.schema import SchemaType
 
 
@@ -44,10 +46,16 @@ class Change(BaseModel):
     """
 
     type: ChangeType
-    old: SchemaType | str | None
-    new: SchemaType | str | None
+    old: SchemaType | Path | str | None
+    new: SchemaType | Path | str | None
     old_trace: str
     new_trace: str
 
     def __str__(self) -> str:
         return f"{self.type}: {self.old} -> {self.new}"
+
+
+class Changes(BaseModel):
+    old_version: Version
+    new_version: Version
+    changes: list[Change]
