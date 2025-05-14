@@ -9,6 +9,9 @@ from typing import Annotated
 import typer
 
 from bo4e_cli.commands.dummy import dummy
+from bo4e_cli.diff.diff import diff_schemas as get_changes_by_diff_schemas
+from bo4e_cli.io.console import CONSOLE
+from bo4e_cli.io.schemas import read_schemas
 
 sub_app_diff = typer.Typer(
     help="Command group for comparing JSON-schemas of different BO4E versions. "
@@ -40,7 +43,15 @@ def diff_schemas(
     The output file will contain the differences in JSON-format. It will also contain information about the
     compared versions.
     """
-    dummy(input_dir_base=input_dir_base, input_dir_comp=input_dir_comp, output_file=output_file)
+    schemas_base = read_schemas(input_dir_base)
+    schemas_comp = read_schemas(input_dir_comp)
+    with CONSOLE.status("Comparing JSON-schemas...", spinner="squish"):
+        changes = get_changes_by_diff_schemas(schemas_base, schemas_comp)
+    CONSOLE.print("Compared JSON-schemas.")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, "w", encoding="utf-8") as file:
+        file.write(changes.model_dump_json(indent=2))
+    CONSOLE.print("Saved Diff to file:", output_file)
 
 
 @sub_app_diff.command("matrix")
