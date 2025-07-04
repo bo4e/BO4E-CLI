@@ -14,7 +14,7 @@ class TestDiffSchemas:
     A class with pytest unit tests.
     """
 
-    def test_edit(self, tmp_path: Path) -> None:
+    def test_diff_schemas(self, tmp_path: Path) -> None:
         modified_bo4e_path = tmp_path / "modified_bo4e"
         schemas = read_schemas(TEST_DIR_BO4E_REL_REFS)
         schema_angebot = schemas.modules["bo", "Angebot"]
