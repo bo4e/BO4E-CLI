@@ -334,6 +334,17 @@ class Schemas(BaseModel):
                     return False
         return True
 
+    @staticmethod
+    def _get_schemas(schemas_or_set: "Schemas | set[SchemaMeta]") -> set[SchemaMeta]:
+        """
+        Helper method to get the schemas from a Schemas object or a set of SchemaMeta objects.
+        """
+        if isinstance(schemas_or_set, Schemas):
+            return schemas_or_set.schemas
+        if isinstance(schemas_or_set, set):
+            return schemas_or_set
+        raise TypeError(f"Expected Schemas or set[SchemaMeta], got {type(schemas_or_set)}")
+
     # ****************** Functions to mimic a set ******************
     def __contains__(self, item: object) -> bool:
         return self.schemas.__contains__(item)
@@ -345,11 +356,11 @@ class Schemas(BaseModel):
     def __len__(self) -> int:
         return self.schemas.__len__()
 
-    def __le__(self, other: "Schemas") -> bool:
-        return self.schemas.__le__(other.schemas)
+    def __le__(self, other: "Schemas | set[SchemaMeta]") -> bool:
+        return self.schemas.__le__(self._get_schemas(other))
 
-    def __lt__(self, other: "Schemas") -> bool:
-        return self.schemas.__lt__(other.schemas)
+    def __lt__(self, other: "Schemas | set[SchemaMeta]") -> bool:
+        return self.schemas.__lt__(self._get_schemas(other))
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Schemas):
@@ -359,23 +370,23 @@ class Schemas(BaseModel):
     def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
 
-    def __gt__(self, other: "Schemas") -> bool:
-        return self.schemas.__gt__(other.schemas)
+    def __gt__(self, other: "Schemas | set[SchemaMeta]") -> bool:
+        return self.schemas.__gt__(self._get_schemas(other))
 
-    def __ge__(self, other: "Schemas") -> bool:
-        return self.schemas.__ge__(other.schemas)
+    def __ge__(self, other: "Schemas | set[SchemaMeta]") -> bool:
+        return self.schemas.__ge__(self._get_schemas(other))
 
-    def __and__(self, other: "Schemas") -> set[SchemaMeta]:
-        return self.schemas.__and__(other.schemas)
+    def __and__(self, other: "Schemas | set[SchemaMeta]") -> set[SchemaMeta]:
+        return self.schemas.__and__(self._get_schemas(other))
 
-    def __or__(self, other: set[T_co]) -> set[SchemaMeta | T_co]:
-        return self.schemas.__or__(other)
+    def __or__(self, other: "Schemas | set[T_co]") -> set[SchemaMeta | T_co]:
+        return self.schemas.__or__(self._get_schemas(other))
 
-    def __sub__(self, other: "Schemas") -> set[SchemaMeta]:
-        return self.schemas.__sub__(other.schemas)
+    def __sub__(self, other: "Schemas | set[SchemaMeta]") -> set[SchemaMeta]:
+        return self.schemas.__sub__(self._get_schemas(other))
 
-    def __xor__(self, other: set[T_co]) -> set[SchemaMeta | T_co]:
-        return self.schemas.__xor__(other)
+    def __xor__(self, other: "Schemas | set[T_co]") -> set[SchemaMeta | T_co]:
+        return self.schemas.__xor__(self._get_schemas(other))
 
     def isdisjoint(self, other: Iterable[object]) -> bool:
         """Return True if the set has no elements in common with other.
