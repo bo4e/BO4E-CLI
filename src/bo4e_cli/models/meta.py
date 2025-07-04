@@ -6,20 +6,7 @@ import functools
 import re
 from collections.abc import Hashable
 from pathlib import Path
-from typing import (
-    AbstractSet,
-    Callable,
-    Generic,
-    ItemsView,
-    Iterable,
-    Iterator,
-    KeysView,
-    Literal,
-    Set,
-    TypeVar,
-    ValuesView,
-    overload,
-)
+from typing import Callable, Generic, ItemsView, Iterable, Iterator, KeysView, Literal, TypeVar, ValuesView, overload
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
 
@@ -36,6 +23,7 @@ REGEX_VERSION = re.compile(
 )
 
 
+@functools.total_ordering
 class Version(BaseModel):
     """
     A version of the BO4E-Schemas.
@@ -44,8 +32,8 @@ class Version(BaseModel):
     major: int
     functional: int
     technical: int
-    candidate: int | None
-    commit: str | None
+    candidate: int | None = None
+    commit: str | None = None
     """
     The commit hash.
     When retrieving the version from a commit which has no tag on it, the version will have the commit hash
@@ -90,8 +78,53 @@ class Version(BaseModel):
             return str(self) == other
         return NotImplemented
 
-    def __ne__(self, other: object) -> bool:
-        return not self.__eq__(other)
+    def __lt__(self, other: "Version") -> bool:
+        """
+        This method asks: Is this (self) version older than the other version?
+        """
+        if not isinstance(other, Version):
+            return NotImplemented
+        if self.is_local_commit() and other.is_local_commit():
+            raise ValueError("Cannot compare two versions with local commit part.")
+        for attr in ["major", "functional", "technical"]:
+            if getattr(self, attr) != getattr(other, attr):
+                return getattr(self, attr) < getattr(other, attr)  # type: ignore[no-any-return]
+        if self.candidate != other.candidate:
+            return self.candidate is None or (other.candidate is not None and self.candidate < other.candidate)
+        if self.commit != other.commit:
+            return self.commit is None  # Implies other.commit is not None
+            # I.e. if the other version is at least one commit ahead to this version, it's considered as newer.
+        return False  # self == other
+
+    def bumped_major(self, other: "Version") -> bool:
+        """
+        Return True if this version is a major bump from the other version.
+        """
+        return self.major > other.major
+
+    def bumped_functional(self, other: "Version") -> bool:
+        """
+        Return True if this version is a functional bump from the other version.
+        Return False if major bump is detected.
+        """
+        return not self.bumped_major(other) and self.functional > other.functional
+
+    def bumped_technical(self, other: "Version") -> bool:
+        """
+        Return True if this version is a technical bump from the other version.
+        Return False if major or functional bump is detected.
+        """
+        return not self.bumped_functional(other) and self.technical > other.technical
+
+    def bumped_candidate(self, other: "Version") -> bool:
+        """
+        Return True if this version is a candidate bump from the other version.
+        Return False if major, functional or technical bump is detected.
+        Raises ValueError if one of the versions is not a candidate version.
+        """
+        if self.candidate is None or other.candidate is None:
+            raise ValueError("Cannot compare candidate versions if one of them is not a candidate.")
+        return not self.bumped_technical(other) and self.candidate > other.candidate
 
 
 class SchemaMeta(BaseModel):
@@ -206,7 +239,7 @@ class SchemaMeta(BaseModel):
         if isinstance(self._schema, (SchemaRootObject, SchemaRootStrEnum)):
             raise ValueError(
                 "The schema has already been parsed. If you are sure you want to delete possible changes "
-                "to the parsed schema, call `del_schema_parsed` first."
+                "to the parsed schema, call `del_schema` first."
             )
         self._schema = value
 
@@ -216,6 +249,22 @@ class SchemaMeta(BaseModel):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"SchemaMeta(name={self.name}, module={self.module}, src={self.src})"
+
+    def __hash__(self) -> int:
+        """
+        Hashes the schema meta data object.
+        This is needed to use the object in a set or as a key in a dictionary.
+        """
+        return hash((self.name, self.module))
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Compares the schema meta data object to another object.
+        This is needed to use the object in a set or as a key in a dictionary.
+        """
+        if isinstance(other, SchemaMeta):
+            return self.name == other.name and self.module == other.module
+        return NotImplemented
 
 
 T_co = TypeVar("T_co", bound=Hashable, covariant=True)
@@ -285,6 +334,17 @@ class Schemas(BaseModel):
                     return False
         return True
 
+    @staticmethod
+    def _get_schemas(schemas_or_set: "Schemas | set[SchemaMeta]") -> set[SchemaMeta]:
+        """
+        Helper method to get the schemas from a Schemas object or a set of SchemaMeta objects.
+        """
+        if isinstance(schemas_or_set, Schemas):
+            return schemas_or_set.schemas
+        if isinstance(schemas_or_set, set):
+            return schemas_or_set
+        raise TypeError(f"Expected Schemas or set[SchemaMeta], got {type(schemas_or_set)}")
+
     # ****************** Functions to mimic a set ******************
     def __contains__(self, item: object) -> bool:
         return self.schemas.__contains__(item)
@@ -296,11 +356,11 @@ class Schemas(BaseModel):
     def __len__(self) -> int:
         return self.schemas.__len__()
 
-    def __le__(self, other: AbstractSet[object]) -> bool:
-        return self.schemas.__le__(other)
+    def __le__(self, other: "Schemas | set[SchemaMeta]") -> bool:
+        return self.schemas.__le__(self._get_schemas(other))
 
-    def __lt__(self, other: AbstractSet[object]) -> bool:
-        return self.schemas.__lt__(other)
+    def __lt__(self, other: "Schemas | set[SchemaMeta]") -> bool:
+        return self.schemas.__lt__(self._get_schemas(other))
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Schemas):
@@ -310,23 +370,25 @@ class Schemas(BaseModel):
     def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
 
-    def __gt__(self, other: AbstractSet[object]) -> bool:
-        return self.schemas.__gt__(other)
+    def __gt__(self, other: "Schemas | set[SchemaMeta]") -> bool:
+        return self.schemas.__gt__(self._get_schemas(other))
 
-    def __ge__(self, other: AbstractSet[object]) -> bool:
-        return self.schemas.__ge__(other)
+    def __ge__(self, other: "Schemas | set[SchemaMeta]") -> bool:
+        return self.schemas.__ge__(self._get_schemas(other))
 
-    def __and__(self, other: AbstractSet[object]) -> Set[SchemaMeta]:
-        return self.schemas.__and__(other)
+    def __and__(self, other: "Schemas | set[SchemaMeta]") -> set[SchemaMeta]:
+        return self.schemas.__and__(self._get_schemas(other))
 
-    def __or__(self, other: AbstractSet[T_co]) -> Set[SchemaMeta | T_co]:
-        return self.schemas.__or__(other)
+    def __or__(self, other: "Schemas | set[T_co]") -> set[SchemaMeta | T_co]:
+        return self.schemas.__or__(other.schemas if isinstance(other, Schemas) else other)  # type: ignore[operator]
+        # No idea why mypy is complaining here
 
-    def __sub__(self, other: AbstractSet[SchemaMeta | None]) -> Set[SchemaMeta]:
-        return self.schemas.__sub__(other)
+    def __sub__(self, other: "Schemas | set[SchemaMeta]") -> set[SchemaMeta]:
+        return self.schemas.__sub__(self._get_schemas(other))
 
-    def __xor__(self, other: AbstractSet[T_co]) -> Set[SchemaMeta | T_co]:
-        return self.schemas.__xor__(other)
+    def __xor__(self, other: "Schemas | set[T_co]") -> set[SchemaMeta | T_co]:
+        return self.schemas.__xor__(other.schemas if isinstance(other, Schemas) else other)  # type: ignore[operator]
+        # No idea why mypy is complaining here
 
     def isdisjoint(self, other: Iterable[object]) -> bool:
         """Return True if the set has no elements in common with other.
