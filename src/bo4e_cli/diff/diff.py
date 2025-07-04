@@ -2,11 +2,10 @@
 Contains the logic to detect the different changes between two BO4E versions.
 """
 
-import itertools
 import logging
 import re
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable
 
 from bo4e_cli.diff.filters import filter_non_crit
 from bo4e_cli.models.changes import Change, Changes, ChangeType
@@ -386,6 +385,11 @@ def diff_schemas(schemas_old: Schemas, schemas_new: Schemas) -> Changes:
 #         last_version = version_new
 #         changes[version_old, version_new] = compare_bo4e_versions(version_old, version_new, gh_token)
 #     if cur_version is not None:
-#         changes[last_version, cur_version] = compare_bo4e_versions(last_version, cur_version, gh_token, from_local=True)
+#         changes[last_version, cur_version] = compare_bo4e_versions(
+#             last_version,
+#             cur_version,
+#             gh_token,
+#             from_local=True
+#         )
 #     print("Comparisons finished.")
 #     return changes

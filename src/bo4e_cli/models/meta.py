@@ -4,7 +4,7 @@ This module contains the models for the GitHub API queries.
 
 import functools
 import re
-from collections.abc import Hashable, Set
+from collections.abc import Hashable
 from pathlib import Path
 from typing import Callable, Generic, ItemsView, Iterable, Iterator, KeysView, Literal, TypeVar, ValuesView, overload
 

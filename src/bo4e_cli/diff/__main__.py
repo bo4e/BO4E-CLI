@@ -6,6 +6,7 @@ Additionally, it implements a little cache functionality to avoid multiple downl
 if you're testing locally.
 """
 
+# pylint: skip-file
 import logging
 from pathlib import Path
 

@@ -4,7 +4,6 @@ Contains the classes to model changes between two BO4E versions.
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -56,6 +55,10 @@ class Change(BaseModel):
 
 
 class Changes(BaseModel):
+    """
+    This pydantic class models the changes between two BO4E versions.
+    """
+
     old_version: Version
     new_version: Version
     changes: list[Change]

@@ -1,3 +1,8 @@
+"""
+This module provides functions to interact with the git repository in the current working directory.
+It is designed to interact with the BO4E repository in order to retrieve version tags, branches, and commits.
+"""
+
 import re
 import subprocess
 from typing import Iterable, Literal
@@ -150,11 +155,11 @@ def get_last_n_tags(
         counter += 1
     if counter < n and 0 < n:
         if ref_type == "tag":
-            logger.warning("Only found %d tags before tag %s, tried to retrieve %d", counter, ref, n)
+            CONSOLE.print(f"Only found {counter} tags before tag {ref}, tried to retrieve {n}", style="warning")
         else:
-            logger.warning("Only found %d tags on branch %s, tried to retrieve %d", counter, ref, n)
+            CONSOLE.print(f"Only found {counter} tags on branch {ref}, tried to retrieve {n}", style="warning")
     if n == 0:
-        logger.warning("Threshold version %s not found. Returned all tags.", version_threshold)
+        CONSOLE.print(f"Threshold version {version_threshold} not found. Returned all tags.", style="warning")
 
 
 def get_last_version_before(version: Version) -> Version:
