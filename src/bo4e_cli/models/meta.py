@@ -88,7 +88,7 @@ class Version(BaseModel):
             raise ValueError("Cannot compare two versions with local commit part.")
         for attr in ["major", "functional", "technical"]:
             if getattr(self, attr) != getattr(other, attr):
-                return getattr(self, attr) < getattr(other, attr)
+                return getattr(self, attr) < getattr(other, attr)  # type: ignore[no-any-return]
         if self.candidate != other.candidate:
             return self.candidate is None or (other.candidate is not None and self.candidate < other.candidate)
         if self.commit != other.commit:
@@ -380,13 +380,15 @@ class Schemas(BaseModel):
         return self.schemas.__and__(self._get_schemas(other))
 
     def __or__(self, other: "Schemas | set[T_co]") -> set[SchemaMeta | T_co]:
-        return self.schemas.__or__(self._get_schemas(other))
+        return self.schemas.__or__(other.schemas if isinstance(other, Schemas) else other)  # type: ignore[operator]
+        # No idea why mypy is complaining here
 
     def __sub__(self, other: "Schemas | set[SchemaMeta]") -> set[SchemaMeta]:
         return self.schemas.__sub__(self._get_schemas(other))
 
     def __xor__(self, other: "Schemas | set[T_co]") -> set[SchemaMeta | T_co]:
-        return self.schemas.__xor__(self._get_schemas(other))
+        return self.schemas.__xor__(other.schemas if isinstance(other, Schemas) else other)  # type: ignore[operator]
+        # No idea why mypy is complaining here
 
     def isdisjoint(self, other: Iterable[object]) -> bool:
         """Return True if the set has no elements in common with other.

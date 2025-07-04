@@ -1,3 +1,4 @@
+# type: ignore
 """
 This module provides functions to compare the BO4E JSON schemas of different versions.
 It also contains functions to query GitHub for the latest BO4E versions to compare with the schemas of the current

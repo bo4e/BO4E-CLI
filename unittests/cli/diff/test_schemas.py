@@ -21,7 +21,9 @@ class TestDiffSchemas:
         schemas.remove(schema_angebot)
         schema_ausschreibung = schemas.modules["bo", "Ausschreibung"]
         del schema_ausschreibung.object_schema_parsed.properties["abgabefrist"]
-        old_type: String = schema_ausschreibung.object_schema_parsed.properties["ausschreibungsnummer"].any_of[0]
+        old_type: String = schema_ausschreibung.object_schema_parsed.properties["ausschreibungsnummer"].any_of[
+            0
+        ]  # type: ignore[assignment]
         schema_ausschreibung.object_schema_parsed.properties["ausschreibungsnummer"].any_of[0] = Decimal(
             type="number",
             format="decimal",

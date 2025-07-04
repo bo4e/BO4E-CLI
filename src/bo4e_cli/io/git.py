@@ -18,7 +18,7 @@ def is_version_tag(value: str) -> bool:
     Check if value is a valid version tag and exists in repository.
     """
     try:
-        Version.from_string(value, allow_candidate=True)
+        Version.from_str(value)
         subprocess.check_call(["git", "show-ref", "--quiet", f"refs/tags/{value}"])
     except (ValueError, subprocess.CalledProcessError):
         return False
@@ -124,7 +124,7 @@ def get_last_n_tags(
     if len(output) == 0:
         CONSOLE.print("No tags found.", style="warning")
         return
-    last_version = Version.from_string(output[0], allow_candidate=True)
+    last_version = Version.from_str(output[0])
 
     counter = 0
     stop_iteration = False
@@ -135,11 +135,11 @@ def get_last_n_tags(
             return
         if n == 0 and tag == version_threshold:
             stop_iteration = True
-        version = Version.from_string(tag, allow_candidate=True)
+        version = Version.from_str(tag)
         # pylint: disable=too-many-boolean-expressions
         if (
             exclude_candidates
-            and version.is_candidate()
+            and version.is_release_candidate()
             or exclude_technical_bumps
             and ind > 0
             and not last_version.bumped_functional(version)
@@ -166,4 +166,4 @@ def get_last_version_before(version: Version) -> Version:
     """
     Get the last non-candidate version before the provided version following the commit history.
     """
-    return Version.from_string(one(get_last_n_tags(1, ref=version.tag_name)))
+    return Version.from_str(one(get_last_n_tags(1, ref=str(version))))
