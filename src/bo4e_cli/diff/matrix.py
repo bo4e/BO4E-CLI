@@ -12,33 +12,6 @@ from bo4e_cli.models.changes import Change, Changes, ChangeSymbol, ChangeText, C
 from bo4e_cli.models.matrix import CompatibilityMatrix, CompatibilityMatrixEntry
 from bo4e_cli.models.meta import Schemas
 
-# def iter_sorted_through_list_of_changes(changes_list: Iterator[Changes]) -> Iterator[Changes]:
-#     """
-#     Iterate through a list of Changes objects, sorted by their old_version.
-#     Before starting the iteration, the function ensures that the `old_version` and `new_version` of each Changes object
-#     form a single path graph (note that a `Changes` object acts as an edge of the graph).
-#
-#     :param changes_list: An iterator of Changes objects. The iterator will be exhausted.
-#     :return: An iterator over Changes objects, sorted by their old_version.
-#     :raises ValueError: If the changes do not form a single valid path graph.
-#     """
-#     path_graph = PathGraphChecker[str]()
-#     changes_index = {}
-#     for changes in changes_list:
-#         changes_index[str(changes.old_version)] = changes
-#         path_graph.add_edge(
-#             str(changes.old_version),
-#             str(changes.new_version),
-#             auto_create_missing_nodes=True,
-#             from_info={"schemas": changes.old_schemas},
-#             to_info={"schemas": changes.new_schemas},
-#         )
-#         # Note: We won't need the "schemas" field in further code but the add_edge function automatically checks
-#         # that the old and new schemas across different Changes objects are equal if the version tag is the same.
-#
-#     for node in islice(path_graph, 0, -1):
-#         yield changes_index[node.key]
-
 
 def _check_node(graph: nx.DiGraph, node_key: str, **node_attrs: Any) -> None:
     """
@@ -156,40 +129,3 @@ def create_compatibility_matrix(
             )
         matrix[".".join(module)] = entries
     return matrix
-
-
-# def create_compatibility_matrix_csv(
-#     output: Path, path_graph: nx.DiGraph, path: Sequence[str], *, use_emotes: bool = False
-# ) -> None:
-#     """
-#     Create a compatibility matrix csv file from the given changes.
-#     """
-#     right_arrow = "\u21a6"
-#     output.parent.mkdir(parents=True, exist_ok=True)
-#     with open(output, "w", encoding="utf-8") as file:
-#         csv_writer = csv.writer(file, delimiter=",", lineterminator="\n", escapechar="/")
-#         csv_writer.writerow(
-#             ("", f"{path[0]} {right_arrow} {path[1]}", *(f"{right_arrow} {version}" for version in path[2:]))
-#         )
-#         all_classes: set[tuple[str, ...]] = set(
-#             schema.module for _, schemas in path_graph.nodes(data="schemas") for schema in cast(Schemas, schemas)
-#         )
-#
-#         for module in sorted(all_classes, key=lambda cls: tuple(cls_part.lower() for cls_part in cls)):
-#             row = [module[-1]]
-#             class_path_str = "/" + "/".join(module) + "#"
-#             for version_old, version_new in itertools.pairwise(path):
-#                 changes_related_to_class = [
-#                     change
-#                     for change in cast(Changes, path_graph[version_old][version_new]["changes"]).changes
-#                     if change.old_trace.startswith(class_path_str) or change.new_trace.startswith(class_path_str)
-#                 ]
-#                 row.append(
-#                     determine_symbol(
-#                         changes_related_to_class,
-#                         path_graph.nodes[version_new]["schemas"],
-#                         module,
-#                         use_emotes=use_emotes,
-#                     ).value
-#                 )
-#             csv_writer.writerow(row)
