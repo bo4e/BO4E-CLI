@@ -2,8 +2,9 @@ from pathlib import Path
 
 from bo4e_cli.edit.update_refs import update_reference, update_references
 from bo4e_cli.io.schemas import read_schemas
-from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
+from bo4e_cli.models.meta import SchemaMeta, Schemas
 from bo4e_cli.models.schema import Object, Reference, SchemaRootObject, String
+from bo4e_cli.models.version import Version
 
 TEST_DIR = Path(__file__).parents[1] / "test_data/bo4e_original"
 

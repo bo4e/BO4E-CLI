@@ -16,7 +16,8 @@ from rich.text import Text
 
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.console.style import STYLES
-from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
+from bo4e_cli.models.meta import SchemaMeta, Schemas
+from bo4e_cli.models.version import Version
 
 OWNER = "bo4e"
 REPO = "BO4E-Schemas"

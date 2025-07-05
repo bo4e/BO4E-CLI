@@ -22,8 +22,9 @@ from bo4e_cli.edit.update_refs import REF_ONLINE_REGEX
 from bo4e_cli.io.github import OWNER, REPO, get_source_repo
 from bo4e_cli.io.schemas import read_schemas, write_schemas
 from bo4e_cli.io.version_file import read_version_file
-from bo4e_cli.models.meta import SchemaMeta, Version
+from bo4e_cli.models.meta import SchemaMeta
 from bo4e_cli.models.schema import Decimal, String
+from bo4e_cli.models.version import Version
 
 REPO_DIR = Path(__file__).parents[1]
 TEST_DIR = Path(__file__).parent / "test_data"

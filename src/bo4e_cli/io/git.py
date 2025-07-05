@@ -10,7 +10,7 @@ from typing import Iterable, Literal
 from more_itertools import one
 
 from bo4e_cli.io.console import CONSOLE
-from bo4e_cli.models.meta import Version
+from bo4e_cli.models.version import Version
 
 
 def is_version_tag(value: str) -> bool:
@@ -142,8 +142,7 @@ def get_last_n_tags(
             and version.is_release_candidate()
             or exclude_technical_bumps
             and ind > 0
-            and not last_version.bumped_functional(version)
-            and not last_version.bumped_major(version)
+            and last_version.bumped_technical(version)
             or ind == 0
             and ref_type == "tag"
         ):

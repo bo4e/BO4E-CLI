@@ -6,7 +6,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from bo4e_cli.models.meta import Version
+from bo4e_cli.models.version import Version
 from bo4e_cli.utils.data_structures import RootModelDict
 
 

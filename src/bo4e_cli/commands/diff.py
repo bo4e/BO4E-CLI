@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from more_itertools import one
 
 from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.diff.diff import diff_schemas as get_changes_by_diff_schemas
 from bo4e_cli.diff.matrix import create_compatibility_matrix, create_graph_from_changes, get_path_through_di_path_graph
+from bo4e_cli.diff.versioning import check_version_bump
 from bo4e_cli.io.changes import read_changes_from_diff_files, write_changes
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.matrix import write_compatibility_matrix_csv, write_compatibility_matrix_json
@@ -122,11 +124,21 @@ def diff_matrix(
 def diff_version_bump_type(
     *,
     diff_file: Annotated[Path, typer.Argument(show_default=False)],
+    allow_major_bump: Annotated[
+        bool, typer.Option("--allow-major-bump", "-a", help="Allow major version bumps.")
+    ] = False,
 ) -> None:
     """
     Determine the release bump type according to a diff file created by 'diff schemas'.
-    Prints 'functional' or 'technical' to stdout.
+    Prints 'valid' to stdout if the version bump is valid.
+    Otherwise, a descriptive error message is printed (to stdout).
 
-    The version tags inside the diff file are ignored. The bump type will be determined using the list of changes.
+    The bump type will be determined using the list of changes and compared to the corresponding versions inside the
+    diff file.
     """
-    dummy(diff_file=diff_file)
+    changes = one(read_changes_from_diff_files(diff_file))
+    try:
+        check_version_bump(changes, major_bump_allowed=allow_major_bump)
+        CONSOLE.print("valid", markup=False)
+    except ValueError as error:
+        CONSOLE.print(f"Invalid version bump: {error}", style="warning")

@@ -7,8 +7,9 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from bo4e_cli.models.meta import Schemas, Version
+from bo4e_cli.models.meta import Schemas
 from bo4e_cli.models.schema import SchemaType
+from bo4e_cli.models.version import Version
 
 
 class ChangeType(StrEnum):

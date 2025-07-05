@@ -4,7 +4,7 @@ This module provides functions to create and read the version file.
 
 from pathlib import Path
 
-from bo4e_cli.models.meta import Version
+from bo4e_cli.models.version import Version
 
 
 def create_version_file(output_dir: Path, version: Version) -> None:
