@@ -70,6 +70,8 @@ more-itertools==10.7.0
     #   inflect
 mypy-extensions==1.1.0
     # via black
+networkx==3.5
+    # via bo4e-cli (pyproject.toml)
 packaging==25.0
     # via
     #   black
