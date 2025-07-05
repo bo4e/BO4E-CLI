@@ -4,7 +4,7 @@ Contains the logic to detect the different changes between two BO4E versions.
 
 import logging
 import re
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Iterable
 
 from bo4e_cli.diff.filters import filter_non_crit
@@ -51,8 +51,8 @@ def _diff_type_base(schema_old: TypeBase, schema_new: TypeBase, old_trace: str, 
             old_trace=old_trace,
             new_trace=new_trace,
         )
-    if REGEX_IGNORE_VERSION.sub(schema_old.description, "{__gh_version__}") != REGEX_IGNORE_VERSION.sub(
-        schema_new.description, "{__gh_version__}"
+    if REGEX_IGNORE_VERSION.sub("{__gh_version__}", schema_old.description) != REGEX_IGNORE_VERSION.sub(
+        "{__gh_version__}", schema_new.description
     ):
         yield Change(
             type=ChangeType.FIELD_DESCRIPTION_CHANGED,
@@ -314,7 +314,7 @@ def _diff_schemas(schemas_old: Schemas, schemas_new: Schemas, old_trace: str, ne
             type=ChangeType.CLASS_REMOVED,
             old=schema.relative_path,
             new=None,
-            old_trace=f"{old_trace}/{Path(*schema.module)}#",
+            old_trace=f"{old_trace}/{PurePosixPath(*schema.module)}#",
             new_trace=f"{new_trace}/#",
         )
     for schema in schemas_new - schemas_old:
@@ -323,7 +323,7 @@ def _diff_schemas(schemas_old: Schemas, schemas_new: Schemas, old_trace: str, ne
             old=None,
             new=schema.relative_path,
             old_trace=f"{old_trace}/#",
-            new_trace=f"{new_trace}/{Path(*schema.module)}#",
+            new_trace=f"{new_trace}/{PurePosixPath(*schema.module)}#",
         )
     for schema in schemas_old & schemas_new:
         schema_old = schemas_old.modules[schema.module]
@@ -331,8 +331,8 @@ def _diff_schemas(schemas_old: Schemas, schemas_new: Schemas, old_trace: str, ne
         yield from _diff_root_schemas(
             schema_old.schema_parsed,
             schema_new.schema_parsed,
-            f"{old_trace}/{Path(*schema_old.module)}#",
-            f"{new_trace}/{Path(*schema_new.module)}#",
+            f"{old_trace}/{PurePosixPath(*schema_old.module)}#",
+            f"{new_trace}/{PurePosixPath(*schema_new.module)}#",
         )
 
 

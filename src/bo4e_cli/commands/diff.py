@@ -84,6 +84,8 @@ def diff_matrix(
     emotes: Annotated[
         bool,
         typer.Option(
+            "--emotes",
+            "-e",
             help="Whether to use emojis in the output file. "
             "If disabled, text will be used instead to indicate the type of change.",
         ),
