@@ -132,11 +132,12 @@ def patch_python_path(path: Path) -> Iterator[str]:
     sys.path.remove(path_str)
 
 
+# pylint: disable=too-many-locals
 def create_diff_files() -> None:
     """
     This is a helper function if you need to recreate the diff files for testing.
     """
-    DIFF_FILE_OUT_DIR = TEST_DIR / "diffs"
+    diff_file_out_dir = TEST_DIR / "diffs"
 
     tmp_path = REPO_DIR / "tmp"
     bo4e_v202401_5_0_path = tmp_path / "bo4e_v202401.5.0"
@@ -184,7 +185,7 @@ def create_diff_files() -> None:
         ]
     ):
         diff_file = (
-            DIFF_FILE_OUT_DIR
+            diff_file_out_dir
             / f"test_diff_{read_version_file(previous_schemas_path)}_{read_version_file(next_schemas_path)}.json"
         )
         CliRunner().invoke(

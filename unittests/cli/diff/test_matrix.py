@@ -57,7 +57,7 @@ class TestDiffMatrix:
         for change_symbol in CompatibilitySymbol:
             assert change_symbol.value in matrix_csv_content
 
-        assert "bo.AdditionalModel,\-,➕,🟢" in matrix_csv_content
-        assert "bo.Angebot,➖,\-,\-" in matrix_csv_content
+        assert "bo.AdditionalModel,\\-,➕,🟢" in matrix_csv_content
+        assert "bo.Angebot,➖,\\-,\\-" in matrix_csv_content
         assert "bo.Ausschreibung,🔴,🟢,🟢" in matrix_csv_content
         assert "bo.Buendelvertrag,🟢,🟢,🟡" in matrix_csv_content
