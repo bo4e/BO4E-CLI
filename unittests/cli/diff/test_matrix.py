@@ -3,11 +3,9 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from bo4e_cli import app
-from bo4e_cli.io.schemas import read_schemas, write_schemas
-from bo4e_cli.models.changes import Changes, ChangeSymbol, ChangeType
+from bo4e_cli.models.changes import ChangeSymbol
 from bo4e_cli.models.matrix import CompatibilityMatrix
-from bo4e_cli.models.schema import Decimal, String
-from unittests.conftest import TEST_DIR, TEST_DIR_BO4E_REL_REFS
+from unittests.conftest import TEST_DIR
 
 
 class TestDiffMatrix:

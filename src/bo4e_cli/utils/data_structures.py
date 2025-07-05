@@ -3,12 +3,9 @@ Contains custom data structures that are used in the CLI.
 """
 
 from collections.abc import Hashable
-from typing import Any, Generic, ItemsView, Iterator, KeysView, Mapping, NamedTuple, TypeVar, ValuesView
+from typing import Generic, ItemsView, Iterator, KeysView, Mapping, TypeVar, ValuesView
 
-from more_itertools import one
 from pydantic import RootModel
-
-from bo4e_cli.utils.iterator import side_effect
 
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
