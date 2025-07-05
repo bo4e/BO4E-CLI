@@ -69,7 +69,7 @@ def get_path_through_di_path_graph(graph: nx.DiGraph) -> list[str]:
     if start_key is None or end_key is None:
         raise ValueError("Graph must have exactly one starting and one ending node.")
 
-    return nx.shortest_path(graph, start_key, end_key)
+    return nx.shortest_path(graph, start_key, end_key)  # type: ignore[no-any-return]
     # Note: The shortest_path function has no big performance impact since each node has at most one outgoing edge.
 
 

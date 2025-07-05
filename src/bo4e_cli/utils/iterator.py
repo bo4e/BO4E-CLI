@@ -103,11 +103,11 @@ def side_effect(
 
         if chunk_size is None:
             for item in iterable:
-                func(item)
+                func(item)  # type: ignore[arg-type]
                 yield item
         else:
             for chunk in chunked(iterable, chunk_size):
-                func(chunk)
+                func(chunk)  # type: ignore[arg-type]
                 yield from chunk
     finally:
         if after is not None:
