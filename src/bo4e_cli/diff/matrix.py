@@ -8,15 +8,16 @@ from typing import Any, Iterator, Sequence, cast
 import networkx as nx
 
 from bo4e_cli.diff.filters import is_change_critical
-from bo4e_cli.models.changes import Change, Changes, ChangeSymbol, ChangeText, ChangeType
-from bo4e_cli.models.matrix import CompatibilityMatrix, CompatibilityMatrixEntry
+from bo4e_cli.models.changes import Change, Changes, ChangeType
+from bo4e_cli.models.matrix import CompatibilityMatrix, CompatibilityMatrixEntry, CompatibilitySymbol, CompatibilityText
 from bo4e_cli.models.meta import Schemas
 
 
 def _check_node(graph: nx.DiGraph, node_key: str, **node_attrs: Any) -> None:
     """
-    Check if a node exists in the graph and has no incoming edges.
-    Raises an error if the node does not exist or has incoming edges.
+    Check if a node with the given key exists in the graph. If it does not exist, add it with the given attributes.
+
+    :raises ValueError: If it exists but has different attributes, raise a ValueError.
     """
     if node_key not in graph:
         graph.add_node(node_key, **node_attrs)
@@ -46,6 +47,7 @@ def get_path_through_di_path_graph(graph: nx.DiGraph) -> list[str]:
     and all nodes in between have exactly one incoming and one outgoing edge.
 
     :param graph: The directed graph to check.
+    :return: An ordered list of node keys representing the path from the starting node to the ending node.
     :raises ValueError: If the graph is not a valid path graph.
     """
     start_key: str | None = None
@@ -68,16 +70,16 @@ def get_path_through_di_path_graph(graph: nx.DiGraph) -> list[str]:
         raise ValueError("Graph must have exactly one starting and one ending node.")
 
     return nx.shortest_path(graph, start_key, end_key)
-    # Note: The shortest_path function has big performance impact since each node has at most one outgoing edge.
+    # Note: The shortest_path function has no big performance impact since each node has at most one outgoing edge.
 
 
 def determine_symbol(
     changes: Sequence[Change], schemas: Schemas, cls: tuple[str, ...], *, use_emotes: bool = False
-) -> ChangeSymbol | ChangeText:
+) -> CompatibilitySymbol | CompatibilityText:
     """
     Determine the symbol of a change.
     """
-    symbol_model = ChangeSymbol if use_emotes else ChangeText
+    symbol_model = CompatibilitySymbol if use_emotes else CompatibilityText
     if len(changes) == 1 and changes[0].type == ChangeType.CLASS_REMOVED:
         return symbol_model.REMOVED
     if len(changes) == 1 and changes[0].type == ChangeType.CLASS_ADDED:

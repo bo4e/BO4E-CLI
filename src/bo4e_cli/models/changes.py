@@ -76,29 +76,3 @@ class Changes(BaseModel):
         Returns the new version of the changes.
         """
         return self.new_schemas.version
-
-
-class ChangeSymbol(StrEnum):
-    """
-    This enum class lists the different symbols of changes in the compatibility matrix.
-    """
-
-    CHANGE_NONE = "🟢"
-    CHANGE_NON_CRITICAL = "🟡"
-    CHANGE_CRITICAL = "🔴"
-    NON_EXISTENT = "\\-"
-    ADDED = "➕"
-    REMOVED = "➖"
-
-
-class ChangeText(StrEnum):
-    """
-    This enum class lists the different text representations of changes in the compatibility matrix.
-    """
-
-    CHANGE_NONE = "none"
-    CHANGE_NON_CRITICAL = "none\\-critical"
-    CHANGE_CRITICAL = "critical"
-    NON_EXISTENT = "\\-"
-    ADDED = "added"
-    REMOVED = "removed"

@@ -3,8 +3,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from bo4e_cli import app
-from bo4e_cli.models.changes import ChangeSymbol
-from bo4e_cli.models.matrix import CompatibilityMatrix
+from bo4e_cli.models.matrix import CompatibilityMatrix, CompatibilitySymbol
 from unittests.conftest import TEST_DIR
 
 
@@ -55,7 +54,7 @@ class TestDiffMatrix:
         with open(matrix_file, "r", encoding="utf-8") as file:
             matrix_csv_content = file.read()
 
-        for change_symbol in ChangeSymbol:
+        for change_symbol in CompatibilitySymbol:
             assert change_symbol.value in matrix_csv_content
 
         assert "bo.AdditionalModel,\-,➕,🟢" in matrix_csv_content
