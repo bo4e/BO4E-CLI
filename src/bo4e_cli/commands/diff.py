@@ -10,7 +10,10 @@ import typer
 
 from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.diff.diff import diff_schemas as get_changes_by_diff_schemas
+from bo4e_cli.diff.matrix import create_compatibility_matrix, create_graph_from_changes, get_path_through_di_path_graph
+from bo4e_cli.io.changes import read_changes_from_diff_files, write_changes
 from bo4e_cli.io.console import CONSOLE
+from bo4e_cli.io.matrix import write_compatibility_matrix_csv, write_compatibility_matrix_json
 from bo4e_cli.io.schemas import read_schemas
 
 sub_app_diff = typer.Typer(
@@ -48,9 +51,7 @@ def diff_schemas(
     with CONSOLE.status("Comparing JSON-schemas...", spinner="squish"):
         changes = get_changes_by_diff_schemas(schemas_base, schemas_comp)
     CONSOLE.print("Compared JSON-schemas.")
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w", encoding="utf-8") as file:
-        file.write(changes.model_dump_json(indent=2))
+    write_changes(changes, output_file)
     CONSOLE.print("Saved Diff to file:", output_file)
 
 
@@ -83,6 +84,8 @@ def diff_matrix(
     emotes: Annotated[
         bool,
         typer.Option(
+            "--emotes",
+            "-e",
             help="Whether to use emojis in the output file. "
             "If disabled, text will be used instead to indicate the type of change.",
         ),
@@ -91,13 +94,28 @@ def diff_matrix(
     """
     Create a difference matrix from the diff-files created by the 'diff schemas' command.
 
-    The datastructure models a table where the columns are a list of
+    The data structure models a table where the columns are a list of
     ascending versions where each column is a comparison to the version before. This means that the very first version
     will not appear in the matrix as text.
 
     The rows will represent each model such that each cell indicates how the model has changed between the two versions.
     """
-    dummy(input_diff_files=input_diff_files, output_file=output_file, output_type=output_type, emotes=emotes)
+    with CONSOLE.status("Reading changes from diff files...", spinner="squish"):
+        graph = create_graph_from_changes(read_changes_from_diff_files(*input_diff_files))
+        path = get_path_through_di_path_graph(graph)
+    CONSOLE.print("Read changes from diff files.")
+    with CONSOLE.status("Creating compatibility matrix...", spinner="squish"):
+        compatibility_matrix = create_compatibility_matrix(graph, path, use_emotes=emotes)
+    CONSOLE.print("Created compatibility matrix.")
+
+    with CONSOLE.status(f"Saving compatibility matrix to file {output_file} ...", spinner="squish"):
+        if output_type == MatrixOutputType.JSON:
+            write_compatibility_matrix_json(output_file, compatibility_matrix)
+        elif output_type == MatrixOutputType.CSV:
+            write_compatibility_matrix_csv(output_file, compatibility_matrix, path)
+        else:
+            raise ValueError(f"Unknown output type: {output_type}.")
+    CONSOLE.print(f"Saved compatibility matrix to file {output_file}.")
 
 
 @sub_app_diff.command("bump")

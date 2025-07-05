@@ -25,6 +25,7 @@ dependencies = [
     "autoflake",
     "more_itertools",
     "sqlmodel",
+    "networkx",
 ]     # add all the dependencies here
 dynamic = ["readme", "version"]
 

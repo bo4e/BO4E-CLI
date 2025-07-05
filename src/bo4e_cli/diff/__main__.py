@@ -11,8 +11,8 @@ if you're testing locally.
 import logging
 from pathlib import Path
 
-from bo4e_cli.diff.matrix import create_compatibility_matrix_csv
 from bo4e_cli.io.git import get_last_n_tags
+from bo4e_cli.io.matrix import write_compatibility_matrix_csv
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def create_tables_for_doc(
     namespaces = {version: list(get_namespace(BO4E_BASE_DIR / version)) for version in versions}
     namespaces[gh_version] = list(get_namespace(BO4E_BASE_DIR / gh_version))
     logger.info("Creating compatibility matrix")
-    create_compatibility_matrix_csv(compatibility_matrix_output_file, [*versions, gh_version], namespaces, changes)
+    write_compatibility_matrix_csv(compatibility_matrix_output_file, [*versions, gh_version], namespaces, changes)
 
 
 def test_create_tables_for_doc() -> None:

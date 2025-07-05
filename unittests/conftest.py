@@ -1,6 +1,8 @@
 import os
+import shutil
 import sys
 from contextlib import contextmanager
+from itertools import pairwise
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Iterator, cast
 from unittest.mock import MagicMock, Mock, patch
@@ -13,12 +15,17 @@ from github.GitTree import GitTree
 from github.PaginatedList import PaginatedList
 from httpx import Request, Response
 from more_itertools import take
+from typer.testing import CliRunner
 
+from bo4e_cli import app
 from bo4e_cli.edit.update_refs import REF_ONLINE_REGEX
 from bo4e_cli.io.github import OWNER, REPO, get_source_repo
+from bo4e_cli.io.schemas import read_schemas, write_schemas
 from bo4e_cli.io.version_file import read_version_file
-from bo4e_cli.models.meta import Version
+from bo4e_cli.models.meta import SchemaMeta, Version
+from bo4e_cli.models.schema import Decimal, String
 
+REPO_DIR = Path(__file__).parents[1]
 TEST_DIR = Path(__file__).parent / "test_data"
 TEST_DIR_BO4E_ORIGINAL = TEST_DIR / "bo4e_original"
 TEST_DIR_BO4E_REL_REFS = TEST_DIR / "bo4e_rel_refs"
@@ -123,3 +130,76 @@ def patch_python_path(path: Path) -> Iterator[str]:
     sys.path.append(path_str)
     yield path_str
     sys.path.remove(path_str)
+
+
+# pylint: disable=too-many-locals
+def create_diff_files() -> None:
+    """
+    This is a helper function if you need to recreate the diff files for testing.
+    """
+    diff_file_out_dir = TEST_DIR / "diffs"
+
+    tmp_path = REPO_DIR / "tmp"
+    bo4e_v202401_5_0_path = tmp_path / "bo4e_v202401.5.0"
+    bo4e_v202401_6_0_path = tmp_path / "bo4e_v202401.6.0"
+    bo4e_v202401_7_0_path = tmp_path / "bo4e_v202401.7.0"
+
+    schemas = read_schemas(TEST_DIR_BO4E_REL_REFS)
+    # *********** Modify v202401.4.0 -> v202401.5.0
+    schema_angebot = schemas.modules["bo", "Angebot"]
+    schemas.remove(schema_angebot)
+    schema_ausschreibung = schemas.modules["bo", "Ausschreibung"]
+    del schema_ausschreibung.object_schema_parsed.properties["abgabefrist"]
+    old_type: String = schema_ausschreibung.object_schema_parsed.properties["ausschreibungsnummer"].any_of[
+        0
+    ]  # type: ignore[assignment]
+    schema_ausschreibung.object_schema_parsed.properties["ausschreibungsnummer"].any_of[0] = Decimal(
+        type="number",
+        format="decimal",
+        description=old_type.description,
+        title=old_type.title,
+        default=old_type.default,
+    )
+    schemas.version.functional += 1
+    write_schemas(schemas, bo4e_v202401_5_0_path)
+    # ********** Modify v202401.5.0 -> v202401.6.0
+    additional_model = SchemaMeta(name="AdditionalModel", module=("bo", "AdditionalModel"))
+    with open(TEST_DIR / "additional_model.json", encoding="utf-8") as file:
+        additional_model.set_schema_text(file.read())
+    schemas.add(additional_model)
+    schemas.version.functional += 1
+    write_schemas(schemas, bo4e_v202401_6_0_path)
+    # ********** Modify v202401.6.0 -> v202401.7.0
+    schema_buendelvertrag = schemas.modules["bo", "Buendelvertrag"]
+    schema_buendelvertrag.object_schema_parsed.properties["beschreibung"].description = "AAAAND IT'S GOOONE!"
+    schemas.version.functional += 1
+    write_schemas(schemas, bo4e_v202401_7_0_path)
+    # ********** Create diff files
+    diff_files = []
+    for previous_schemas_path, next_schemas_path in pairwise(
+        [
+            TEST_DIR_BO4E_REL_REFS,
+            bo4e_v202401_5_0_path,
+            bo4e_v202401_6_0_path,
+            bo4e_v202401_7_0_path,
+        ]
+    ):
+        diff_file = (
+            diff_file_out_dir
+            / f"test_diff_{read_version_file(previous_schemas_path)}_{read_version_file(next_schemas_path)}.json"
+        )
+        CliRunner().invoke(
+            app,
+            [
+                "diff",
+                "schemas",
+                str(previous_schemas_path),
+                str(next_schemas_path),
+                "-o",
+                str(diff_file),
+            ],
+            catch_exceptions=False,
+        )
+        diff_files.append(diff_file)
+
+    shutil.rmtree(tmp_path)

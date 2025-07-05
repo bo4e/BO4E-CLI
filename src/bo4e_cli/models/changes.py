@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from bo4e_cli.models.meta import Version
+from bo4e_cli.models.meta import Schemas, Version
 from bo4e_cli.models.schema import SchemaType
 
 
@@ -59,6 +59,20 @@ class Changes(BaseModel):
     This pydantic class models the changes between two BO4E versions.
     """
 
-    old_version: Version
-    new_version: Version
+    old_schemas: Schemas
+    new_schemas: Schemas
     changes: list[Change]
+
+    @property
+    def old_version(self) -> Version:
+        """
+        Returns the old version of the changes.
+        """
+        return self.old_schemas.version
+
+    @property
+    def new_version(self) -> Version:
+        """
+        Returns the new version of the changes.
+        """
+        return self.new_schemas.version
