@@ -341,9 +341,9 @@ def diff_schemas(schemas_old: Schemas, schemas_new: Schemas) -> Changes:
     This function compares two BO4E versions and yields the changes.
     """
     return Changes(
-        changes=list(_diff_schemas(schemas_old, schemas_new, str(schemas_old.version), str(schemas_new.version))),
-        old_version=schemas_old.version,
-        new_version=schemas_new.version,
+        changes=list(_diff_schemas(schemas_old, schemas_new, "", "")),
+        old_schemas=schemas_old,
+        new_schemas=schemas_new,
     )
 
 

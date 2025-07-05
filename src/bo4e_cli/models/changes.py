@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from bo4e_cli.models.meta import Version
+from bo4e_cli.models.meta import Schemas, Version
 from bo4e_cli.models.schema import SchemaType
 
 
@@ -59,6 +59,46 @@ class Changes(BaseModel):
     This pydantic class models the changes between two BO4E versions.
     """
 
-    old_version: Version
-    new_version: Version
+    old_schemas: Schemas
+    new_schemas: Schemas
     changes: list[Change]
+
+    @property
+    def old_version(self) -> Version:
+        """
+        Returns the old version of the changes.
+        """
+        return self.old_schemas.version
+
+    @property
+    def new_version(self) -> Version:
+        """
+        Returns the new version of the changes.
+        """
+        return self.new_schemas.version
+
+
+class ChangeSymbol(StrEnum):
+    """
+    This enum class lists the different symbols of changes in the compatibility matrix.
+    """
+
+    CHANGE_NONE = "🟢"
+    CHANGE_NON_CRITICAL = "🟡"
+    CHANGE_CRITICAL = "🔴"
+    NON_EXISTENT = "\\-"
+    ADDED = "➕"
+    REMOVED = "➖"
+
+
+class ChangeText(StrEnum):
+    """
+    This enum class lists the different text representations of changes in the compatibility matrix.
+    """
+
+    CHANGE_NONE = "none"
+    CHANGE_NON_CRITICAL = "none\\-critical"
+    CHANGE_CRITICAL = "critical"
+    NON_EXISTENT = "\\-"
+    ADDED = "added"
+    REMOVED = "removed"

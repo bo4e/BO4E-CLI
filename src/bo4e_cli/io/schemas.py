@@ -58,6 +58,23 @@ def read_schemas(input_dir: Path, *, enable_tracker: bool = True) -> Schemas:
     return schemas
 
 
+def read_schemas_from_meta(schemas: Schemas, *, enable_tracker: bool = True) -> Schemas:
+    """
+    Read the schemas from the src paths defined in the Schemas object. If any `SchemaMeta` has no `src` defined or
+    if it is an online address, an error will be raised.
+
+    :param schemas: The Schemas object containing the metadata of the schemas.
+    :param enable_tracker: Whether to enable the progress tracker.
+    :return: The Schemas object with the schema texts set.
+    :raises ValueError: If any `SchemaMeta` has no `src` defined or if it is an online address.
+    """
+    for schema in track(
+        schemas, description="Reading schemas...", total=len(schemas), console=CONSOLE, disable=not enable_tracker
+    ):
+        schema.set_schema_text(schema.src_path.read_text(encoding="utf-8"))
+    return schemas
+
+
 def read_parsed_schema(file: Path) -> SchemaRootType:
     """
     Load a parsed schema from a file.
