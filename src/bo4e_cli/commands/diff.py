@@ -12,7 +12,7 @@ from more_itertools import one
 from bo4e_cli.commands.dummy import dummy
 from bo4e_cli.diff.diff import diff_schemas as get_changes_by_diff_schemas
 from bo4e_cli.diff.matrix import create_compatibility_matrix, create_graph_from_changes, get_path_through_di_path_graph
-from bo4e_cli.diff.versioning import check_version_bump
+from bo4e_cli.diff.version import check_version_bump
 from bo4e_cli.io.changes import read_changes_from_diff_files, write_changes
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.matrix import write_compatibility_matrix_csv, write_compatibility_matrix_json
