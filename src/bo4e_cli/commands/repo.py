@@ -65,7 +65,8 @@ def get_last_versions(
             "--show-full-commit-sha",
             "-s",
             help="If set, the full commit SHA will be shown in the output. "
-            "Otherwise, only the first 6 characters of the commit SHA will be shown.",
+            "Otherwise, only the first 6 characters of the commit SHA will be shown. "
+            "This option has no effect if the output is quiet (i.e. --quiet is set). ",
         ),
     ] = False,
     quiet: Annotated[
