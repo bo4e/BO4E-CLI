@@ -3,7 +3,6 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from bo4e_cli import app
-from bo4e_cli.models.matrix import CompatibilityMatrix, CompatibilitySymbol
 from unittests.conftest import TEST_DIR
 
 
