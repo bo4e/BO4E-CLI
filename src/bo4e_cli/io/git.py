@@ -83,13 +83,13 @@ def get_ref(ref: str) -> tuple[Literal["tag", "branch", "commit"], str]:
     Get the type of reference and the reference itself.
     """
     if is_version_tag(ref):
-        CONSOLE.print(f"Get tags before tag {ref}")
+        CONSOLE.print(f"Get tags before tag {ref}", show_only_on_verbose=True)
         return "tag", ref
     if is_branch(ref):
-        CONSOLE.print(f"Get tags on branch {ref}")
+        CONSOLE.print(f"Get tags on branch {ref}", show_only_on_verbose=True)
         return "branch", ref
     if is_commit(ref):
-        CONSOLE.print(f"Get tags before commit {ref}")
+        CONSOLE.print(f"Get tags before commit {ref}", show_only_on_verbose=True)
         return "commit", ref
     cur_commit = get_commit_sha()
     CONSOLE.print(
@@ -117,7 +117,7 @@ def get_last_n_tags(
     version_threshold = "v202401.0.0"  # Is used if n=0
     ref_type, reference = get_ref(ref)
     if n == 0:
-        CONSOLE.print(f"Get all tags since {version_threshold}")
+        CONSOLE.print(f"Get all tags since {version_threshold}", show_only_on_verbose=True)
     else:
         CONSOLE.print(f"Get the last {n} tags", show_only_on_verbose=True)
 

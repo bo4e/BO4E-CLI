@@ -59,6 +59,15 @@ def get_last_versions(
             "From versions differing only in the technical version, the newest technical release will be returned.",
         ),
     ] = False,
+    show_full_commit_sha: Annotated[
+        bool,
+        typer.Option(
+            "--show-full-commit-sha",
+            "-s",
+            help="If set, the full commit SHA will be shown in the output. "
+            "Otherwise, only the first 6 characters of the commit SHA will be shown.",
+        ),
+    ] = False,
     quiet: Annotated[
         bool,
         typer.Option(
@@ -122,7 +131,7 @@ def get_last_versions(
 
         for version in map(str, last_versions):
             commit_sha = get_commit_sha(version)
-            table.add_row(version, commit_sha[:6], get_commit_date(commit_sha))
+            table.add_row(version, commit_sha if show_full_commit_sha else commit_sha[:6], get_commit_date(commit_sha))
 
         CONSOLE.print("\n", table)
 
