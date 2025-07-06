@@ -1,5 +1,5 @@
 """
-This module contains a function to check version bumps between two sets of BO4E `Schemas`.
+This module contains a function to check version bumps of a diff file.
 """
 
 from bo4e_cli.io.console import CONSOLE
@@ -8,8 +8,15 @@ from bo4e_cli.models.changes import Changes
 
 def check_version_bump(changes: Changes, *, major_bump_allowed: bool = True) -> None:
     """
-    Check if the new version of the schemas is a valid bump from the old version.
-    If the versions have
+    Check if the `new_version` in the `Changes` object is a valid version bump compared to the `old_version`.
+    If the `Changes` object contains no changes, it will still check if the `new_version` is a valid technical bump.
+    Otherwise, it will check if the `new_version` is a functional bump.
+    If the `new_version` is a major bump, it will only check if the `major_bump_allowed` argument is set to `True`.
+
+    :param changes: The `Changes` object containing the old and new versions and the list of changes.
+    :param major_bump_allowed: If `True`, a major version bump is allowed. If `False`, a major version bump
+        will raise an error.
+    :raises ValueError: If the `new_version` is not a valid version bump compared to the `old_version`.
     """
 
     version_old = changes.old_version
