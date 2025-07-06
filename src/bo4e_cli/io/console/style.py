@@ -264,6 +264,10 @@ STYLES = {
     "bo4e.win_path": Style(color=ColorPalette.MAIN, bold=True),
     "bo4e.filename": Style(color=ColorPalette.MAIN, bold=True),
     "bo4e.json": Style(color=ColorPalette.COM),
+    "bo4e.table.title": Style(color=ColorPalette.MAIN, bold=True),
+    "bo4e.table.header": Style(color=ColorPalette.MAIN),
+    "bo4e.table.row1": Style(color=ColorPalette.SUB),
+    "bo4e.table.row2": Style(color=ColorPalette.SUB, dim=True),
     # These are style keys from the rich library
     "repr.ellipsis": Style(color=ColorPalette.ENUM),
     "repr.indent": Style(color=ColorPalette.MAIN, dim=True),
