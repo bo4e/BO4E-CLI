@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 from rich.table import Table
 
+from bo4e_cli.commands.parser import set_quiet_mode
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.git import get_commit_date, get_commit_sha, get_last_n_tags, get_ref
 
@@ -16,6 +17,7 @@ sub_app_repo = typer.Typer(
 )
 
 
+# pylint: disable=too-many-arguments, too-many-branches
 @sub_app_repo.command("versions")
 def get_last_versions(
     *,
@@ -90,12 +92,7 @@ def get_last_versions(
     The output will contain the version tags in chronological descending order, i.e. the newest version first.
     If executed without any arguments, it will return all versions on the main branch since v202401.0.0.
     """
-    if quiet and CONSOLE.verbose:
-        raise ValueError("The --quiet option cannot be used together with the --verbose option.")
-    if quiet:
-        CONSOLE.quiet = True
-    else:
-        CONSOLE.quiet = False
+    set_quiet_mode(quiet)
 
     try:
         ref_type, ref = get_ref(ref)
@@ -109,7 +106,7 @@ def get_last_versions(
             return
         # Make a rich table containing some information about the versions
         if n == 0:
-            title = f"All versions between v202401.0.0 and "
+            title = "All versions between v202401.0.0 and "
         else:
             title = f"Last {n} versions before "
         if ref_type == "tag":
@@ -136,9 +133,8 @@ def get_last_versions(
 
         CONSOLE.print("\n", table)
 
-    except Exception as error:
+    except Exception as error:  # pylint: disable=broad-exception-caught
         if quiet:
             print(f"Error while retrieving versions: {error}")
             raise typer.Exit(code=1)
-        else:
-            CONSOLE.print(f"Error while retrieving versions: {error}", style="warning")
+        CONSOLE.print(f"Error while retrieving versions: {error}", style="warning")

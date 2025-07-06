@@ -100,6 +100,7 @@ def get_ref(ref: str) -> tuple[Literal["tag", "branch", "commit"], str]:
     return "commit", cur_commit
 
 
+# pylint: disable=too-many-branches
 def get_last_n_tags(
     n: int, *, ref: str = "main", exclude_candidates: bool = True, exclude_technical_bumps: bool = False
 ) -> Iterable[Version]:
