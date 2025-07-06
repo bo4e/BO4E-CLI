@@ -74,7 +74,7 @@ def get_last_versions(
         typer.Option(
             "--quiet",
             "-q",
-            help="If set, the output will contain only the versions, seperated by newlines. "
+            help="If set, the output will contain only the versions, separated by newlines. "
             "Additionally, if an error occurs, it will be printed to stdout and the program exits with exit code 1. "
             "Can't be set together with verbose option.",
         ),
