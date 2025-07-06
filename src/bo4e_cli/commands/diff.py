@@ -120,7 +120,7 @@ def diff_matrix(
     CONSOLE.print(f"Saved compatibility matrix to file {output_file}.")
 
 
-@sub_app_diff.command("bump")
+@sub_app_diff.command("version-bump")
 def diff_version_bump_type(
     *,
     diff_file: Annotated[Path, typer.Argument(show_default=False)],
@@ -152,6 +152,8 @@ def diff_version_bump_type(
         raise ValueError("The --quiet option cannot be used together with the --verbose option.")
     if quiet:
         CONSOLE.quiet = True
+    else:
+        CONSOLE.quiet = False
     changes = one(read_changes_from_diff_files(diff_file))
     try:
         check_version_bump(changes, major_bump_allowed=allow_major_bump)
