@@ -1,7 +1,8 @@
 from more_itertools import one, take
 
 from bo4e_cli.io.schemas import read_schemas
-from bo4e_cli.models.meta import SchemaMeta, Schemas, Version
+from bo4e_cli.models.meta import SchemaMeta, Schemas
+from bo4e_cli.models.version import Version
 from unittests.conftest import TEST_DIR_BO4E_ORIGINAL
 
 

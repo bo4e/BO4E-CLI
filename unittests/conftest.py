@@ -22,8 +22,9 @@ from bo4e_cli.edit.update_refs import REF_ONLINE_REGEX
 from bo4e_cli.io.github import OWNER, REPO, get_source_repo
 from bo4e_cli.io.schemas import read_schemas, write_schemas
 from bo4e_cli.io.version_file import read_version_file
-from bo4e_cli.models.meta import SchemaMeta, Version
+from bo4e_cli.models.meta import SchemaMeta
 from bo4e_cli.models.schema import Decimal, String
+from bo4e_cli.models.version import Version
 
 REPO_DIR = Path(__file__).parents[1]
 TEST_DIR = Path(__file__).parent / "test_data"
@@ -142,7 +143,7 @@ def create_diff_files() -> None:
     tmp_path = REPO_DIR / "tmp"
     bo4e_v202401_5_0_path = tmp_path / "bo4e_v202401.5.0"
     bo4e_v202401_6_0_path = tmp_path / "bo4e_v202401.6.0"
-    bo4e_v202401_7_0_path = tmp_path / "bo4e_v202401.7.0"
+    bo4e_v202401_6_1_path = tmp_path / "bo4e_v202401.6.1"
 
     schemas = read_schemas(TEST_DIR_BO4E_REL_REFS)
     # *********** Modify v202401.4.0 -> v202401.5.0
@@ -169,11 +170,11 @@ def create_diff_files() -> None:
     schemas.add(additional_model)
     schemas.version.functional += 1
     write_schemas(schemas, bo4e_v202401_6_0_path)
-    # ********** Modify v202401.6.0 -> v202401.7.0
+    # ********** Modify v202401.6.0 -> v202401.6.1
     schema_buendelvertrag = schemas.modules["bo", "Buendelvertrag"]
     schema_buendelvertrag.object_schema_parsed.properties["beschreibung"].description = "AAAAND IT'S GOOONE!"
-    schemas.version.functional += 1
-    write_schemas(schemas, bo4e_v202401_7_0_path)
+    schemas.version.technical += 1
+    write_schemas(schemas, bo4e_v202401_6_1_path)
     # ********** Create diff files
     diff_files = []
     for previous_schemas_path, next_schemas_path in pairwise(
@@ -181,7 +182,7 @@ def create_diff_files() -> None:
             TEST_DIR_BO4E_REL_REFS,
             bo4e_v202401_5_0_path,
             bo4e_v202401_6_0_path,
-            bo4e_v202401_7_0_path,
+            bo4e_v202401_6_1_path,
         ]
     ):
         diff_file = (

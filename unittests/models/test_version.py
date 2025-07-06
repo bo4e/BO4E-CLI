@@ -1,4 +1,4 @@
-from bo4e_cli.models.meta import Version
+from bo4e_cli.models.version import Version
 
 
 class TestVersion:
@@ -36,3 +36,20 @@ class TestVersion:
         assert not version.is_local_commit()
         version = Version.from_str("v202401.0.1+dev12984hdac")
         assert version.is_local_commit()
+
+    def test_total_ordering(self) -> None:
+        """
+        Test the total ordering of the Version class.
+        """
+        # pylint: disable=unnecessary-negation
+        assert Version.from_str("v202401.1.2") == Version(major=202401, functional=1, technical=2)
+        assert Version.from_str("v202401.1.2-rc3") == Version(major=202401, functional=1, technical=2, candidate=3)
+        assert Version.from_str("v202401.1.2") < Version.from_str("v202401.1.3")
+        assert Version.from_str("v202401.1.2") < Version.from_str("v202401.2.0")
+        assert not Version.from_str("v202401.2.0") < Version.from_str("v202401.1.2")
+        assert Version.from_str("v202401.2.0") > Version.from_str("v202401.1.2")
+        assert Version.from_str("v202401.1.2-rc3") < Version.from_str("v202401.1.2")
+        assert Version.from_str("v202401.1.2-rc3") <= Version.from_str("v202401.1.2")
+        assert not Version.from_str("v202401.1.2-rc3") >= Version.from_str("v202401.1.2")
+        assert Version.from_str("v202401.1.2-rc3") > Version.from_str("v202401.1.1")
+        assert Version.from_str("v202401.1.2-rc3") > Version.from_str("v202401.1.2-rc1")

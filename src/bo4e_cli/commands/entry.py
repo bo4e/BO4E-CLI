@@ -36,3 +36,5 @@ def callback(
         raise typer.Exit()
     if verbose:
         CONSOLE.verbose = True
+    else:
+        CONSOLE.verbose = False

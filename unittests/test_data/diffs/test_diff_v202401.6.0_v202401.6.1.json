@@ -2909,8 +2909,8 @@
     ],
     "version": {
       "major": 202401,
-      "functional": 7,
-      "technical": 0,
+      "functional": 6,
+      "technical": 1,
       "candidate": null,
       "commit": null
     }

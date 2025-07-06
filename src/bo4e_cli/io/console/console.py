@@ -182,6 +182,52 @@ class ConsoleWithVerbose(Console):
             new_line_start=new_line_start,
         )
 
+    def print_json(
+        self,
+        json: Optional[str] = None,
+        *,
+        data: Any = None,
+        indent: Union[None, int, str] = 2,
+        highlight: bool = True,
+        skip_keys: bool = False,
+        ensure_ascii: bool = False,
+        check_circular: bool = True,
+        allow_nan: bool = True,
+        default: Optional[Callable[[Any], Any]] = None,
+        sort_keys: bool = False,
+        show_only_on_verbose: bool = False,
+    ) -> None:
+        """Pretty prints JSON. Output will be valid JSON.
+
+        Args:
+            json (Optional[str]): A string containing JSON.
+            data (Any): If json is not supplied, then encode this data.
+            indent (Union[None, int, str], optional): Number of spaces to indent. Defaults to 2.
+            highlight (bool, optional): Enable highlighting of output: Defaults to True.
+            skip_keys (bool, optional): Skip keys not of a basic type. Defaults to False.
+            ensure_ascii (bool, optional): Escape all non-ascii characters. Defaults to False.
+            check_circular (bool, optional): Check for circular references. Defaults to True.
+            allow_nan (bool, optional): Allow NaN and Infinity values. Defaults to True.
+            default (Callable, optional): A callable that converts values that can not be encoded
+                in to something that can be JSON encoded. Defaults to None.
+            sort_keys (bool, optional): Sort dictionary keys. Defaults to False.
+            show_only_on_verbose (bool, False): If set to True, print the message only if the verbose flag is set. Defaults to ``False``.
+        """
+        if not self.verbose and show_only_on_verbose:
+            return
+        super().print_json(
+            json=json,
+            data=data,
+            indent=indent,
+            highlight=highlight,
+            skip_keys=skip_keys,
+            ensure_ascii=ensure_ascii,
+            check_circular=check_circular,
+            allow_nan=allow_nan,
+            default=default,
+            sort_keys=sort_keys,
+        )
+
     def log(
         self,
         *objects: Any,

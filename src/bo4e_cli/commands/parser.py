@@ -4,7 +4,7 @@ Contains parser functions for custom types in the CLI.
 
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.github import resolve_latest_version
-from bo4e_cli.models.meta import Version
+from bo4e_cli.models.version import Version
 
 
 def parse_version(version: str, token: str | None = None) -> Version:
