@@ -15,20 +15,22 @@ def check_version_bump(changes: Changes, *, major_bump_allowed: bool = True) -> 
     version_old = changes.old_version
     version_new = changes.new_version
 
-    assert version_new > version_old, f"Version did not increase: {version_new} <= {version_old}"
+    if version_new <= version_old:
+        raise ValueError(
+            'The version of "schemas_new" in the diff file must be newer than the version of "schemas_old".'
+        )
 
-    CONSOLE.print('"New" version is ahead of the compared "old" version.', show_only_on_verbose=True)
-    if version_new.bumped_major(version_old):
-        if not major_bump_allowed:
-            raise ValueError("Major bump detected. Major bump is not allowed due to set argument flag.")
-        CONSOLE.print("Major version bump detected. No further checks needed.", show_only_on_verbose=True)
-        return
-    CONSOLE.print("Check if functional or technical release bump is needed", show_only_on_verbose=True)
     functional_changes = len(changes.changes) > 0
+    CONSOLE.print_json(changes.model_dump_json(exclude={"old_schemas", "new_schemas"}), show_only_on_verbose=True)
     CONSOLE.print(
-        f"{"Functional" if functional_changes else "Technical"} release bump is needed", show_only_on_verbose=True
+        f"{"Functional" if functional_changes else "Technical"} release bump is needed.", show_only_on_verbose=True
     )
 
+    if version_new.bumped_major(version_old):
+        if not major_bump_allowed:
+            raise ValueError("Major version bump detected. Major bump is not allowed due to set argument flag.")
+        CONSOLE.print("Major version bump detected. Major bump is allowed.", show_only_on_verbose=True)
+        return
     if not functional_changes and version_new.bumped_functional(version_old):
         raise ValueError(
             "Functional version bump detected but no functional changes found. "
@@ -36,7 +38,6 @@ def check_version_bump(changes: Changes, *, major_bump_allowed: bool = True) -> 
         )
     if functional_changes and not version_new.bumped_functional(version_old):
         raise ValueError(
-            "No functional version bump detected but functional changes found. "
-            "Please bump the functional release count.\n"
-            f"Detected changes: {changes.model_dump_json(indent=2)}"
+            "Technical version bump detected but functional changes found. "
+            "Please bump the functional release count instead of the technical."
         )

@@ -127,6 +127,18 @@ def diff_version_bump_type(
     allow_major_bump: Annotated[
         bool, typer.Option("--allow-major-bump", "-a", help="Allow major version bumps.")
     ] = False,
+    quiet: Annotated[
+        bool,
+        typer.Option(
+            "--quiet",
+            "-q",
+            help="Suppress output messages. Can't be set together with verbose option. "
+            "If set, the program will exit with code 0 and no output if the version bump is valid, "
+            "or with code 1 and an error message if it is invalid. "
+            "If not set, the program will print a message to stdout indicating whether the version bump "
+            "is valid or not and will always exit with code 0.",
+        ),
+    ] = False,
 ) -> None:
     """
     Determine the release bump type according to a diff file created by 'diff schemas'.
@@ -136,9 +148,16 @@ def diff_version_bump_type(
     The bump type will be determined using the list of changes and compared to the corresponding versions inside the
     diff file.
     """
+    if quiet and CONSOLE.verbose:
+        raise ValueError("The --quiet option cannot be used together with the --verbose option.")
+    if quiet:
+        CONSOLE.quiet = True
     changes = one(read_changes_from_diff_files(diff_file))
     try:
         check_version_bump(changes, major_bump_allowed=allow_major_bump)
-        CONSOLE.print("valid", markup=False)
+        CONSOLE.print("The version bump is valid.")
     except ValueError as error:
+        if quiet:
+            print(f"Invalid version bump: {error}")
+            raise typer.Exit(code=1) from error
         CONSOLE.print(f"Invalid version bump: {error}", style="warning")
