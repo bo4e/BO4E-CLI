@@ -30,7 +30,7 @@ def check_version_bump(changes: Changes, *, major_bump_allowed: bool = True) -> 
     functional_changes = len(changes.changes) > 0
     CONSOLE.print_json(changes.model_dump_json(exclude={"old_schemas", "new_schemas"}), show_only_on_verbose=True)
     CONSOLE.print(
-        f"{"Functional" if functional_changes else "Technical"} release bump is needed.", show_only_on_verbose=True
+        f"{'Functional' if functional_changes else 'Technical'} release bump is needed.", show_only_on_verbose=True
     )
 
     if version_new.bumped_major(version_old):
