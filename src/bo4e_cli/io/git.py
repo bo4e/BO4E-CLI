@@ -4,6 +4,7 @@ It is designed to interact with the BO4E repository in order to retrieve version
 """
 
 import functools
+import json
 import re
 import subprocess
 from typing import Iterable, Literal
@@ -131,7 +132,7 @@ def get_last_n_tags(
         .splitlines()
     )
     CONSOLE.print("Output from git tag command:", show_only_on_verbose=True)
-    CONSOLE.print_json(output, show_only_on_verbose=True)
+    CONSOLE.print_json(json.dumps(output, indent=2), show_only_on_verbose=True)
     output = list(filter(Version.is_valid, output))
     if len(output) == 0:
         CONSOLE.print("No tags found.", style="warning")
