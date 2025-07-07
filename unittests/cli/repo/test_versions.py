@@ -36,12 +36,12 @@ class TestLastVersions:
             )
 
         # Check if the output is a table with the expected columns
-        assert "Version" in result.stdout
-        assert "Commit SHA" in result.stdout
-        assert "Commit date" in result.stdout
+        assert "Version" in result.stdout, f"Expected 'Version' in output, got: {result.stdout}"
+        assert "Commit SHA" in result.stdout, f"Expected 'Commit SHA' in output, got: {result.stdout}"
+        assert "Commit date" in result.stdout, f"Expected 'Commit date' in output, got: {result.stdout}"
 
         # Check if the output contains some expected versions
-        assert "v202401.7.1" in result.stdout
+        assert "v202401.7.1" in result.stdout, f"Expected 'v202401.7.1' in output, got: {result.stdout}"
         assert "v202401.7.0" in result.stdout
         assert "v202401.6.0" in result.stdout
         assert "v202401.5.0" in result.stdout

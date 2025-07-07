@@ -138,3 +138,4 @@ def get_last_versions(
             print(f"Error while retrieving versions: {error}")
             raise typer.Exit(code=1)
         CONSOLE.print(f"Error while retrieving versions: {error}", style="warning")
+        CONSOLE.print_exception()
