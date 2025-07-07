@@ -9,6 +9,7 @@ from typing import Annotated
 import typer
 from more_itertools import one
 
+from bo4e_cli.commands.parser import set_quiet_mode
 from bo4e_cli.diff.diff import diff_schemas as get_changes_by_diff_schemas
 from bo4e_cli.diff.matrix import create_compatibility_matrix, create_graph_from_changes, get_path_through_di_path_graph
 from bo4e_cli.diff.version import check_version_bump
@@ -147,12 +148,7 @@ def diff_version_bump_type(
     The bump type will be determined using the list of changes and compared to the corresponding versions inside the
     diff file.
     """
-    if quiet and CONSOLE.verbose:
-        raise ValueError("The --quiet option cannot be used together with the --verbose option.")
-    if quiet:
-        CONSOLE.quiet = True
-    else:
-        CONSOLE.quiet = False
+    set_quiet_mode(quiet)
     changes = one(read_changes_from_diff_files(diff_file))
     try:
         check_version_bump(changes, major_bump_allowed=allow_major_bump)

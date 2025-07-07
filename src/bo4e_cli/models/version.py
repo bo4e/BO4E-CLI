@@ -45,6 +45,18 @@ class Version(BaseModel):
             raise ValueError(f"Invalid version: {version}")
         return cls.model_validate(match.groupdict())
 
+    @classmethod
+    def is_valid(cls, version: str) -> bool:
+        """
+        Check if the version string is valid.
+        Returns True if the version string is valid, False otherwise.
+        """
+        try:
+            cls.from_str(version)
+            return True
+        except ValueError:
+            return False
+
     def is_release_candidate(self) -> bool:
         """Check if the version is a release candidate."""
         return self.candidate is not None
