@@ -26,7 +26,7 @@ class TestLastVersions:
         with change_cwd(BO4E_PYTHON_DIR):
             result = CliRunner().invoke(
                 app,
-                ["repo", "versions", "-sr", "ff94097932d6e2e0aadb515281f53f3619a93486"],
+                ["-v", "repo", "versions", "-sr", "ff94097932d6e2e0aadb515281f53f3619a93486"],
                 # This commit sha corresponds to the (wrongly tagged) 2025.0.0 tag.
                 # For some reason, dependabot created this tag?
                 catch_exceptions=False,

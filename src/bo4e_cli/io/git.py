@@ -130,10 +130,12 @@ def get_last_n_tags(
         .strip()
         .splitlines()
     )
+    CONSOLE.print("Output from git tag command:", show_only_on_verbose=True)
+    CONSOLE.print_json(output, show_only_on_verbose=True)
+    output = list(filter(Version.is_valid, output))
     if len(output) == 0:
         CONSOLE.print("No tags found.", style="warning")
         return
-    output = list(filter(Version.is_valid, output))
     last_version = Version.from_str(output[0])
 
     counter = 0
