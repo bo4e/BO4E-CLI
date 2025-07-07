@@ -27,6 +27,7 @@ from bo4e_cli.models.schema import Decimal, String
 from bo4e_cli.models.version import Version
 
 REPO_DIR = Path(__file__).parents[1]
+BO4E_PYTHON_DIR = REPO_DIR / "BO4E-python"
 TEST_DIR = Path(__file__).parent / "test_data"
 TEST_DIR_BO4E_ORIGINAL = TEST_DIR / "bo4e_original"
 TEST_DIR_BO4E_REL_REFS = TEST_DIR / "bo4e_rel_refs"
@@ -204,3 +205,22 @@ def create_diff_files() -> None:
         diff_files.append(diff_file)
 
     shutil.rmtree(tmp_path)
+
+
+@contextmanager
+def change_cwd(new_cwd: Path) -> Iterator[Path]:
+    """
+    A context manager to temporarily change the current working directory.
+
+    Args:
+        new_cwd: The new current working directory.
+
+    Yields:
+        The original current working directory.
+    """
+    original_cwd = Path.cwd()
+    os.chdir(new_cwd)
+    try:
+        yield original_cwd
+    finally:
+        os.chdir(original_cwd)
