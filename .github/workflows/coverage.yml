@@ -15,6 +15,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+      - name: Unshallow the submodule
+        run: git submodule foreach 'git fetch --unshallow || true'
+        # Found that actions/checkout fetches the repository with the
+        # '--unshallow' option, but it doesn't do the same for submodules.
+        # Some unittests require the full history of the submodule.
+        # Solution taken from: https://github.com/tarantool/tarantool/pull/9147
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
