@@ -1,9 +1,9 @@
 # BO4E-CLI
 
-![Unittests status badge](https://github.com/bo4e/BO4E-CLI/workflows/Unittests/badge.svg?query=branch=main)
-![Coverage status badge](https://github.com/bo4e/BO4E-CLI/workflows/Coverage/badge.svg?query=branch=main)
-![Linting status badge](https://github.com/bo4e/BO4E-CLI/workflows/Linting/badge.svg?query=branch=main)
-![Black status badge](https://github.com/bo4e/BO4E-CLI/workflows/Formatting/badge.svg?query=branch=main)
+![Unittests status badge](https://github.com/bo4e/BO4E-CLI/actions/workflows/unittests.yml/badge.svg?branch=main)
+![Coverage status badge](https://github.com/bo4e/BO4E-CLI/actions/workflows/coverage.yml/badge.svg?branch=main)
+![Linting status badge](https://github.com/bo4e/BO4E-CLI/actions/workflows/pythonlint.yml/badge.svg?branch=main)
+![Black status badge](https://github.com/bo4e/BO4E-CLI/actions/workflows/formatting.yml/badge.svg?branch=main)
 
 This is a command line interface (CLI) for developers working or wanting to work with BO4E models.
 It contains several features which can make your life easier when working with BO4E.
