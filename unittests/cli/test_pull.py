@@ -3,7 +3,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from bo4e_cli import app
-from bo4e_cli.commands import pull
+from bo4e_cli.commands.pull import pull
 from bo4e_cli.models.meta import SchemaMeta
 from unittests.conftest import TEST_DATA_VERSION
 
