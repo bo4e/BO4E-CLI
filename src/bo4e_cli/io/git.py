@@ -10,6 +10,7 @@ import subprocess
 from typing import Iterable, Literal
 
 from bo4e_cli.io.console import CONSOLE
+from bo4e_cli.io.github import release_exists
 from bo4e_cli.models.version import Version
 
 
@@ -103,7 +104,12 @@ def get_ref(ref: str) -> tuple[Literal["tag", "branch", "commit"], str]:
 
 # pylint: disable=too-many-branches
 def get_last_n_tags(
-    n: int, *, ref: str = "main", exclude_candidates: bool = True, exclude_technical_bumps: bool = False
+    n: int,
+    *,
+    ref: str = "main",
+    exclude_candidates: bool = True,
+    exclude_technical_bumps: bool = False,
+    token: str | None = None,
 ) -> Iterable[Version]:
     """
     Get the last n tags in chronological descending order starting from `ref`.
@@ -160,6 +166,11 @@ def get_last_n_tags(
             and ref_type == "tag"
         ):
             CONSOLE.print(f"Skipping version {version}", show_only_on_verbose=True)
+            continue
+        if not release_exists(version, token):
+            CONSOLE.print(
+                f"Skipping version {version} because it does not exist in the BO4E-Schemas repository.", style="warning"
+            )
             continue
         CONSOLE.print(f"Yielding version {version}", show_only_on_verbose=True)
         yield version

@@ -56,6 +56,18 @@ def get_versions(token: str | None) -> Iterable[Version]:
             pass
 
 
+def release_exists(version: Version, token: str | None) -> bool:
+    """
+    Check if a release with the given version exists in the BO4E-Schemas repository.
+    """
+    repo = get_source_repo(token)
+    try:
+        repo.get_release(str(version))
+        return True
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False
+
+
 def get_schemas_meta_from_gh(version: Version, token: str | None) -> Schemas:
     """
     Query the github tree api for a specific package and version.
