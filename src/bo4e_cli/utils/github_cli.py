@@ -5,6 +5,8 @@ Returns some utility functions to interact with the GitHub CLI.
 import re
 import subprocess
 
+from bo4e_cli.io.console import CONSOLE
+
 REGEX_GH_TOKEN = re.compile(
     r"^(gh[pousr]_[A-Za-z0-9_]{36,251}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$"
 )
@@ -33,6 +35,7 @@ def get_access_token_from_cli() -> str | None:
         return None
     token = result.stdout.decode().strip()
     if REGEX_GH_TOKEN.fullmatch(token):
+        CONSOLE.print("Retrieved access token from GitHub CLI command `gh auth token`.")
         return token
     return None
 
