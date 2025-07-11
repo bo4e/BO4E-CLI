@@ -8,17 +8,17 @@ class TestVersion:
         assert version.functional == 0
         assert version.technical == 1
         assert version.candidate == 8
-        assert version.commit is None
+        assert not version.is_dirty()
 
     def test_eq_and_ne(self) -> None:
         version1 = Version.from_str("v202401.0.1-rc8")
         version2 = Version.from_str("v202401.0.1-rc8")
-        version3 = Version.from_str("v202401.0.1-rc7+dev12984hdac")
+        version3 = Version.from_str("v202401.0.1-rc7+g12984hdac")
         assert version1 == version2
         assert version1 == "v202401.0.1-rc8"
         assert "v202401.0.1-rc8" == version1
         assert version1 != "v202401.0.1-rc7"
-        assert "v202401.0.1-rc7+dev12984hdac" != version1
+        assert "v202401.0.1-rc7+g12984hdac" != version1
         assert version1 != version3
 
     def test_str(self) -> None:
@@ -33,9 +33,9 @@ class TestVersion:
 
     def test_is_local_commit(self) -> None:
         version = Version.from_str("v202401.0.1-rc8")
-        assert not version.is_local_commit()
-        version = Version.from_str("v202401.0.1+dev12984hdac")
-        assert version.is_local_commit()
+        assert not version.is_dirty()
+        version = Version.from_str("v202401.0.1+g12984hdac")
+        assert version.is_dirty()
 
     def test_total_ordering(self) -> None:
         """

@@ -22,10 +22,11 @@ from bo4e_cli.models.schema import (
     String,
     TypeBase,
 )
+from bo4e_cli.models.version import REGEX_VERSION
 
 logger = logging.getLogger(__name__)
 
-REGEX_IGNORE_VERSION = re.compile(r"v\d+\.\d+\.\d+(-rc\d+)?")
+REGEX_IGNORE_VERSION = re.compile(REGEX_VERSION.pattern[1:-1])
 
 
 def _diff_type_base(schema_old: TypeBase, schema_new: TypeBase, old_trace: str, new_trace: str) -> Iterable[Change]:

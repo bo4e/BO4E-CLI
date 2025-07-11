@@ -3,6 +3,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from bo4e_cli import app
+from bo4e_cli.commands.pull import pull
 from bo4e_cli.models.meta import SchemaMeta
 from unittests.conftest import TEST_DATA_VERSION
 
@@ -11,6 +12,18 @@ class TestPull:
     """
     A class with pytest unit tests.
     """
+
+    def test_latest_as_function_call(self, tmp_path: Path, mock_github: None) -> None:
+        pull(output_dir=tmp_path, update_refs=False)
+
+        version_file = tmp_path / ".version"
+        angebot_schema = tmp_path / "bo/Angebot.json"
+        assert version_file.exists()
+        assert version_file.read_text() == TEST_DATA_VERSION
+        assert angebot_schema.exists()
+        angebot = SchemaMeta(name="Angebot", module=("bo", "Angebot"), src=angebot_schema)
+        angebot.set_schema_text(angebot_schema.read_text())
+        assert angebot.schema_parsed.title == "Angebot"
 
     def test_latest(self, tmp_path: Path, mock_github: None) -> None:
         result = CliRunner().invoke(app, ["pull", "-o", str(tmp_path), "--no-update-refs"], catch_exceptions=False)
