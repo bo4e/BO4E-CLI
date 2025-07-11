@@ -9,8 +9,6 @@ import re
 import subprocess
 from typing import Iterable, Literal
 
-from more_itertools import one
-
 from bo4e_cli.io.console import CONSOLE
 from bo4e_cli.io.github import release_exists
 from bo4e_cli.models.version import Version
