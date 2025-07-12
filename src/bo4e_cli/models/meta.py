@@ -7,7 +7,7 @@ from collections.abc import Hashable
 from pathlib import Path
 from typing import Callable, Generic, ItemsView, Iterable, Iterator, KeysView, Literal, TypeVar, ValuesView, overload
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, ValidationError
 
 from bo4e_cli.models.schema import SchemaRootObject, SchemaRootStrEnum, SchemaRootType
 from bo4e_cli.models.version import Version
@@ -85,7 +85,12 @@ class SchemaMeta(BaseModel):
         if self._schema is None:
             raise ValueError("The schema has not been loaded yet. Call `set_schema_parsed` or `set_schema_text` first.")
         if isinstance(self._schema, str):
-            self._schema = TypeAdapter(SchemaRootType).validate_json(self._schema)
+            try:
+                self._schema = TypeAdapter(SchemaRootType).validate_json(self._schema)
+            except ValidationError as error:
+                raise ValueError(
+                    f"JSON parsing error for schema '{self.name}' in module '{self.module}': {error}"
+                ) from error
         return self._schema
 
     @property
