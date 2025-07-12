@@ -168,7 +168,7 @@ class Version(BaseModel):
         Return True if this version is a technical bump from the other version.
         Return False if major or functional bump is detected.
         """
-        return not self.bumped_functional(other) and self.technical > other.technical
+        return not self.bumped_major(other) and not self.bumped_functional(other) and self.technical > other.technical
 
     def bumped_candidate(self, other: "Version") -> bool:
         """
@@ -178,4 +178,9 @@ class Version(BaseModel):
         """
         if self.candidate is None or other.candidate is None:
             raise ValueError("Cannot compare candidate versions if one of them is not a candidate.")
-        return not self.bumped_technical(other) and self.candidate > other.candidate
+        return (
+            not self.bumped_major(other)
+            and not self.bumped_functional(other)
+            and not self.bumped_technical(other)
+            and self.candidate > other.candidate
+        )
