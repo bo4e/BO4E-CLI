@@ -20,7 +20,7 @@ jobs:
         python-version: ["3.12"]
         os: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: 'recursive'
       - name: Unshallow the submodule
@@ -52,7 +52,7 @@ jobs:
         id-token: write
     needs: tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
