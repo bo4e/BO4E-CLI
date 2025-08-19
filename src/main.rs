@@ -11,10 +11,7 @@ fn main() {
     // matches just as you would the top level cmd
     match &cli.command {
         Some(Commands::Pull(pull)) => {
-            println!(
-                "'myapp add' was used, name is: {:?}",
-                pull.name.as_ref().unwrap()
-            )
+            println!("'myapp add' was used, name is: {:?}", &pull.version_tag)
         }
         None => {
             // print help page if no subcommand is provided
