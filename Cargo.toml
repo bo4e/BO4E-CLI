@@ -1,0 +1,14 @@
+[package]
+name = "bo4e-cli"
+version = "0.1.0"
+description = "CLI for developers. It contains many useful features when working on using BO4E in your own projects."
+authors = ["Leon Haffmans <leon.haffmans@hochfrequenz.de>"]
+license = "MIT"
+edition = "2024"
+
+[dependencies]
+color-eyre = "0.6.3"
+crossterm = { version = "0.28.1", features = ["event-stream"] }
+futures = "0.3.31"
+ratatui = "0.29.0"
+tokio = { version = "1.40.0", features = ["full"] }
