@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use lazy_static::lazy_static;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -29,9 +30,8 @@ lazy_static! {
     .unwrap();
 }
 
-trait VersionTrait: FromStr + Display {}
-
 /// A version of the BO4E-Schemas.
+#[derive(Serialize, Deserialize)]
 struct Version {
     major: u32,
     functional: u32,
@@ -39,8 +39,12 @@ struct Version {
     candidate: Option<u32>,
 }
 
+#[derive(Serialize, Deserialize)]
 struct DirtyVersion {
-    version: Version,
+    major: u32,
+    functional: u32,
+    technical: u32,
+    candidate: Option<u32>,
     /// The commit hash or at least a starting substring of it.
     /// When retrieving the version from a commit which has no tag on it, the version will have
     /// the commit hash after the last version tag in the history.
@@ -52,7 +56,7 @@ struct DirtyVersion {
     dirty_worktree_date: Option<NaiveDate>,
 }
 
-fn _get_basic_version_from_match(captures: &regex::Captures) -> Version {
+fn _get_basic_version_from_match(captures: &regex::Captures) -> (u32, u32, u32, Option<u32>) {
     // Note: unwrap is safe here because the regex ensures that these groups are present
     // and valid unsigned integers.
     let major = captures.name("major").unwrap().as_str().parse().unwrap();
@@ -73,12 +77,7 @@ fn _get_basic_version_from_match(captures: &regex::Captures) -> Version {
         .name("candidate")
         .map(|m| m.as_str().parse().unwrap());
 
-    Version {
-        major,
-        functional,
-        technical,
-        candidate,
-    }
+    (major, functional, technical, candidate)
 }
 
 impl FromStr for Version {
@@ -91,7 +90,13 @@ impl FromStr for Version {
             .captures(s)
             .ok_or_else(|| format!("Invalid version format: {}", s))?;
 
-        Ok(_get_basic_version_from_match(&captures))
+        let (major, functional, technical, candidate) = _get_basic_version_from_match(&captures);
+        Ok(Version {
+            major,
+            functional,
+            technical,
+            candidate,
+        })
     }
 }
 
@@ -105,7 +110,7 @@ impl FromStr for DirtyVersion {
             .captures(s)
             .ok_or_else(|| format!("Invalid version format: {}", s))?;
 
-        let version = _get_basic_version_from_match(&captures);
+        let (major, functional, technical, candidate) = _get_basic_version_from_match(&captures);
 
         let commit_part = captures.name("commit_part").map(|m| m.as_str().to_string());
 
@@ -123,10 +128,44 @@ impl FromStr for DirtyVersion {
         };
 
         Ok(DirtyVersion {
-            version,
+            major,
+            functional,
+            technical,
+            candidate,
             commit_part,
             dirty_worktree_date,
         })
+    }
+}
+
+impl TryFrom<&DirtyVersion> for Version {
+    type Error = String;
+
+    /// Convert a DirtyVersion to a Version, ignoring the commit_part and dirty_worktree_date.
+    fn try_from(dirty_version: &DirtyVersion) -> Result<Self, Self::Error> {
+        if dirty_version.is_dirty() {
+            return Err("Cannot convert DirtyVersion to Version: it is dirty.".to_string());
+        }
+        Ok(Version {
+            major: dirty_version.major,
+            functional: dirty_version.functional,
+            technical: dirty_version.technical,
+            candidate: dirty_version.candidate,
+        })
+    }
+}
+
+impl From<&Version> for DirtyVersion {
+    /// Convert a Version to a DirtyVersion, setting commit_part and dirty_worktree_date to None.
+    fn from(version: &Version) -> Self {
+        DirtyVersion {
+            major: version.major,
+            functional: version.functional,
+            technical: version.technical,
+            candidate: version.candidate,
+            commit_part: None,
+            dirty_worktree_date: None,
+        }
     }
 }
 
@@ -143,7 +182,9 @@ impl Display for Version {
 impl Display for DirtyVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Run fmt method of Version first
-        self.version.fmt(f)?;
+        Version::try_from(self)
+            .map_err(|x| std::fmt::Error)?
+            .fmt(f)?;
         if let Some(commit_part) = &self.commit_part {
             write!(f, "+g{}", commit_part)?;
         }
@@ -201,7 +242,8 @@ impl Ord for Version {
     }
 }
 
-impl Version {
+#[duplicate::duplicate_item(T; [Version]; [DirtyVersion])]
+impl T {
     /// Check if the version is a release candidate.
     fn is_release_candidate(&self) -> bool {
         self.candidate.is_some()
@@ -227,11 +269,11 @@ impl Version {
         Ok(self.major == other.major
             && self.functional == other.functional
             && self.technical == other.technical
-            && self.candidate.ok_or_else(|| {
-                format!("Cannot compare candidate versions if one of them is not a candidate.")
-            })? > other.candidate.ok_or_else(|| {
-                format!("Cannot compare candidate versions if one of them is not a candidate.")
-            })?)
+            && self.candidate.ok_or_else(
+                || "Cannot compare candidate versions if one of them is not a candidate.",
+            )? > other.candidate.ok_or_else(
+                || "Cannot compare candidate versions if one of them is not a candidate.",
+            )?)
     }
 }
 
