@@ -31,7 +31,7 @@ lazy_static! {
 }
 
 /// A version of the BO4E-Schemas.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Version {
     major: u32,
     functional: u32,
@@ -39,7 +39,7 @@ struct Version {
     candidate: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct DirtyVersion {
     #[serde(flatten)]
     version: Version,

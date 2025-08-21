@@ -1,4 +1,4 @@
+mod base;
 mod pull;
-mod structs;
 
-pub use structs::{Cli, SubcommandsLevel1};
+pub use base::{Cli, SubcommandsLevel1};

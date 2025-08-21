@@ -54,7 +54,9 @@ impl Pull {
             && !self.no_clear_output
         {
             std::fs::remove_dir_all(&self.output_dir)
-                .map_err(|e| format!("Failed to clear output directory: {}", e))?;
+                .map_err(|e| format!("Failed to clear output directory: {}", e))
+        } else {
+            Ok(())
         }
     }
 }
