@@ -1,5 +1,6 @@
+use crate::cli::base::Executable;
 use clap::Args;
-use std::error::Error;
+use std::io;
 use std::path::PathBuf;
 
 /// Pull all BO4E-JSON-schemas of a specific version.
@@ -44,17 +45,11 @@ pub struct Pull {
     pub token: Option<String>,
 }
 
-impl Pull {
-    pub fn run(&self) -> Result<(), String> {
+impl Executable for Pull {
+    fn run(&self) -> io::Result<()> {
         // Ensure the output directory exists
-        if self
-            .output_dir
-            .try_exists()
-            .map_err(|e| format!("Failed to access output directory: {}", e))?
-            && !self.no_clear_output
-        {
+        if self.output_dir.try_exists()? && !self.no_clear_output {
             std::fs::remove_dir_all(&self.output_dir)
-                .map_err(|e| format!("Failed to clear output directory: {}", e))
         } else {
             Ok(())
         }
