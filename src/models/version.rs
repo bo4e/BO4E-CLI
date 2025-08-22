@@ -32,15 +32,15 @@ lazy_static! {
 
 /// A version of the BO4E-Schemas.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct Version {
+pub struct Version {
     major: u32,
     functional: u32,
     technical: u32,
     candidate: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct DirtyVersion {
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct DirtyVersion {
     #[serde(flatten)]
     version: Version,
     /// The commit hash or at least a starting substring of it.
@@ -146,6 +146,18 @@ impl TryFrom<&DirtyVersion> for Version {
     }
 }
 
+impl TryFrom<DirtyVersion> for Version {
+    type Error = String;
+
+    /// Convert a DirtyVersion to a Version, ignoring the commit_part and dirty_worktree_date.
+    fn try_from(dirty_version: DirtyVersion) -> Result<Self, Self::Error> {
+        if dirty_version.is_dirty() {
+            return Err("Cannot convert DirtyVersion to Version: it is dirty.".to_string());
+        }
+        Ok(dirty_version.version)
+    }
+}
+
 impl From<&Version> for DirtyVersion {
     /// Convert a Version to a DirtyVersion, setting commit_part and dirty_worktree_date to None.
     fn from(version: &Version) -> Self {
@@ -156,6 +168,17 @@ impl From<&Version> for DirtyVersion {
                 technical: version.technical,
                 candidate: version.candidate,
             },
+            commit_part: None,
+            dirty_worktree_date: None,
+        }
+    }
+}
+
+impl From<Version> for DirtyVersion {
+    /// Convert a Version to a DirtyVersion, setting commit_part and dirty_worktree_date to None.
+    fn from(version: Version) -> Self {
+        DirtyVersion {
+            version,
             commit_part: None,
             dirty_worktree_date: None,
         }
