@@ -1,4 +1,5 @@
 use crate::models::json_schema::SchemaRootType;
+use crate::models::version::DirtyVersion;
 use itertools::chain;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -116,6 +117,7 @@ impl Schema {
 pub struct Schemas {
     #[serde(default)]
     schemas: Vec<Rc<Schema>>,
+    pub version: DirtyVersion,
     #[serde(skip, default)]
     _schemas_by_name: HashMap<String, Rc<Schema>>,
     #[serde(skip, default)]
@@ -123,16 +125,18 @@ pub struct Schemas {
 }
 
 impl Schemas {
-    pub fn new() -> Self {
+    pub fn new(version: DirtyVersion) -> Self {
         Self {
             schemas: Vec::new(),
+            version,
             _schemas_by_name: HashMap::new(),
             _schemas_by_module: HashMap::new(),
         }
     }
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(capacity: usize, version: DirtyVersion) -> Self {
         Self {
             schemas: Vec::with_capacity(capacity),
+            version,
             _schemas_by_name: HashMap::with_capacity(capacity),
             _schemas_by_module: HashMap::with_capacity(capacity),
         }
@@ -197,8 +201,11 @@ impl Schemas {
         }
     }
 
-    fn try_from_iter<T: IntoIterator<Item = Schema>>(iter: T) -> Result<Self, String> {
-        let mut schemas = Schemas::new();
+    fn try_from_iter<T: IntoIterator<Item = Schema>>(
+        iter: T,
+        version: DirtyVersion,
+    ) -> Result<Self, String> {
+        let mut schemas = Schemas::new(version);
         for schema in iter {
             schemas.add_schema(Rc::new(schema))?;
         }
@@ -215,11 +222,11 @@ impl IntoIterator for Schemas {
     }
 }
 
-impl TryFrom<Vec<Rc<Schema>>> for Schemas {
+impl TryFrom<(Vec<Rc<Schema>>, DirtyVersion)> for Schemas {
     type Error = String;
 
-    fn try_from(schemas: Vec<Rc<Schema>>) -> Result<Self, Self::Error> {
-        let mut schemas_coll = Self::with_capacity(schemas.len());
+    fn try_from((schemas, version): (Vec<Rc<Schema>>, DirtyVersion)) -> Result<Self, Self::Error> {
+        let mut schemas_coll = Self::with_capacity(schemas.len(), version);
         for schema in schemas {
             schemas_coll.add_schema(schema)?;
         }
@@ -227,11 +234,11 @@ impl TryFrom<Vec<Rc<Schema>>> for Schemas {
     }
 }
 
-impl TryFrom<Vec<Schema>> for Schemas {
+impl TryFrom<(Vec<Schema>, DirtyVersion)> for Schemas {
     type Error = String;
 
-    fn try_from(schemas: Vec<Schema>) -> Result<Self, Self::Error> {
-        let mut schemas_coll = Self::with_capacity(schemas.len());
+    fn try_from((schemas, version): (Vec<Schema>, DirtyVersion)) -> Result<Self, Self::Error> {
+        let mut schemas_coll = Self::with_capacity(schemas.len(), version);
         for schema in schemas {
             schemas_coll.add_schema(Rc::new(schema))?;
         }
