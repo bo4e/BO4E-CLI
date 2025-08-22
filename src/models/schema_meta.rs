@@ -1,8 +1,10 @@
 use crate::models::json_schema::SchemaRootType;
 use itertools::chain;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 use std::path::PathBuf;
+use std::rc::Rc;
 use url::Url;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -112,51 +114,128 @@ impl Schema {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Schemas {
-    schemas: Vec<Schema>,
+    #[serde(default)]
+    schemas: Vec<Rc<Schema>>,
+    #[serde(skip, default)]
+    _schemas_by_name: HashMap<String, Rc<Schema>>,
+    #[serde(skip, default)]
+    _schemas_by_module: HashMap<Vec<String>, Rc<Schema>>,
 }
 
 impl Schemas {
-    pub fn schemas(&self) -> &[Schema] {
+    pub fn new() -> Self {
+        Self {
+            schemas: Vec::new(),
+            _schemas_by_name: HashMap::new(),
+            _schemas_by_module: HashMap::new(),
+        }
+    }
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            schemas: Vec::with_capacity(capacity),
+            _schemas_by_name: HashMap::with_capacity(capacity),
+            _schemas_by_module: HashMap::with_capacity(capacity),
+        }
+    }
+    pub fn schemas(&self) -> &[Rc<Schema>] {
         &self.schemas
     }
-}
+    pub fn names(&self) -> HashSet<&String> {
+        self._schemas_by_name.keys().collect()
+    }
+    pub fn modules(&self) -> HashSet<&Vec<String>> {
+        self._schemas_by_module.keys().collect()
+    }
+    pub fn add_schema(&mut self, schema: Rc<Schema>) -> Result<(), String> {
+        let name = schema.name().to_string();
+        let module = schema.module().to_vec();
 
-pub struct IndexedSchemas<'a> {
-    schemas_by_name: HashMap<&'a str, &'a Schema>,
-    schemas_by_module: HashMap<&'a [String], &'a Schema>,
-    _schemas: &'a mut Schemas,
-}
-
-impl<'a> From<&'a mut Schemas> for IndexedSchemas<'a> {
-    fn from(schemas: &'a mut Schemas) -> Self {
-        let mut schemas_by_name = HashMap::new();
-        let mut schemas_by_module = HashMap::new();
-
-        for schema in &schemas.schemas {
-            schemas_by_name.insert(schema.name(), schema);
-            schemas_by_module.insert(schema.module(), schema);
+        if self._schemas_by_name.contains_key(&name) {
+            return Err(format!("Schema with name '{}' already exists.", name));
         }
+        // We don't need to check for module uniqueness here,
+        // as the schema's name is part of the module.
+        self._schemas_by_name.insert(name.clone(), schema.clone());
+        self._schemas_by_module
+            .insert(module.clone(), schema.clone());
+        self.schemas.push(schema);
+        Ok(())
+    }
+    pub fn get_by_name(&self, name: &str) -> Option<Rc<Schema>> {
+        self._schemas_by_name.get(name).cloned()
+    }
+    pub fn get_by_module(&self, module: &[String]) -> Option<Rc<Schema>> {
+        self._schemas_by_module.get(module).cloned()
+    }
+    pub fn remove(&mut self, schema: &Schema) -> Option<Rc<Schema>> {
+        let name = schema.name();
+        let module = schema.module();
 
-        Self {
-            schemas_by_name,
-            schemas_by_module,
-            _schemas: schemas,
+        if let Some(schema) = self._schemas_by_name.remove(name) {
+            self._schemas_by_module.remove(module).unwrap();
+            self.schemas.retain(|s| s.name() != name);
+            Some(schema)
+        } else {
+            None
         }
+    }
+    pub fn remove_by_name(&mut self, name: &str) -> Option<Rc<Schema>> {
+        if let Some(schema) = self._schemas_by_name.remove(name) {
+            self._schemas_by_module.remove(schema.module()).unwrap();
+            self.schemas.retain(|s| s.name() != name);
+            Some(schema)
+        } else {
+            None
+        }
+    }
+    pub fn remove_by_module(&mut self, module: &[String]) -> Option<Rc<Schema>> {
+        if let Some(schema) = self._schemas_by_module.remove(module) {
+            self._schemas_by_name.remove(schema.name());
+            self.schemas.retain(|s| s.module() != module);
+            Some(schema)
+        } else {
+            None
+        }
+    }
+
+    fn try_from_iter<T: IntoIterator<Item = Schema>>(iter: T) -> Result<Self, String> {
+        let mut schemas = Schemas::new();
+        for schema in iter {
+            schemas.add_schema(Rc::new(schema))?;
+        }
+        Ok(schemas)
     }
 }
 
-impl<'a> IndexedSchemas<'a> {
-    pub fn get_by_name(&self, name: &str) -> Option<&'a Schema> {
-        self.schemas_by_name.get(name).copied()
-    }
+impl IntoIterator for Schemas {
+    type Item = Rc<Schema>;
+    type IntoIter = std::vec::IntoIter<Rc<Schema>>;
 
-    pub fn get_by_module(&self, module: &[String]) -> Option<&'a Schema> {
-        self.schemas_by_module.get(module).copied()
+    fn into_iter(self) -> Self::IntoIter {
+        self.schemas.into_iter()
     }
+}
 
-    pub fn add_schema(&mut self, schema: &'a Schema) {
-        self.schemas_by_name.insert(schema.name(), schema);
-        self.schemas_by_module.insert(schema.module(), schema);
-        self._schemas.schemas.push(schema);
+impl TryFrom<Vec<Rc<Schema>>> for Schemas {
+    type Error = String;
+
+    fn try_from(schemas: Vec<Rc<Schema>>) -> Result<Self, Self::Error> {
+        let mut schemas_coll = Self::with_capacity(schemas.len());
+        for schema in schemas {
+            schemas_coll.add_schema(schema)?;
+        }
+        Ok(schemas_coll)
+    }
+}
+
+impl TryFrom<Vec<Schema>> for Schemas {
+    type Error = String;
+
+    fn try_from(schemas: Vec<Schema>) -> Result<Self, Self::Error> {
+        let mut schemas_coll = Self::with_capacity(schemas.len());
+        for schema in schemas {
+            schemas_coll.add_schema(Rc::new(schema))?;
+        }
+        Ok(schemas_coll)
     }
 }
