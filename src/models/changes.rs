@@ -22,7 +22,7 @@ pub enum ChangeType {
     FieldAnyOfTypeRemoved,
     FieldAllOfTypeAdded,
     FieldAllOfTypeRemoved,
-    FieldTypeChanged, // An arbitrary unclassified change in type
+    FieldTypeChanged,
     ClassAdded,
     ClassRemoved,
     ClassDescriptionChanged,

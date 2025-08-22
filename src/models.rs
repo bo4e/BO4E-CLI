@@ -1,4 +1,5 @@
 mod changes;
+mod config;
 pub mod git;
 mod json_schema;
 mod macros;
