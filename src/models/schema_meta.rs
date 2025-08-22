@@ -2,7 +2,6 @@ use crate::models::json_schema::SchemaRootType;
 use itertools::chain;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::Rc;
 use url::Url;
@@ -60,8 +59,9 @@ impl SchemaMeta {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Schema {
+    #[serde(flatten)]
     pub meta: SchemaMeta,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     schema: Option<SchemaRootType>,
     #[serde(skip, default)]
     _schema_text: Option<String>,
@@ -151,13 +151,12 @@ impl Schemas {
         let module = schema.module().to_vec();
 
         if self._schemas_by_name.contains_key(&name) {
-            return Err(format!("Schema with name '{}' already exists.", name));
+            return Err(format!("Schema with name '{}' already exists.", &name));
         }
         // We don't need to check for module uniqueness here,
         // as the schema's name is part of the module.
-        self._schemas_by_name.insert(name.clone(), schema.clone());
-        self._schemas_by_module
-            .insert(module.clone(), schema.clone());
+        self._schemas_by_name.insert(name, schema.clone());
+        self._schemas_by_module.insert(module, schema.clone());
         self.schemas.push(schema);
         Ok(())
     }

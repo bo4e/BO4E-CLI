@@ -94,6 +94,7 @@ pub struct CompatibilityMatrixEntry {
     pub compatibility: CompatibilitySymbol,
 }
 
+/// This class models the compatibility matrix of BO4E versions.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct CompatibilityMatrix {
     #[serde(flatten, default)]
