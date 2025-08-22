@@ -275,7 +275,7 @@ mod tests {
         };
 
         let serialized = serde_json::to_string_pretty(&schema).unwrap();
-
+        println!("{}", serialized);
         assert!(!serialized.contains("\"$defs\": {}"));
         assert!(serialized.contains("\"type\": \"object\""));
         assert!(serialized.contains("\"description\": \"A complex object schema\""));
