@@ -1,5 +1,7 @@
 use crate::cli::base::Executable;
-use clap::Args;
+use crate::io::github::get_token_from_github_cli;
+use crate::models::cli::Token;
+use clap::{Args, value_parser};
 use std::io;
 use std::path::PathBuf;
 
@@ -41,8 +43,8 @@ pub struct Pull {
     /// Alternatively, if you have the GitHub CLI installed and
     /// the token can't be found in the environment variables,
     /// the token will be fetched from the GitHub CLI (if you are logged in). Uses `gh auth token`.
-    #[arg(long, env = "GITHUB_ACCESS_TOKEN")]
-    pub token: Option<String>,
+    #[arg(long, env = "GITHUB_ACCESS_TOKEN", value_parser = value_parser!(Token))]
+    pub token: Option<Token>,
 }
 
 impl Executable for Pull {

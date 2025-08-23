@@ -1,8 +1,9 @@
-mod changes;
-mod config;
+pub mod changes;
+pub mod cli;
+pub mod config;
 pub mod git;
-mod json_schema;
-mod macros;
-mod matrix;
-mod schema_meta;
-mod version;
+pub mod json_schema;
+pub mod macros;
+pub mod matrix;
+pub mod schema_meta;
+pub mod version;

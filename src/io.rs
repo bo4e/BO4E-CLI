@@ -1,2 +1,3 @@
-mod cleanse;
-mod git;
+pub mod cleanse;
+pub mod git;
+pub mod github;
