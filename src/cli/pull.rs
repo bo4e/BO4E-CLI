@@ -1,4 +1,5 @@
 use crate::cli::base::Executable;
+use crate::io::cleanse::clear_dir_if_needed;
 use crate::io::github::get_token_from_github_cli;
 use crate::models::cli::Token;
 use clap::{Args, value_parser};
@@ -50,10 +51,7 @@ pub struct Pull {
 impl Executable for Pull {
     fn run(&self) -> io::Result<()> {
         // Ensure the output directory exists
-        if self.output_dir.try_exists()? && !self.no_clear_output {
-            std::fs::remove_dir_all(&self.output_dir)
-        } else {
-            Ok(())
-        }
+        clear_dir_if_needed(&self.output_dir, !self.no_clear_output)?;
+        Ok(())
     }
 }

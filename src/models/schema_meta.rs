@@ -9,7 +9,7 @@ use url::Url;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct SchemaMeta {
-    module: Box<[String]>,
+    module: Vec<String>,
     #[serde(default)]
     pub src: Option<Source>,
 }
@@ -21,7 +21,7 @@ pub enum Source {
 }
 
 impl SchemaMeta {
-    pub fn new(module: Box<[String]>, src: Option<Source>) -> Result<Self, String> {
+    pub fn new(module: Vec<String>, src: Option<Source>) -> Result<Self, String> {
         if module.is_empty() {
             return Err("Module name cannot be empty".to_string());
         }
@@ -69,10 +69,10 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub fn new(meta: SchemaMeta) -> Self {
+    pub fn new(meta: SchemaMeta, schema: Option<SchemaRootType>) -> Self {
         Self {
             meta,
-            schema: None,
+            schema,
             _schema_text: None,
         }
     }
@@ -110,6 +110,12 @@ impl Schema {
 
     pub fn src_path(&self) -> Option<&PathBuf> {
         self.meta.src_path()
+    }
+}
+
+impl From<SchemaMeta> for Schema {
+    fn from(meta: SchemaMeta) -> Self {
+        Self::new(meta, None)
     }
 }
 
@@ -211,14 +217,31 @@ impl Schemas {
         }
         Ok(schemas)
     }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, Rc<Schema>> {
+        self.schemas.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Rc<Schema>> {
+        self.schemas.iter_mut()
+    }
 }
 
-impl IntoIterator for Schemas {
-    type Item = Rc<Schema>;
-    type IntoIter = std::vec::IntoIter<Rc<Schema>>;
+impl<'a> IntoIterator for &'a Schemas {
+    type Item = &'a Rc<Schema>;
+    type IntoIter = std::slice::Iter<'a, Rc<Schema>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.schemas.into_iter()
+        self.schemas.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Schemas {
+    type Item = &'a mut Rc<Schema>;
+    type IntoIter = std::slice::IterMut<'a, Rc<Schema>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.schemas.iter_mut()
     }
 }
 
