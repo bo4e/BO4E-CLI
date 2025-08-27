@@ -5,63 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
-use url::Url;
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct SchemaMeta {
-    module: Vec<String>,
-    #[serde(default)]
-    pub src: Option<Source>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub enum Source {
-    Local(PathBuf),
-    Online(Url),
-}
-
-impl SchemaMeta {
-    pub fn new(module: Vec<String>, src: Option<Source>) -> Result<Self, String> {
-        if module.is_empty() {
-            return Err("Module name cannot be empty".to_string());
-        }
-        Ok(Self { module, src })
-    }
-    pub fn module(&self) -> &[String] {
-        &self.module
-    }
-    pub fn name(&self) -> &str {
-        &self.module.last().unwrap()
-    }
-
-    pub fn as_relative_json_path(&self) -> PathBuf {
-        let last_index = self.module.len() - 1;
-        chain(
-            &self.module[..last_index],
-            [&(self.module[last_index].clone() + ".json")],
-        )
-        .collect()
-    }
-    pub fn src_url(&self) -> Option<&Url> {
-        if let Some(Source::Online(url)) = &self.src {
-            Some(url)
-        } else {
-            None
-        }
-    }
-    pub fn src_path(&self) -> Option<&PathBuf> {
-        if let Some(Source::Local(path)) = &self.src {
-            Some(path)
-        } else {
-            None
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Schema {
-    #[serde(flatten)]
-    pub meta: SchemaMeta,
+    module: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     schema: Option<SchemaRootType>,
     #[serde(skip, default)]
@@ -69,12 +16,15 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub fn new(meta: SchemaMeta, schema: Option<SchemaRootType>) -> Self {
-        Self {
-            meta,
+    pub fn new(module: Vec<String>, schema: Option<SchemaRootType>) -> Result<Self, String> {
+        if module.is_empty() {
+            return Err("Module name cannot be empty".to_string());
+        }
+        Ok(Self {
+            module,
             schema,
             _schema_text: None,
-        }
+        })
     }
 
     pub fn load_schema(&mut self, schema_text: String) {
@@ -91,31 +41,31 @@ impl Schema {
             Ok(self.schema.as_ref().unwrap())
         }
     }
-
-    pub fn module(&self) -> &[String] {
-        self.meta.module()
+    pub fn get_serialized_schema(&self) -> Result<String, String> {
+        if let Some(schema) = &self.schema {
+            serde_json::to_string_pretty(schema)
+                .map_err(|e| format!("Failed to serialize schema: {}", e))
+        } else if let Some(schema_text) = &self._schema_text {
+            Ok(schema_text.clone())
+        } else {
+            Err("Schema has neither parsed schema nor schema text.".to_string())
+        }
     }
 
+    pub fn module(&self) -> &[String] {
+        &self.module
+    }
     pub fn name(&self) -> &str {
-        self.meta.name()
+        &self.module.last().unwrap()
     }
 
     pub fn as_relative_json_path(&self) -> PathBuf {
-        self.meta.as_relative_json_path()
-    }
-
-    pub fn src_url(&self) -> Option<&Url> {
-        self.meta.src_url()
-    }
-
-    pub fn src_path(&self) -> Option<&PathBuf> {
-        self.meta.src_path()
-    }
-}
-
-impl From<SchemaMeta> for Schema {
-    fn from(meta: SchemaMeta) -> Self {
-        Self::new(meta, None)
+        let last_index = self.module.len() - 1;
+        chain(
+            &self.module[..last_index],
+            [&(self.module[last_index].clone() + ".json")],
+        )
+        .collect()
     }
 }
 

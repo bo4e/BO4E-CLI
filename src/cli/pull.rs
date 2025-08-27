@@ -1,10 +1,16 @@
 use crate::cli::base::Executable;
 use crate::io::cleanse::clear_dir_if_needed;
-use crate::io::github::get_token_from_github_cli;
+use crate::io::github::{
+    get_schemas_from_github, get_token_from_github_cli, resolve_latest_version,
+};
+use crate::io::schemas::write_schemas;
 use crate::models::cli::Token;
+use crate::models::version::Version;
+use crate::utils::tokio::get_runtime;
 use clap::{Args, value_parser};
 use std::io;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 /// Pull all BO4E-JSON-schemas of a specific version.
 ///
@@ -49,9 +55,21 @@ pub struct Pull {
 }
 
 impl Executable for Pull {
-    fn run(&self) -> io::Result<()> {
+    fn run(&self) -> Result<(), String> {
         // Ensure the output directory exists
-        clear_dir_if_needed(&self.output_dir, !self.no_clear_output)?;
-        Ok(())
+        clear_dir_if_needed(&self.output_dir, !self.no_clear_output)
+            .map_err(|err| err.to_string())?;
+        let token = self.token.as_ref().map(|token| token.token.as_str());
+        let runtime = get_runtime();
+        let version = {
+            if self.version_tag == "latest" {
+                runtime.block_on(resolve_latest_version(token))
+            } else {
+                Version::from_str(&self.version_tag)
+            }
+        }?;
+        let schemas = runtime.block_on(get_schemas_from_github(&version, token))?;
+        write_schemas(&schemas, self.output_dir.as_path())
+            .map_err(|err| format!("Failed to write schemas to output directory: {}", err))
     }
 }

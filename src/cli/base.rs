@@ -3,7 +3,7 @@ use clap::{Args, CommandFactory, Parser, Subcommand};
 use std::io;
 
 pub trait Executable {
-    fn run(&self) -> io::Result<()>;
+    fn run(&self) -> Result<(), String>;
 }
 
 #[derive(Parser)]
@@ -15,11 +15,11 @@ pub struct Cli {
 }
 
 impl Executable for Cli {
-    fn run(&self) -> io::Result<()> {
+    fn run(&self) -> Result<(), String> {
         if let Some(command) = &self.command {
             command.run()
         } else {
-            Cli::command().print_help()
+            Cli::command().print_help().map_err(|err| err.to_string())
         }
     }
 }
@@ -30,7 +30,7 @@ pub enum SubcommandsLevel1 {
 }
 
 impl Executable for SubcommandsLevel1 {
-    fn run(&self) -> io::Result<()> {
+    fn run(&self) -> Result<(), String> {
         match self {
             SubcommandsLevel1::Pull(pull) => pull.run(),
         }

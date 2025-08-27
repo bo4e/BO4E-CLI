@@ -22,6 +22,18 @@ impl Display for Token {
     }
 }
 
+impl From<Token> for String {
+    fn from(token: Token) -> Self {
+        token.token
+    }
+}
+
+impl From<&Token> for String {
+    fn from(token: &Token) -> Self {
+        token.token.clone()
+    }
+}
+
 impl Token {
     pub fn new(token: String) -> Result<Self, String> {
         is_valid_github_token(&token)

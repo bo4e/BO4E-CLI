@@ -1,8 +1,11 @@
-use crate::models::schema_meta::{Schema, SchemaMeta, Schemas, Source};
+use crate::models::schema_meta::{Schema, Schemas};
 use crate::models::version::Version;
 use lazy_static::lazy_static;
 use octocrab::repos::RepoHandler;
+use serde::de::IntoDeserializer;
 use std::rc::Rc;
+use std::str::FromStr;
+use tokio::task::JoinSet;
 use url::Url;
 
 lazy_static! {
@@ -29,53 +32,72 @@ pub fn get_token_from_github_cli() -> Option<String> {
 }
 
 async fn _get_schemas_from_github_recursive(
-    repo_handler: &RepoHandler<'_>,
-    target_commitish: &str,
-    path: &str,
-    schemas: &mut Schemas,
-) -> Result<(), String> {
-    let items = repo_handler
+    octocrab: octocrab::Octocrab,
+    target_commitish: String,
+    dir_path: String,
+) -> Result<Vec<Schema>, String> {
+    let items = get_bo4e_schemas_repo_handler(&octocrab)
         .get_content()
-        .r#ref(target_commitish)
-        .path(path)
+        .r#ref(target_commitish.clone())
+        .path(dir_path)
         .send()
         .await
         .map_err(|e| e.to_string())?;
+
+    let mut join_handle: JoinSet<Result<Vec<Schema>, String>> = JoinSet::new();
 
     for item in items.items {
         match item.r#type.as_str() {
             "file" => {
                 if let Some(path_match) = REGEX_GITHUB_SRC_PATH.captures(&item.path) {
-                    let path_slice = path_match.name("module").unwrap().as_str();
-                    //let response = repo_handler.raw_file(target_commitish, &item.path).await?;
-                    //response.status()
-                    //let schema: Schema = serde_json::from_str(&file_content)
-                    //    .map_err(|e| octocrab::Error::Other(e.to_string()))?;
-                    let schema = Schema::from(SchemaMeta::new(
-                        path_slice.split('/').map(String::from).collect(),
-                        Some(Source::Online(Url::parse(path_slice).unwrap())),
-                    )?);
-                    return schemas.add_schema(Rc::new(schema));
+                    let octocrab = octocrab.clone();
+                    let target_commitish = target_commitish.clone();
+                    let file_path = item.path.clone();
+                    let path_slice = path_match.name("module").unwrap().as_str().to_string();
+
+                    join_handle.spawn_local(async move {
+                        let file_content = get_bo4e_schemas_repo_handler(&octocrab)
+                            .get_content()
+                            .r#ref(target_commitish)
+                            .path(file_path)
+                            .send()
+                            .await
+                            .map_err(|e| e.to_string())?
+                            .items[0]
+                            .decoded_content()
+                            .ok_or("Failed to retrieve and decode file content".to_string())?;
+                        let mut schema =
+                            Schema::new(path_slice.split('/').map(String::from).collect(), None)?;
+                        schema.load_schema(file_content);
+                        Ok(vec![schema])
+                    });
                 }
             }
             "dir" => {
-                Box::pin(_get_schemas_from_github_recursive(
-                    repo_handler,
-                    target_commitish,
-                    &item.path,
-                    schemas,
-                ))
-                .await?;
+                join_handle.spawn_local(Box::pin(_get_schemas_from_github_recursive(
+                    octocrab.clone(),
+                    target_commitish.clone(),
+                    item.path.clone(),
+                )));
             }
             _ => {
                 // Ignore other types (e.g., symlinks, submodules)
             }
         }
     }
-    Ok(())
+    let mut output = Vec::new();
+    while let Some(res) = join_handle.join_next().await {
+        match res {
+            Ok(Ok(schemas)) => output.extend(schemas),
+            Ok(Err(err)) => return Err(err),
+            Err(err) if err.is_panic() => return Err(format!("Panic occurred: {:?}", err)),
+            Err(err) => return Err(format!("Task joining failed: {:?}", err)),
+        }
+    }
+    Ok(output)
 }
 
-pub fn get_octocrab_instance(token: Option<&str>) -> Result<octocrab::Octocrab, String> {
+fn get_octocrab_instance(token: Option<&str>) -> Result<octocrab::Octocrab, String> {
     if let Some(token) = token {
         octocrab::Octocrab::builder()
             .personal_token(token.to_string())
@@ -88,7 +110,7 @@ pub fn get_octocrab_instance(token: Option<&str>) -> Result<octocrab::Octocrab, 
     }
 }
 
-pub fn get_bo4e_schemas_repo_handler(octocrab: &octocrab::Octocrab) -> RepoHandler<'_> {
+fn get_bo4e_schemas_repo_handler(octocrab: &octocrab::Octocrab) -> RepoHandler<'_> {
     octocrab.repos("bo4e", "BO4E-Schemas")
 }
 
@@ -107,38 +129,33 @@ async fn get_target_commitish_from_tag(
 /// Query the GitHub API of `bo4e/BO4E-Schemas` for a specific version.
 /// Returns metadata of all BO4E schemas.
 // Uses octocrab to interact with the GitHub API.
-pub async fn get_schemas_from_github(
-    repo_handler: &RepoHandler<'_>,
-    version_tag: &Version,
-    target_commitish: &str,
-) -> Result<Schemas, String> {
-    // Get the reference for the tag
 
-    let mut schemas = Schemas::new(version_tag.into());
-    repo_handler.raw_file()
-    _get_schemas_from_github_recursive(
-        repo_handler,
+pub async fn get_schemas_from_github(
+    version_tag: &Version,
+    token: Option<&str>,
+) -> Result<Schemas, String> {
+    let octocrab = get_octocrab_instance(token)?;
+    let target_commitish =
+        get_target_commitish_from_tag(&get_bo4e_schemas_repo_handler(&octocrab), version_tag)
+            .await?;
+
+    let schemas_vector = _get_schemas_from_github_recursive(
+        octocrab,
         target_commitish,
-        "src/bo4e_schemas",
-        &mut schemas,
+        "src/bo4e_schemas".to_string(),
     )
     .await?;
+    let schemas = Schemas::try_from((schemas_vector, version_tag.into()))?;
 
     Ok(schemas)
 }
 
-pub async fn download_schemas_from_github(schemas: &mut Schemas) -> Result<(), String> {
-    for schema in schemas {
-        if let Some(download_url) = schema.src_url() {
-            // TODO: make a GET request to download_url with crate `http`
-
-            schema.load_schema(schema_text);
-        } else {
-            return Err(format!(
-                "Schema {} does not have a valid online source URL.",
-                schema.name()
-            ));
-        }
-    }
-    Ok(())
+pub async fn resolve_latest_version(token: Option<&str>) -> Result<Version, String> {
+    let octocrab = get_octocrab_instance(token)?;
+    let latest_release = get_bo4e_schemas_repo_handler(&octocrab)
+        .releases()
+        .get_latest()
+        .await
+        .map_err(|e| e.to_string())?;
+    Version::from_str(&latest_release.tag_name)
 }
