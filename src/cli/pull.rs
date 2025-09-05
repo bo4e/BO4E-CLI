@@ -4,7 +4,7 @@ use crate::io::github::{
     get_schemas_from_github, get_token_from_github_cli, resolve_latest_version,
 };
 use crate::io::schemas::write_schemas;
-use crate::models::cli::Token;
+use crate::models::cli::{Token, get_token_as_string};
 use crate::models::version::Version;
 use crate::utils::tokio::get_runtime;
 use clap::{Args, value_parser};
@@ -36,11 +36,11 @@ pub struct Pull {
     /// Don't automatically update the references in the schemas.
     /// On default, online references to BO4E-schemas will be replaced by relative paths.
     /// To keep the online references, set this flag.
-    #[arg(short = 'u', long)]
+    #[arg(short = 'u', long, default_value_t = false)]
     pub no_update_refs: bool,
 
     /// Don't automatically clear the output directory before saving the schemas.
-    #[arg(short = 'c', long)]
+    #[arg(short = 'c', long, default_value_t = false)]
     pub no_clear_output: bool,
 
     /// A GitHub Access token to authenticate with the GitHub API.
@@ -50,7 +50,7 @@ pub struct Pull {
     /// Alternatively, if you have the GitHub CLI installed and
     /// the token can't be found in the environment variables,
     /// the token will be fetched from the GitHub CLI (if you are logged in). Uses `gh auth token`.
-    #[arg(long, env = "GITHUB_ACCESS_TOKEN", value_parser = value_parser!(Token))]
+    #[arg(long, env = "GITHUB_ACCESS_TOKEN", value_parser = value_parser!(Token), default_value = None)]
     pub token: Option<Token>,
 }
 
@@ -59,7 +59,8 @@ impl Executable for Pull {
         // Ensure the output directory exists
         clear_dir_if_needed(&self.output_dir, !self.no_clear_output)
             .map_err(|err| err.to_string())?;
-        let token = self.token.as_ref().map(|token| token.token.as_str());
+        let token = get_token_as_string(&self.token);
+        let token = token.as_deref();
         let runtime = get_runtime();
         let version = {
             if self.version_tag == "latest" {
@@ -68,7 +69,7 @@ impl Executable for Pull {
                 Version::from_str(&self.version_tag)
             }
         }?;
-        let schemas = runtime.block_on(get_schemas_from_github(&version, token))?;
+        let schemas = runtime.block_on(get_schemas_from_github(&version, token, true))?;
         write_schemas(&schemas, self.output_dir.as_path())
             .map_err(|err| format!("Failed to write schemas to output directory: {}", err))
     }

@@ -12,7 +12,7 @@ impl FromStr for Token {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Token::new(s.to_string()).or_else(|_| Token::from_github_cli())
+        Token::new(s.to_string())
     }
 }
 
@@ -44,5 +44,15 @@ impl Token {
         get_token_from_github_cli()
             .map(|token| Token { token })
             .ok_or_else(|| "Could not retrieve GitHub token from GitHub CLI.".to_string())
+    }
+}
+
+pub fn get_token_as_string(token: &Option<Token>) -> Option<String> {
+    if let Some(t) = token {
+        Some(t.into())
+    } else if let Ok(t) = Token::from_github_cli() {
+        Some(t.into())
+    } else {
+        None
     }
 }
