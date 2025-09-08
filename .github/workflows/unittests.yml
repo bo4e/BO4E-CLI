@@ -22,7 +22,7 @@ jobs:
         # Some unittests require the full history of the submodule.
         # Solution taken from: https://github.com/tarantool/tarantool/pull/9147
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Dependencies
