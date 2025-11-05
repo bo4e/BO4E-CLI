@@ -1,5 +1,7 @@
 use crate::cli::base::Executable;
 mod cli;
+mod console;
+mod edit;
 mod io;
 mod models;
 mod utils;

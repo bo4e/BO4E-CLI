@@ -1,6 +1,10 @@
+use crate::console::progress_bar::{
+    abandon_progress_bar_with_error, finish_progress_bar, new_progress_bar,
+};
 use crate::models::schema_meta::{Schema, Schemas};
 use crate::models::version::Version;
 use indicatif;
+use indicatif::ProgressFinish;
 use lazy_static::lazy_static;
 use octocrab::repos::RepoHandler;
 use serde::de::IntoDeserializer;
@@ -100,30 +104,31 @@ async fn _execute_futures_with_progress_bar<T: 'static>(
     enable_output: bool,
 ) -> Result<Vec<T>, String> {
     let total = futures.len();
-    let pb = if enable_output {
-        let pb = indicatif::ProgressBar::new(total as u64);
-        pb.set_style(
-            indicatif::ProgressStyle::with_template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-            )
-            .unwrap(),
-        );
-        Some(pb)
-    } else {
-        None
-    };
+    let start_message = "Downloading schemas...";
+    let finish_message = "Downloaded schemas.   ";
+    let pb = enable_output.then(|| new_progress_bar(total as u64, Some(start_message.to_string())));
 
     let mut join_set: JoinSet<T> = JoinSet::new();
     for future in futures {
         join_set.spawn_local(future);
     }
 
-    let mut output = Vec::new();
+    let mut output = Ok(Vec::new());
     while let Some(res) = join_set.join_next().await {
+        if output.is_err() {
+            // Entering here means all tasks have been aborted due to a panic or error.
+            continue;
+        }
         match res {
-            Ok(value) => output.push(value),
-            Err(err) if err.is_panic() => return Err(format!("Panic occurred: {:?}", err)),
-            Err(err) => return Err(format!("Task joining failed: {:?}", err)),
+            Ok(value) => output.as_mut().unwrap().push(value),
+            Err(err) if err.is_panic() => {
+                output = Err(format!("Panic occurred: {:?}", err));
+                join_set.abort_all();
+            }
+            Err(err) => {
+                output = Err(format!("Task joining failed: {:?}", err));
+                join_set.abort_all();
+            }
         }
         if let Some(ref pb) = pb {
             pb.inc(1);
@@ -131,10 +136,14 @@ async fn _execute_futures_with_progress_bar<T: 'static>(
     }
 
     if let Some(ref pb) = pb {
-        pb.finish_with_message("Done");
+        if let Err(ref e) = output {
+            abandon_progress_bar_with_error(pb, format!("Error: {}", e));
+        } else {
+            finish_progress_bar(pb, Some(finish_message.to_string()));
+        }
     }
 
-    Ok(output)
+    output
 }
 
 fn get_octocrab_instance(token: Option<&str>) -> Result<octocrab::Octocrab, String> {

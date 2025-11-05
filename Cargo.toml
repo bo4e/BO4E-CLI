@@ -25,6 +25,7 @@ serde_regex = "1.1.0"
 octocrab = "0.44.1"
 http = "1.3.1"
 indicatif = { version = "0.18.0", features = ["tokio"] }
+console = { version = "0.16.0", features = ["windows-console-colors"] }
 
 [patch.crates-io]
 console = { path = "../../public/console" }
