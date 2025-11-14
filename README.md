@@ -38,7 +38,7 @@ bo4e --help
 
 In the following I will describe some details on how to use the functionality provided by this CLI. Please keep in
 mind that I won't explain every command line option. In this regard, please refer to the help text of the CLI.
-If the explanation is not sufficient for you feel free
+If you are missing something in the following explanation and/or the help text, feel free
 to [create an issue](https://github.com/bo4e/BO4E-CLI/issues/new).
 
 > Note: If you want to have a more verbose output, you have to place the option `-v` *before* the subcommand.
@@ -78,7 +78,7 @@ bo4e pull -o ./bo4e_schemas_latest
 
 ## `bo4e edit`
 
-In short, it let's you edit the schemas using a static config-file. Ideally, no one should need it but in
+In short, this lets you edit the schemas using a static config-file. Ideally, no one should need it but in
 reality you might not have enough time to wait for the gremium or just want to experiment and elaborate
 an appropriate model. Here is a list of what it can do:
 
@@ -221,7 +221,7 @@ value for `_version` fields with the version inside the `.version` file.
 Example:
 
 ```bash
-bo4e edit -i ./bo4e_schemas_latest -o ./bo4e_schemas_editted -c ./my_config_file.json
+bo4e edit -i ./bo4e_schemas_latest -o ./bo4e_schemas_edited -c ./my_config_file.json
 ```
 
 ## `bo4e generate`
@@ -241,7 +241,7 @@ output-type.
 Example:
 
 ```bash
-bo4e generate -i ./bo4e_schemas_editted -o ./bo4e_schemas_python -t python-pydantic-v2
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic-v2
 ```
 
 ## `bo4e diff schemas`
