@@ -41,6 +41,9 @@ mind that I won't explain every command line option. In this regard, please refe
 If the explanation is not sufficient for you feel free
 to [create an issue](https://github.com/bo4e/BO4E-CLI/issues/new).
 
+> Note: If you want to have a more verbose output, you have to place the option `-v` *before* the subcommand.
+> I.e. you would have to write `bo4e -v pull -o ./bo4e_latest` or `bo4e -v diff version-bump ./diff.json`.
+
 ## `bo4e pull`
 
 Pull all BO4E-JSON-schemas of a specific version (or `latest`).
@@ -66,6 +69,12 @@ with relative references.
 > if the provided PAT is valid. If you are more interested in this, please refer to
 >
 the [GitHub documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28)
+
+Example:
+
+```bash
+bo4e pull -o ./bo4e_schemas_latest
+```
 
 ## `bo4e edit`
 
@@ -209,6 +218,12 @@ version each time you upgrade the BO4E version.
 To solve this problem, you can use the `--set-default-version` flag. It will automatically set or override the default
 value for `_version` fields with the version inside the `.version` file.
 
+Example:
+
+```bash
+bo4e edit -i ./bo4e_schemas_latest -o ./bo4e_schemas_editted -c ./my_config_file.json
+```
+
 ## `bo4e generate`
 
 This is a code-generation command. It creates all BO4E-models from the input JSON-schemas for a supported
@@ -222,6 +237,12 @@ output-type.
   in [pydantic](https://github.com/pydantic/pydantic) v2 style.
 - `python-sql-model`: Programming language Python. Class definitions are
   in [SQLModel](https://github.com/fastapi/sqlmodel) style.
+
+Example:
+
+```bash
+bo4e generate -i ./bo4e_schemas_editted -o ./bo4e_schemas_python -t python-pydantic-v2
+```
 
 ## `bo4e diff schemas`
 
@@ -344,6 +365,12 @@ The type of change can be one of the following:
 - `enum_value_added`
 - `enum_value_removed`
 
+Example:
+
+```bash
+bo4e diff schemas ./bo4e_schemas_v2024.0.0 ./bo4e_schemas_latest -o diff_v2024.0.0_to_latest.json
+```
+
 ## `bo4e diff matrix`
 
 This command creates a difference matrix just like
@@ -360,12 +387,24 @@ must match the `old_version` of it's next neighbour. Example of valid input file
 |-----------------------|---------|-----------------------|---------|-----------------------|
 | v1.0.0 &#8594; v1.0.2 |         | v1.0.2 &#8594; v1.3.0 |         | v1.3.0 &#8594; v2.0.0 |
 
+Example:
+
+```bash
+bo4e diff matrix diff_3.json diff_2.json diff_1.json -o matrix.csv -et csv
+```
+
 ## `bo4e diff version-bump`
 
 Given a diff file this command will decide if the list of changes corresponds to a functional or just technical change.
 It will then take a look at the versions inside the file and will then print if the detected version bump is valid
 or not. Alternatively, you can execute this command in `--quiet` mode in which case it will error with exit code `1`
 if the version bump is invalid.
+
+Example:
+
+```bash
+bo4e diff version-bump ./diff.json
+```
 
 ## How to use this Repository on Your Machine
 
