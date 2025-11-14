@@ -16,13 +16,13 @@ It contains several features which can make your life easier when working with B
   references with relative paths.
 - Edit JSON schemas using a static config file to customize the BO4E models to your usecase.
 - Generate the models in one of the [supported languages](#supported-languages).
-- Compare BO4E schemas of different versions. Creates a machine-readable diff-file in json-format.
+- Compare BO4E schemas of different versions. Create a machine-readable diff-file in json-format.
 - Create a difference matrix comparing multiple versions consecutively by using multiple diff-files.
-- Gives information if a diff between two versions is functional or technical.
+- Get information if a diff between two versions is functional or technical.
 
 ## Install
 
-You need to have a Python installed. Tested are Python versions `>3.10` but it may work for older versions too.
+You need to have Python installed. Tested are Python versions `>3.10` but it may work for older versions too.
 
 ```bash
 pip install bo4e-cli
@@ -48,7 +48,7 @@ Pull all BO4E-JSON-schemas of a specific version (or `latest`).
 Beside the json-files a `.version` file will be created in utf-8 format at root of the output directory.
 This file is needed for other commands of this CLI.
 
-The schemas from the repository `BO4E-Schemas` contain online references to each other
+The schemas pulled from the repository `BO4E-Schemas` contain online references to each other
 (e.g. `"$ref": "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.0.1/src/bo4e_schemas/bo/Angebot.json#"`).
 This is not very convenient if you want to work with the schemas offline. And if you need to edit the schemas using
 the config file, this would be a problem.
@@ -70,7 +70,7 @@ the [GitHub documentation](https://docs.github.com/en/rest/using-the-rest-api/ra
 ## `bo4e edit`
 
 In short, it let's you edit the schemas using a static config-file. Ideally, no one should need it but in
-reality you might haven't got enough time to wait for the gremium or just want to experiment and elaborate
+reality you might not have enough time to wait for the gremium or just want to experiment and elaborate
 an appropriate model. Here is a list of what it can do:
 
 - Define non-nullable properties (in most cases changes it to a required field)
@@ -151,9 +151,9 @@ I think it's most effective to learn by example here:
 
 The config file can contain the following keys:
 
-- `nonNullabelFields`: A list of regex patterns which will be used to define non-nullable fields.
+- `nonNullableFields`: A list of regex patterns which will be used to define non-nullable fields.
   The field will be required if the default value was `null`, which will be mostly the case.
-  The regex pattern will be (full-)matched to the path of each the field.
+  The regex pattern will be (full-)matched to the path of each field.
   An example of such a path would be `bo.Angebot.angebotspreis`. If the pattern matches, the field will be non-nullable.
 - `additionalFields`: A list of additional fields which will be added to the schema.
     - `pattern`: A regex pattern which will be used to match the path of the schema (e.g. `bo.Angebot`).
@@ -168,7 +168,7 @@ The config file can contain the following keys:
     - `module`: The module to which the schema will be added.
     - `schema`: The schema definition which will be added.
 
-Note: For all config keys (except for `nonNullabelFields`), you can alternatively use the `"$ref"` key
+Note: For all config keys (except for `nonNullableFields`), you can alternatively use the `"$ref"` key
 to reference to a file.
 This is useful to keep the config file small and to reuse definitions.
 If the path is relative it will be applied to the path of the directory where the config file is stored in.
@@ -211,7 +211,8 @@ value for `_version` fields with the version inside the `.version` file.
 
 ## `bo4e generate`
 
-This is a code-generation command. It creates all BO4E-models from the input JSON-schemas for an arbitrary output.
+This is a code-generation command. It creates all BO4E-models from the input JSON-schemas for a supported
+output-type.
 
 <a name="supported-languages"></a>Currently supported output types are:
 
@@ -362,7 +363,7 @@ must match the `old_version` of it's next neighbour. Example of valid input file
 ## `bo4e diff version-bump`
 
 Given a diff file this command will decide if the list of changes corresponds to a functional or just technical change.
-It will then take a look and the versions inside the file and will then print if the detected version bump is valid
+It will then take a look at the versions inside the file and will then print if the detected version bump is valid
 or not. Alternatively, you can execute this command in `--quiet` mode in which case it will error with exit code `1`
 if the version bump is invalid.
 
