@@ -1,5 +1,6 @@
 use std::any::{Any, TypeId};
 use std::fmt::Debug;
+use std::iter;
 // pub trait Visitable: 'static {
 //     fn sub_nodes(&self) -> Box<dyn Iterator<Item = &dyn Visitable>>;
 //     fn sub_nodes_mut(&mut self) -> Box<dyn Iterator<Item = &mut dyn Visitable>>;
@@ -76,13 +77,49 @@ impl dyn Visitable {
             sub.visit_by_type(f);
         }
     }
-    pub fn visit_by_type_mut<T: Visitable + Debug, F: Fn(&mut T)>(&mut self, f: &mut F) {
+    pub fn visit_by_type_mut<'a, T, F, U, E>(
+        &mut self,
+        f: &mut F,
+    ) -> ControlFlow<Box<dyn Iterator<Item = U> + 'a>, Box<E>>
+    where
+        T: Visitable + Debug,
+        F: Fn(&mut T) -> U,
+        U: 'a,
+        E: 'a,
+    {
         let self_any: &mut dyn Any = self;
+        let mut return_values: Box<dyn Iterator<Item = U>>;
         if let Some(y) = self_any.downcast_mut::<T>() {
-            f(y);
+            return_values = Box::new(iter::once(f(y)));
+        } else {
+            return_values = Box::new(iter::empty());
         }
         for sub in self.sub_nodes_mut() {
-            sub.visit_by_type_mut(f);
+            return_values = Box::new(return_values.chain(sub.visit_by_type_mut(f)));
         }
+        return_values
     }
+}
+
+pub enum ControlFlow<T, E> {
+    Continue(T),
+    Break(E),
+}
+
+pub struct VisitorMut<'a, T, F, U>
+where
+    T: Visitable + Debug,
+    F: Fn(&mut T) -> U,
+    U: 'a,
+{
+    root: &'a mut dyn Visitable,
+    func: F,
+}
+
+impl<'a, T, F, U> VisitorMut<'a, T, F, U>
+where
+    T: Visitable + Debug,
+    F: Fn(&mut T) -> U,
+    U: 'a,
+{
 }

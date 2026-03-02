@@ -1,7 +1,9 @@
 use crate::models::json_schema::SchemaRootType;
 use crate::models::version::DirtyVersion;
+use color_eyre::owo_colors::OwoColorize;
 use itertools::chain;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -31,15 +33,22 @@ impl Schema {
         self._schema_text = Some(schema_text);
     }
     pub fn schema(&mut self) -> Result<&SchemaRootType, String> {
-        if self.schema.is_some() {
-            Ok(self.schema.as_ref().unwrap())
-        } else {
+        if self.schema.is_none() {
             self.schema = serde_json::from_str(self._schema_text.as_ref().ok_or_else(|| {
                 "Schema text was not loaded before through 'load_schema'.".to_string()
             })?)
             .map_err(|e| format!("Failed to parse schema: {}", e))?;
-            Ok(self.schema.as_ref().unwrap())
         }
+        Ok(self.schema.as_ref().unwrap())
+    }
+    pub fn schema_mut(&mut self) -> Result<&mut SchemaRootType, String> {
+        if self.schema.is_none() {
+            self.schema = serde_json::from_str(self._schema_text.as_ref().ok_or_else(|| {
+                "Schema text was not loaded before through 'load_schema'.".to_string()
+            })?)
+            .map_err(|e| format!("Failed to parse schema: {}", e))?;
+        }
+        Ok(self.schema.as_mut().unwrap())
     }
     pub fn get_serialized_schema(&self) -> Result<String, String> {
         if let Some(schema) = &self.schema {
@@ -72,12 +81,12 @@ impl Schema {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Schemas {
     #[serde(default)]
-    schemas: Vec<Rc<Schema>>,
+    schemas: Vec<Rc<RefCell<Schema>>>,
     pub version: DirtyVersion,
     #[serde(skip, default)]
-    _schemas_by_name: HashMap<String, Rc<Schema>>,
+    _schemas_by_name: HashMap<String, Rc<RefCell<Schema>>>,
     #[serde(skip, default)]
-    _schemas_by_module: HashMap<Vec<String>, Rc<Schema>>,
+    _schemas_by_module: HashMap<Vec<String>, Rc<RefCell<Schema>>>,
 }
 
 impl Schemas {
@@ -97,7 +106,7 @@ impl Schemas {
             _schemas_by_module: HashMap::with_capacity(capacity),
         }
     }
-    pub fn schemas(&self) -> &[Rc<Schema>] {
+    pub fn schemas(&self) -> &[Rc<RefCell<Schema>>] {
         &self.schemas
     }
     pub fn names(&self) -> HashSet<&String> {
@@ -106,9 +115,17 @@ impl Schemas {
     pub fn modules(&self) -> HashSet<&Vec<String>> {
         self._schemas_by_module.keys().collect()
     }
-    pub fn add_schema(&mut self, schema: Rc<Schema>) -> Result<(), String> {
-        let name = schema.name().to_string();
-        let module = schema.module().to_vec();
+    pub fn modules_by_name(&self) -> HashMap<String, Vec<String>> {
+        HashMap::from_iter(self._schemas_by_name.iter().map(|(name, schema)| {
+            (
+                name.clone(),
+                schema.borrow().module().iter().map(String::from).collect(),
+            )
+        }))
+    }
+    pub fn add_schema(&mut self, schema: Rc<RefCell<Schema>>) -> Result<(), String> {
+        let name = schema.borrow().name().to_string();
+        let module = schema.borrow().module().to_vec();
 
         if self._schemas_by_name.contains_key(&name) {
             return Err(format!("Schema with name '{}' already exists.", &name));
@@ -120,37 +137,39 @@ impl Schemas {
         self.schemas.push(schema);
         Ok(())
     }
-    pub fn get_by_name(&self, name: &str) -> Option<Rc<Schema>> {
+    pub fn get_by_name(&self, name: &str) -> Option<Rc<RefCell<Schema>>> {
         self._schemas_by_name.get(name).cloned()
     }
-    pub fn get_by_module(&self, module: &[String]) -> Option<Rc<Schema>> {
+    pub fn get_by_module(&self, module: &[String]) -> Option<Rc<RefCell<Schema>>> {
         self._schemas_by_module.get(module).cloned()
     }
-    pub fn remove(&mut self, schema: &Schema) -> Option<Rc<Schema>> {
+    pub fn remove(&mut self, schema: &Schema) -> Option<Rc<RefCell<Schema>>> {
         let name = schema.name();
         let module = schema.module();
 
         if let Some(schema) = self._schemas_by_name.remove(name) {
             self._schemas_by_module.remove(module).unwrap();
-            self.schemas.retain(|s| s.name() != name);
+            self.schemas.retain(|s| s.borrow().name() != name);
             Some(schema)
         } else {
             None
         }
     }
-    pub fn remove_by_name(&mut self, name: &str) -> Option<Rc<Schema>> {
+    pub fn remove_by_name(&mut self, name: &str) -> Option<Rc<RefCell<Schema>>> {
         if let Some(schema) = self._schemas_by_name.remove(name) {
-            self._schemas_by_module.remove(schema.module()).unwrap();
-            self.schemas.retain(|s| s.name() != name);
+            self._schemas_by_module
+                .remove(schema.borrow().module())
+                .unwrap();
+            self.schemas.retain(|s| s.borrow().name() != name);
             Some(schema)
         } else {
             None
         }
     }
-    pub fn remove_by_module(&mut self, module: &[String]) -> Option<Rc<Schema>> {
+    pub fn remove_by_module(&mut self, module: &[String]) -> Option<Rc<RefCell<Schema>>> {
         if let Some(schema) = self._schemas_by_module.remove(module) {
-            self._schemas_by_name.remove(schema.name());
-            self.schemas.retain(|s| s.module() != module);
+            self._schemas_by_name.remove(schema.borrow().name());
+            self.schemas.retain(|s| s.borrow().module() != module);
             Some(schema)
         } else {
             None
@@ -163,23 +182,23 @@ impl Schemas {
     ) -> Result<Self, String> {
         let mut schemas = Schemas::new(version);
         for schema in iter {
-            schemas.add_schema(Rc::new(schema))?;
+            schemas.add_schema(Rc::new(RefCell::new(schema)))?;
         }
         Ok(schemas)
     }
 
-    pub fn iter(&self) -> std::slice::Iter<'_, Rc<Schema>> {
+    pub fn iter(&self) -> std::slice::Iter<'_, Rc<RefCell<Schema>>> {
         self.schemas.iter()
     }
 
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Rc<Schema>> {
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Rc<RefCell<Schema>>> {
         self.schemas.iter_mut()
     }
 }
 
 impl<'a> IntoIterator for &'a Schemas {
-    type Item = &'a Rc<Schema>;
-    type IntoIter = std::slice::Iter<'a, Rc<Schema>>;
+    type Item = &'a Rc<RefCell<Schema>>;
+    type IntoIter = std::slice::Iter<'a, Rc<RefCell<Schema>>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.schemas.iter()
@@ -187,18 +206,20 @@ impl<'a> IntoIterator for &'a Schemas {
 }
 
 impl<'a> IntoIterator for &'a mut Schemas {
-    type Item = &'a mut Rc<Schema>;
-    type IntoIter = std::slice::IterMut<'a, Rc<Schema>>;
+    type Item = &'a mut Rc<RefCell<Schema>>;
+    type IntoIter = std::slice::IterMut<'a, Rc<RefCell<Schema>>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.schemas.iter_mut()
     }
 }
 
-impl TryFrom<(Vec<Rc<Schema>>, DirtyVersion)> for Schemas {
+impl TryFrom<(Vec<Rc<RefCell<Schema>>>, DirtyVersion)> for Schemas {
     type Error = String;
 
-    fn try_from((schemas, version): (Vec<Rc<Schema>>, DirtyVersion)) -> Result<Self, Self::Error> {
+    fn try_from(
+        (schemas, version): (Vec<Rc<RefCell<Schema>>>, DirtyVersion),
+    ) -> Result<Self, Self::Error> {
         let mut schemas_coll = Self::with_capacity(schemas.len(), version);
         for schema in schemas {
             schemas_coll.add_schema(schema)?;
@@ -213,7 +234,7 @@ impl TryFrom<(Vec<Schema>, DirtyVersion)> for Schemas {
     fn try_from((schemas, version): (Vec<Schema>, DirtyVersion)) -> Result<Self, Self::Error> {
         let mut schemas_coll = Self::with_capacity(schemas.len(), version);
         for schema in schemas {
-            schemas_coll.add_schema(Rc::new(schema))?;
+            schemas_coll.add_schema(Rc::new(RefCell::new(schema)))?;
         }
         Ok(schemas_coll)
     }
