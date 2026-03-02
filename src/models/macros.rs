@@ -1,5 +1,3 @@
-use std::iter::empty;
-//#[macro_export]
 macro_rules! literal_enum {
     ($name:ident, $variant:ident) => {
         #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -16,54 +14,71 @@ macro_rules! literal_enum {
     };
 }
 
+/// Implements `Visitable` for a type with no schema children (a leaf node).
 macro_rules! visitable_leaf {
     ($name:ident) => {
         impl Visitable for $name {
-            fn sub_nodes(&self) -> Box<dyn Iterator<Item = &dyn Visitable> + '_> {
-                Box::new(empty::<&dyn Visitable>())
-            }
-            fn sub_nodes_mut(&mut self) -> Box<dyn Iterator<Item = &mut dyn Visitable> + '_> {
-                Box::new(empty::<&mut dyn Visitable>())
-            }
+            fn for_each_child(&self, _f: &mut dyn FnMut(&dyn Visitable)) {}
+            fn for_each_child_mut(&mut self, _f: &mut dyn FnMut(&mut dyn Visitable)) {}
         }
     };
 }
 
+/// Implements `Visitable` for a type that has exactly one schema child at `self.$field`.
 macro_rules! visitable_forwarded {
-    ($name:ident, $forwarded_field:ident) => {
+    ($name:ident, $field:ident) => {
         impl Visitable for $name {
-            fn sub_nodes(&self) -> Box<dyn Iterator<Item = &dyn Visitable> + '_> {
-                self.$forwarded_field.sub_nodes()
+            fn for_each_child(&self, f: &mut dyn FnMut(&dyn Visitable)) {
+                f(&self.$field);
             }
-            fn sub_nodes_mut(&mut self) -> Box<dyn Iterator<Item = &mut dyn Visitable> + '_> {
-                self.$forwarded_field.sub_nodes_mut()
+            fn for_each_child_mut(&mut self, f: &mut dyn FnMut(&mut dyn Visitable)) {
+                f(&mut self.$field);
             }
         }
     };
 }
 
+/// Implements `Visitable` for a type whose children are the items of `self.$field` (a Vec or
+/// similar iterable).
 macro_rules! visitable_forwarded_iter {
-    ($name:ident, $forwarded_field:ident) => {
+    ($name:ident, $field:ident) => {
         impl Visitable for $name {
-            fn sub_nodes(&self) -> Box<dyn Iterator<Item = &dyn Visitable> + '_> {
-                Box::new(
-                    self.$forwarded_field
-                        .iter()
-                        .map(|schema| schema as &dyn Visitable),
-                )
+            fn for_each_child(&self, f: &mut dyn FnMut(&dyn Visitable)) {
+                for item in &self.$field {
+                    f(item);
+                }
             }
-            fn sub_nodes_mut(&mut self) -> Box<dyn Iterator<Item = &mut dyn Visitable> + '_> {
-                Box::new(
-                    self.$forwarded_field
-                        .iter_mut()
-                        .map(|schema| schema as &mut dyn Visitable),
-                )
+            fn for_each_child_mut(&mut self, f: &mut dyn FnMut(&mut dyn Visitable)) {
+                for item in &mut self.$field {
+                    f(item);
+                }
+            }
+        }
+    };
+}
+
+/// Implements `Visitable` for an enum whose sole job is to wrap one of several concrete types.
+/// Each variant must be a newtype `EnumName::VariantName(inner)`.
+/// The single child is the inner value — traversal continues into it.
+macro_rules! visitable_dispatch_enum {
+    ($name:ident, $($variant:ident),+ $(,)?) => {
+        impl Visitable for $name {
+            fn for_each_child(&self, f: &mut dyn FnMut(&dyn Visitable)) {
+                match self {
+                    $($name::$variant(v) => f(v),)+
+                }
+            }
+            fn for_each_child_mut(&mut self, f: &mut dyn FnMut(&mut dyn Visitable)) {
+                match self {
+                    $($name::$variant(v) => f(v),)+
+                }
             }
         }
     };
 }
 
 pub(crate) use literal_enum;
+pub(crate) use visitable_dispatch_enum;
 pub(crate) use visitable_forwarded;
 pub(crate) use visitable_forwarded_iter;
 pub(crate) use visitable_leaf;

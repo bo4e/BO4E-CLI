@@ -1,3 +1,4 @@
+#![feature(try_trait_v2)]
 use crate::cli::base::Executable;
 mod cli;
 mod console;

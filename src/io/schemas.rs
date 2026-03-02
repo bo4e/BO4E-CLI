@@ -24,16 +24,18 @@ pub fn write_schemas(
     output_dir: &std::path::Path,
 ) -> Result<(), std::io::Error> {
     for schema in schemas {
-        let full_path = output_dir.join(&schema.as_relative_json_path());
+        let full_path = output_dir.join(&schema.borrow().as_relative_json_path());
         if let Some(parent) = full_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
+        let name = schema.borrow().name().to_string();
         schema
+            .borrow()
             .get_serialized_schema()
             .map_err(|err| {
                 std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Failed to serialize schema {}: {}", schema.name(), err),
+                    format!("Failed to serialize schema {}: {}", name, err),
                 )
             })
             .and_then(|schema_text| std::fs::write(full_path, schema_text))?;
