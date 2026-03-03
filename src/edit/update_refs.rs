@@ -3,7 +3,7 @@ use crate::models::schema_meta::{Schema, Schemas};
 use crate::utils::visitable::Visitable;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
-use std::ops::DerefMut;
+use std::ops::{ControlFlow, DerefMut};
 
 lazy_static! {
     pub static ref REF_ONLINE_REGEX: regex::Regex = regex::Regex::new(
@@ -28,9 +28,15 @@ fn update_references_single(
 ) -> Result<(), String> {
     let module: Vec<String> = schema.module().iter().cloned().collect();
     let visitable: &mut dyn Visitable = schema.schema_mut()?;
-    visitable.try_visit_all_mut::<ReferenceSchema, Result<(), String>>(
-        &mut |reference| update_reference(reference, &module, namespace),
-    )
+    match visitable.try_visit_all_mut::<ReferenceSchema, String>(&mut |reference| {
+        match update_reference(reference, &module, namespace) {
+            Ok(()) => ControlFlow::Continue(()),
+            Err(e) => ControlFlow::Break(e),
+        }
+    }) {
+        ControlFlow::Continue(()) => Ok(()),
+        ControlFlow::Break(e) => Err(e),
+    }
 }
 
 pub fn update_references_all(schemas: &mut Schemas) -> Result<(), String> {

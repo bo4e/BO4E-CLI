@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::fmt::Debug;
-use std::ops::{ControlFlow, Try};
+use std::ops::ControlFlow;
 
 /// A trait for types that form a tree, traversable with closures.
 ///
@@ -23,29 +23,30 @@ impl dyn Visitable {
         self.for_each_child(&mut |child| child.visit_all(f));
     }
 
-    /// Like `visit_all`, but the closure can stop traversal early.
-    /// Mirrors `Iterator::try_for_each`: the closure and the method both return `R: Try<Output = ()>`.
-    pub fn try_visit_all<T: Any, R: Try<Output = ()>>(
+    /// Like `visit_all`, but the closure can stop traversal early by returning
+    /// `ControlFlow::Break(b)`. Returns `ControlFlow::Continue(())` if the whole
+    /// tree was visited, or `ControlFlow::Break(b)` from the first break encountered.
+    pub fn try_visit_all<T: Any, B>(
         &self,
-        f: &mut dyn FnMut(&T) -> R,
-    ) -> R {
+        f: &mut dyn FnMut(&T) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         if let Some(t) = (self as &dyn Any).downcast_ref::<T>() {
-            match f(t).branch() {
+            match f(t) {
                 ControlFlow::Continue(()) => {}
-                ControlFlow::Break(residual) => return R::from_residual(residual),
+                ControlFlow::Break(b) => return ControlFlow::Break(b),
             }
         }
-        let mut residual: Option<R::Residual> = None;
+        let mut break_value: Option<B> = None;
         self.for_each_child(&mut |child| {
-            if residual.is_none() {
-                if let ControlFlow::Break(r) = child.try_visit_all::<T, R>(f).branch() {
-                    residual = Some(r);
+            if break_value.is_none() {
+                if let ControlFlow::Break(b) = child.try_visit_all::<T, B>(f) {
+                    break_value = Some(b);
                 }
             }
         });
-        match residual {
-            Some(r) => R::from_residual(r),
-            None => R::from_output(()),
+        match break_value {
+            Some(b) => ControlFlow::Break(b),
+            None => ControlFlow::Continue(()),
         }
     }
 
@@ -61,32 +62,33 @@ impl dyn Visitable {
         self.for_each_child_mut(&mut |child| child.visit_all_mut(f));
     }
 
-    /// Like `visit_all_mut`, but the closure can stop traversal early.
-    /// Mirrors `Iterator::try_for_each`.
-    pub fn try_visit_all_mut<T: Any, R: Try<Output = ()>>(
+    /// Like `visit_all_mut`, but the closure can stop traversal early by returning
+    /// `ControlFlow::Break(b)`. Returns `ControlFlow::Continue(())` if the whole
+    /// tree was visited, or `ControlFlow::Break(b)` from the first break encountered.
+    pub fn try_visit_all_mut<T: Any, B>(
         &mut self,
-        f: &mut dyn FnMut(&mut T) -> R,
-    ) -> R {
+        f: &mut dyn FnMut(&mut T) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
         {
             let self_any: &mut dyn Any = self;
             if let Some(t) = self_any.downcast_mut::<T>() {
-                match f(t).branch() {
+                match f(t) {
                     ControlFlow::Continue(()) => {}
-                    ControlFlow::Break(residual) => return R::from_residual(residual),
+                    ControlFlow::Break(b) => return ControlFlow::Break(b),
                 }
             }
         }
-        let mut residual: Option<R::Residual> = None;
+        let mut break_value: Option<B> = None;
         self.for_each_child_mut(&mut |child| {
-            if residual.is_none() {
-                if let ControlFlow::Break(r) = child.try_visit_all_mut::<T, R>(f).branch() {
-                    residual = Some(r);
+            if break_value.is_none() {
+                if let ControlFlow::Break(b) = child.try_visit_all_mut::<T, B>(f) {
+                    break_value = Some(b);
                 }
             }
         });
-        match residual {
-            Some(r) => R::from_residual(r),
-            None => R::from_output(()),
+        match break_value {
+            Some(b) => ControlFlow::Break(b),
+            None => ControlFlow::Continue(()),
         }
     }
 }
@@ -204,11 +206,11 @@ mod tests {
     // ── try_visit_all_mut ─────────────────────────────────────────────────────
 
     #[test]
-    fn try_visit_all_mut_with_control_flow_stops_on_break() {
+    fn try_visit_all_mut_stops_on_break() {
         let mut tree = make_tree();
         let mut visited = vec![];
         let result = ((&mut tree) as &mut dyn Visitable)
-            .try_visit_all_mut::<Leaf, ControlFlow<i32>>(&mut |l| {
+            .try_visit_all_mut::<Leaf, i32>(&mut |l| {
                 visited.push(l.0);
                 if l.0 == 2 {
                     ControlFlow::Break(l.0)
@@ -221,27 +223,10 @@ mod tests {
     }
 
     #[test]
-    fn try_visit_all_mut_with_result_stops_on_err() {
+    fn try_visit_all_mut_returns_continue_when_no_break() {
         let mut tree = make_tree();
-        let mut visited = vec![];
-        let result: Result<(), String> = ((&mut tree) as &mut dyn Visitable)
-            .try_visit_all_mut::<Leaf, _>(&mut |l| {
-                visited.push(l.0);
-                if l.0 == 2 {
-                    Err("stop".to_string())
-                } else {
-                    Ok(())
-                }
-            });
-        assert_eq!(result, Err("stop".to_string()));
-        assert_eq!(visited, [1, 2]); // Leaf(3) was never reached
-    }
-
-    #[test]
-    fn try_visit_all_mut_returns_ok_when_no_error() {
-        let mut tree = make_tree();
-        let result: Result<(), String> =
-            ((&mut tree) as &mut dyn Visitable).try_visit_all_mut::<Leaf, _>(&mut |_| Ok(()));
-        assert_eq!(result, Ok(()));
+        let result = ((&mut tree) as &mut dyn Visitable)
+            .try_visit_all_mut::<Leaf, ()>(&mut |_| ControlFlow::Continue(()));
+        assert_eq!(result, ControlFlow::Continue(()));
     }
 }
