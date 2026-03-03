@@ -93,6 +93,20 @@ impl dyn Visitable {
     }
 }
 
+pub fn cntrl_to_result<T, B>(cntrl: ControlFlow<B, T>) -> Result<T, B> {
+    match cntrl {
+        ControlFlow::Continue(t) => Ok(t),
+        ControlFlow::Break(b) => Err(b),
+    }
+}
+
+pub fn result_to_cntrl<T, B>(res: Result<T, B>) -> ControlFlow<B, T> {
+    match res {
+        Ok(t) => ControlFlow::Continue(t),
+        Err(b) => ControlFlow::Break(b),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,8 +161,14 @@ mod tests {
     /// Tree { left: [Leaf(1), Leaf(2)], right: [Leaf(3)] }
     fn make_tree() -> Tree {
         Tree {
-            left: Branch { tag: "left", children: vec![Leaf(1), Leaf(2)] },
-            right: Branch { tag: "right", children: vec![Leaf(3)] },
+            left: Branch {
+                tag: "left",
+                children: vec![Leaf(1), Leaf(2)],
+            },
+            right: Branch {
+                tag: "right",
+                children: vec![Leaf(3)],
+            },
         }
     }
 
@@ -209,15 +229,14 @@ mod tests {
     fn try_visit_all_mut_stops_on_break() {
         let mut tree = make_tree();
         let mut visited = vec![];
-        let result = ((&mut tree) as &mut dyn Visitable)
-            .try_visit_all_mut::<Leaf, i32>(&mut |l| {
-                visited.push(l.0);
-                if l.0 == 2 {
-                    ControlFlow::Break(l.0)
-                } else {
-                    ControlFlow::Continue(())
-                }
-            });
+        let result = ((&mut tree) as &mut dyn Visitable).try_visit_all_mut::<Leaf, i32>(&mut |l| {
+            visited.push(l.0);
+            if l.0 == 2 {
+                ControlFlow::Break(l.0)
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
         assert_eq!(result, ControlFlow::Break(2));
         assert_eq!(visited, [1, 2]); // Leaf(3) was never reached
     }

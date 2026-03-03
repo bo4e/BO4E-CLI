@@ -1,6 +1,6 @@
 use crate::models::json_schema::ReferenceSchema;
 use crate::models::schema_meta::{Schema, Schemas};
-use crate::utils::visitable::Visitable;
+use crate::utils::visitable::{Visitable, cntrl_to_result, result_to_cntrl};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::{ControlFlow, DerefMut};
@@ -28,15 +28,11 @@ fn update_references_single(
 ) -> Result<(), String> {
     let module: Vec<String> = schema.module().iter().cloned().collect();
     let visitable: &mut dyn Visitable = schema.schema_mut()?;
-    match visitable.try_visit_all_mut::<ReferenceSchema, String>(&mut |reference| {
-        match update_reference(reference, &module, namespace) {
-            Ok(()) => ControlFlow::Continue(()),
-            Err(e) => ControlFlow::Break(e),
-        }
-    }) {
-        ControlFlow::Continue(()) => Ok(()),
-        ControlFlow::Break(e) => Err(e),
-    }
+    cntrl_to_result(
+        visitable.try_visit_all_mut::<ReferenceSchema, String>(&mut |reference| {
+            result_to_cntrl(update_reference(reference, &module, namespace))
+        }),
+    )
 }
 
 pub fn update_references_all(schemas: &mut Schemas) -> Result<(), String> {
