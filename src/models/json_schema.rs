@@ -5,15 +5,29 @@ use crate::utils::visitable::Visitable;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+/// A primitive JSON value used for schema `default` fields.
+/// Only null, bool, integer, float, and string are permitted.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum PrimitiveValue {
+    Null,
+    Bool(bool),
+    Integer(i64),
+    Float(f64),
+    String(String),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct TypeBase {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<PrimitiveValue>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct SchemaRootTypeBase {
     #[serde(
         rename = "$defs",
@@ -24,12 +38,13 @@ pub struct SchemaRootTypeBase {
     pub defs: BTreeMap<String, SchemaClassType>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ObjectSchema {
     #[serde(flatten)]
     pub base: TypeBase,
     pub r#type: LiteralTypeObject,
 
+    #[serde(rename = "additionalProperties")]
     pub additional_properties: bool,
     pub properties: BTreeMap<String, SchemaType>,
     pub required: Vec<String>,
@@ -37,7 +52,7 @@ pub struct ObjectSchema {
 
 literal_enum!(LiteralTypeObject, Object);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct StrEnumSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -49,7 +64,7 @@ pub struct StrEnumSchema {
 
 literal_enum!(LiteralTypeString, String);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SchemaRootObject {
     #[serde(flatten)]
     pub base: SchemaRootTypeBase,
@@ -57,7 +72,7 @@ pub struct SchemaRootObject {
     pub object: ObjectSchema,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SchemaRootStrEnum {
     #[serde(flatten)]
     pub base: SchemaRootTypeBase,
@@ -65,7 +80,7 @@ pub struct SchemaRootStrEnum {
     pub str_enum: StrEnumSchema,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ArraySchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -76,7 +91,7 @@ pub struct ArraySchema {
 
 literal_enum!(LiteralTypeArray, Array);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct AnyOfSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -85,7 +100,7 @@ pub struct AnyOfSchema {
     pub any_of: Vec<SchemaType>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct AllOfSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -94,7 +109,7 @@ pub struct AllOfSchema {
     pub all_of: Vec<SchemaType>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct StringSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -127,7 +142,7 @@ pub enum StringSchemaFormat {
     Binary,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ConstantSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -139,7 +154,7 @@ pub struct ConstantSchema {
     pub constant: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct NumberSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -148,7 +163,7 @@ pub struct NumberSchema {
 
 literal_enum!(LiteralTypeNumber, Number);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct DecimalSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -172,7 +187,7 @@ impl Default for LiteralTypeDecimal {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct IntegerSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -181,7 +196,7 @@ pub struct IntegerSchema {
 
 literal_enum!(LiteralTypeInteger, Integer);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct BooleanSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -190,7 +205,7 @@ pub struct BooleanSchema {
 
 literal_enum!(LiteralTypeBoolean, Boolean);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct NullSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -199,13 +214,13 @@ pub struct NullSchema {
 
 literal_enum!(LiteralTypeNull, Null);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct AnySchema {
     #[serde(flatten)]
     pub base: TypeBase,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ReferenceSchema {
     #[serde(flatten)]
     pub base: TypeBase,
@@ -213,7 +228,7 @@ pub struct ReferenceSchema {
     pub r#ref: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum SchemaType {
     Object(ObjectSchema),
@@ -232,14 +247,14 @@ pub enum SchemaType {
     AnySchema(AnySchema),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum SchemaClassType {
     Object(ObjectSchema),
     StrEnum(StrEnumSchema),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum SchemaRootType {
     Object(SchemaRootObject),
@@ -354,6 +369,7 @@ mod tests {
                 base: TypeBase {
                     description: Some("A complex object schema".to_string()),
                     title: Some("ComplexObject".to_string()),
+                    default: None,
                 },
                 r#type: LiteralTypeObject::Object,
                 additional_properties: true,
@@ -364,6 +380,7 @@ mod tests {
                             base: TypeBase {
                                 description: Some("First property".to_string()),
                                 title: Some("Property1".to_string()),
+                                default: None,
                             },
                             r#type: LiteralTypeString::String,
                             format: None,
@@ -375,6 +392,7 @@ mod tests {
                             base: TypeBase {
                                 description: Some("Second property".to_string()),
                                 title: Some("Property2".to_string()),
+                                default: None,
                             },
                             any_of: vec![
                                 SchemaType::IntegerSchema(Default::default()),
@@ -388,6 +406,7 @@ mod tests {
                             base: TypeBase {
                                 description: Some("Reference to something".to_string()),
                                 title: Some("Property3".to_string()),
+                                default: None,
                             },
                             r#ref: "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/\
                             v202501.1.0-rc1/src/bo4e_schemas/bo/Geschaeftspartner.json"
@@ -400,6 +419,7 @@ mod tests {
                             base: TypeBase {
                                 description: Some("Second property".to_string()),
                                 title: Some("Property2".to_string()),
+                                default: None,
                             },
                             r#ref: "../bo/Geschaeftspartner.json".to_string(),
                         }),
@@ -445,6 +465,49 @@ mod tests {
         let schema = get_example_schema();
         let refs = get_ref_strings(&schema);
         assert_eq!(refs.len(), 2);
+    }
+
+    #[test]
+    fn test_primitive_value_roundtrip() {
+        let cases: &[(&str, PrimitiveValue)] = &[
+            ("null", PrimitiveValue::Null),
+            ("true", PrimitiveValue::Bool(true)),
+            ("42", PrimitiveValue::Integer(42)),
+            ("3.14", PrimitiveValue::Float(3.14)),
+            ("\"hello\"", PrimitiveValue::String("hello".into())),
+        ];
+        for (json, expected) in cases {
+            let v: PrimitiveValue = serde_json::from_str(json).unwrap();
+            assert_eq!(v, *expected);
+            let back = serde_json::to_string(expected).unwrap();
+            assert_eq!(back, *json);
+        }
+    }
+
+    #[test]
+    fn test_typebase_default_absent_not_emitted() {
+        let base = TypeBase { description: None, title: None, default: None };
+        let json = serde_json::to_string(&base).unwrap();
+        assert!(!json.contains("default"), "absent default must not appear in JSON");
+    }
+
+    #[test]
+    fn test_typebase_default_null_emitted() {
+        let base = TypeBase { description: None, title: None, default: Some(PrimitiveValue::Null) };
+        let json = serde_json::to_string(&base).unwrap();
+        assert!(json.contains("\"default\":null"));
+    }
+
+    #[test]
+    fn test_typebase_default_string_roundtrip() {
+        let base = TypeBase {
+            description: None,
+            title: None,
+            default: Some(PrimitiveValue::String("v202401.1.0".into())),
+        };
+        let json = serde_json::to_string(&base).unwrap();
+        let back: TypeBase = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.default, base.default);
     }
 
     #[test]

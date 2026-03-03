@@ -56,7 +56,7 @@ impl Display for ChangeType {
 }
 
 /// The old or new value can be a SchemaType, PathBuf, or String
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", untagged)]
 pub enum ChangeValue {
     Schema(SchemaType),
@@ -75,7 +75,7 @@ impl Display for ChangeValue {
 }
 
 /// This pydantic class models a single change between two BO4E versions.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Change {
     pub r#type: ChangeType,
@@ -102,7 +102,7 @@ impl Display for Change {
 }
 
 /// This pydantic class models the changes between two BO4E versions.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Changes {
     pub old_schemas: Schemas,

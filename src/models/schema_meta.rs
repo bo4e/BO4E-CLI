@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Schema {
     module: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -78,7 +78,7 @@ impl Schema {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Schemas {
     #[serde(default)]
     schemas: Vec<Rc<RefCell<Schema>>>,
