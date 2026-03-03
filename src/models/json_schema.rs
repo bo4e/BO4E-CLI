@@ -415,7 +415,6 @@ mod tests {
         let schema = get_example_schema();
 
         let serialized = serde_json::to_string_pretty(&schema).unwrap();
-        println!("{}", serialized);
         assert!(!serialized.contains("\"$defs\": {}"));
         assert!(serialized.contains("\"type\": \"object\""));
         assert!(serialized.contains("\"description\": \"A complex object schema\""));
@@ -445,7 +444,6 @@ mod tests {
     fn test_complex_root_object_visit_trait() {
         let schema = get_example_schema();
         let refs = get_ref_strings(&schema);
-        println!("{}", serde_json::to_string_pretty(&refs).unwrap());
         assert_eq!(refs.len(), 2);
     }
 
@@ -467,7 +465,6 @@ mod tests {
         });
 
         let refs = get_ref_strings(&schema);
-        println!("{}", serde_json::to_string_pretty(&schema).unwrap());
         assert_eq!(
             refs,
             HashSet::from(["../bo/Geschaeftspartner.json".to_string()])
