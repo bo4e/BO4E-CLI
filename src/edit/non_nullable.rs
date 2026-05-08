@@ -1,6 +1,6 @@
 use crate::models::json_schema::{PrimitiveValue, SchemaRootObject, SchemaRootType, SchemaType, TypeBase};
 use crate::models::schema_meta::Schemas;
-use crate::{cprint_normal, cprint_verbose};
+use crate::{cprint_normal, cprint_verbose, cwarn};
 
 /// Remove the `null` variant from a nullable `AnyOf` property.
 ///
@@ -103,7 +103,7 @@ pub fn transform_all_non_nullable_fields(
         let root = match schema.schema_mut() {
             Ok(r) => r,
             Err(e) => {
-                cprint_normal!("Warning: could not parse schema '{}': {}", module_path, e);
+                cwarn!("could not parse schema '{}': {}", module_path, e);
                 continue;
             }
         };
@@ -148,7 +148,7 @@ pub fn transform_all_non_nullable_fields(
             }
         }
         if match_count == 0 {
-            cprint_normal!("Warning: non-nullable pattern '{}' did not match any fields", pattern);
+            cwarn!("non-nullable pattern '{}' did not match any fields", pattern);
         } else {
             cprint_normal!("Applied non-nullable pattern '{}' to {} field(s)", pattern, match_count);
         }

@@ -7,7 +7,7 @@ use crate::io::cleanse::clear_dir_if_needed;
 use crate::io::config::{get_additional_schemas, load_config};
 use crate::io::schemas::{read_schemas, write_schemas};
 use crate::models::json_schema::{PrimitiveValue, SchemaRootType};
-use crate::{cprint_normal, cprint_verbose};
+use crate::{cprint_normal, cprint_verbose, cwarn};
 use clap::Args;
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -82,7 +82,7 @@ impl Executable for Edit {
                 let root = match schema.schema_mut() {
                     Ok(r) => r,
                     Err(e) => {
-                        cprint_normal!("Warning: could not parse schema for version stamping: {}", e);
+                        cwarn!("could not parse schema for version stamping: {}", e);
                         continue;
                     }
                 };

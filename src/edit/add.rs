@@ -1,7 +1,7 @@
 use crate::models::config::{AdditionalEnumItem, AdditionalField};
 use crate::models::json_schema::{SchemaRootType, SchemaType};
 use crate::models::schema_meta::Schemas;
-use crate::{cprint_normal, cprint_verbose};
+use crate::{cprint_normal, cprint_verbose, cwarn};
 
 /// Insert additional fields into matching `SchemaRootObject` schemas.
 pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut Schemas) {
@@ -16,7 +16,7 @@ pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut
             let root = match schema.schema_mut() {
                 Ok(r) => r,
                 Err(e) => {
-                    cprint_normal!("Warning: could not parse schema '{}': {}", module_path, e);
+                    cwarn!("could not parse schema '{}': {}", module_path, e);
                     continue;
                 }
             };
@@ -40,7 +40,7 @@ pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut
             }
         }
         if match_count == 0 {
-            cprint_normal!("Warning: pattern '{}' did not match any schemas", field.pattern);
+            cwarn!("pattern '{}' did not match any schemas", field.pattern);
         } else {
             cprint_normal!("Pattern '{}' matched {} schema(s)", field.pattern, match_count);
         }
@@ -80,7 +80,7 @@ pub fn transform_all_additional_enum_items(items: &[AdditionalEnumItem], schemas
             let root = match schema.schema_mut() {
                 Ok(r) => r,
                 Err(e) => {
-                    cprint_normal!("Warning: could not parse schema '{}': {}", module_path, e);
+                    cwarn!("could not parse schema '{}': {}", module_path, e);
                     continue;
                 }
             };
@@ -96,7 +96,7 @@ pub fn transform_all_additional_enum_items(items: &[AdditionalEnumItem], schemas
             }
         }
         if match_count == 0 {
-            cprint_normal!("Warning: pattern '{}' did not match any schemas", item.pattern);
+            cwarn!("pattern '{}' did not match any schemas", item.pattern);
         } else {
             cprint_normal!("Pattern '{}' matched {} schema(s)", item.pattern, match_count);
         }
