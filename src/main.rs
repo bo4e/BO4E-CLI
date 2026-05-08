@@ -7,6 +7,7 @@ mod diff;
 mod edit;
 mod io;
 mod models;
+mod repo;
 mod utils;
 
 use clap::Parser;
