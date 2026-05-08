@@ -24,17 +24,32 @@ pub fn filter_tags(
     mut is_release: impl FnMut(&Version) -> Result<bool, String>,
 ) -> Result<Vec<Version>, String> {
     let mut out: Vec<Version> = Vec::new();
-    for v in candidates.iter() {
+    let mut last_yielded: Option<Version> = None;
+    for (i, v) in candidates.iter().enumerate() {
         if opts.n > 0 && out.len() as u32 >= opts.n {
             break;
         }
         if opts.n == 0 && *v == opts.threshold {
             break;
         }
+        if opts.exclude_candidates && v.is_release_candidate() {
+            continue;
+        }
+        if opts.exclude_technical_bumps {
+            if let Some(prev) = &last_yielded {
+                if prev.bumped_technical(v) {
+                    continue;
+                }
+            }
+        }
+        if i == 0 && opts.skip_first {
+            continue;
+        }
         if !is_release(v)? {
             continue;
         }
         out.push(v.clone());
+        last_yielded = out.last().cloned();
     }
     Ok(out)
 }
@@ -83,5 +98,55 @@ mod tests {
         let cands = vec![v("v202401.2.0"), v("v202401.1.0")];
         let out = filter_tags(&cands, &opts(0), |_| Ok(true)).unwrap();
         assert_eq!(out, vec![v("v202401.2.0"), v("v202401.1.0")]);
+    }
+
+    #[test]
+    fn test_exclude_candidates_drops_rcs_only() {
+        let cands = vec![v("v202401.3.0"), v("v202401.2.0-rc1"), v("v202401.2.0")];
+        let mut o = opts(0);
+        o.exclude_candidates = true;
+        let out = filter_tags(&cands, &o, |_| Ok(true)).unwrap();
+        assert_eq!(out, vec![v("v202401.3.0"), v("v202401.2.0")]);
+    }
+
+    #[test]
+    fn test_exclude_technical_bumps_keeps_newest_per_group() {
+        // Three technical bumps under v202401.2.x, plus a different functional group above.
+        let cands = vec![
+            v("v202401.3.0"),
+            v("v202401.2.5"),
+            v("v202401.2.4"),
+            v("v202401.2.3"),
+            v("v202401.1.0"),
+        ];
+        let mut o = opts(0);
+        o.exclude_technical_bumps = true;
+        let out = filter_tags(&cands, &o, |_| Ok(true)).unwrap();
+        // Newest of each functional group: v202401.3.0, v202401.2.5, v202401.1.0
+        assert_eq!(
+            out,
+            vec![v("v202401.3.0"), v("v202401.2.5"), v("v202401.1.0")]
+        );
+    }
+
+    #[test]
+    fn test_skip_first_drops_index_zero() {
+        let cands = vec![v("v202401.3.0"), v("v202401.2.0"), v("v202401.1.0")];
+        let mut o = opts(0);
+        o.skip_first = true;
+        let out = filter_tags(&cands, &o, |_| Ok(true)).unwrap();
+        assert_eq!(out, vec![v("v202401.2.0"), v("v202401.1.0")]);
+    }
+
+    #[test]
+    fn test_skip_first_is_by_input_index_not_post_filter() {
+        // Index 0 is an RC. With both flags on, it gets dropped by skip_first OR
+        // by exclude_candidates — but we still only drop one element.
+        let cands = vec![v("v202401.3.0-rc1"), v("v202401.3.0"), v("v202401.2.0")];
+        let mut o = opts(0);
+        o.skip_first = true;
+        o.exclude_candidates = true;
+        let out = filter_tags(&cands, &o, |_| Ok(true)).unwrap();
+        assert_eq!(out, vec![v("v202401.3.0"), v("v202401.2.0")]);
     }
 }
