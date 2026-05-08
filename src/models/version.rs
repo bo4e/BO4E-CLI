@@ -258,27 +258,27 @@ impl Ord for Version {
 
 impl Version {
     /// Check if the version is a release candidate.
-    fn is_release_candidate(&self) -> bool {
+    pub fn is_release_candidate(&self) -> bool {
         self.candidate.is_some()
     }
 
     /// Return True if this version is a major bump from the other version.
-    fn bumped_major(&self, other: &Self) -> bool {
+    pub fn bumped_major(&self, other: &Self) -> bool {
         self.major > other.major
     }
     /// Return True if this version is a functional bump from the other version.
-    fn bumped_functional(&self, other: &Self) -> bool {
+    pub fn bumped_functional(&self, other: &Self) -> bool {
         self.major == other.major && self.functional > other.functional
     }
     /// Return True if this version is a technical bump from the other version.
-    fn bumped_technical(&self, other: &Self) -> bool {
+    pub fn bumped_technical(&self, other: &Self) -> bool {
         self.major == other.major
             && self.functional == other.functional
             && self.technical > other.technical
     }
     /// Return True if this version is a candidate bump from the other version.
     /// Returns an error if one of the versions is not a candidate version.
-    fn bumped_candidate(&self, other: &Self) -> Result<bool, String> {
+    pub fn bumped_candidate(&self, other: &Self) -> Result<bool, String> {
         Ok(self.major == other.major
             && self.functional == other.functional
             && self.technical == other.technical
@@ -291,9 +291,44 @@ impl Version {
 }
 
 impl DirtyVersion {
-    /// Check if the version is on a commit without a tag or if it corresponds to a dirty working
-    /// directory.
-    fn is_dirty(&self) -> bool {
+    /// Borrow the semantic version, discarding dirt metadata.
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
+    pub fn is_dirty(&self) -> bool {
         self.commit_part.is_some() || self.dirty_worktree_date.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dirty_version_accessor_returns_inner_version() {
+        let dv: DirtyVersion = "v202401.0.1+gabc.d20260101".parse().unwrap();
+        let v = dv.version();
+        assert_eq!(v.to_string(), "v202401.0.1");
+    }
+
+    #[test]
+    fn test_bumped_helpers_are_callable_publicly() {
+        let a: Version = "v202401.0.1".parse().unwrap();
+        let b: Version = "v202401.0.2".parse().unwrap();
+        let c: Version = "v202401.1.0".parse().unwrap();
+        let d: Version = "v202402.0.0".parse().unwrap();
+        assert!(b.bumped_technical(&a));
+        assert!(c.bumped_functional(&a));
+        assert!(d.bumped_major(&a));
+        assert!(!a.is_release_candidate());
+    }
+
+    #[test]
+    fn test_dirty_version_is_dirty_public() {
+        let clean: DirtyVersion = "v202401.0.1".parse().unwrap();
+        let with_commit: DirtyVersion = "v202401.0.1+gabcdef".parse().unwrap();
+        assert!(!clean.is_dirty());
+        assert!(with_commit.is_dirty());
     }
 }
