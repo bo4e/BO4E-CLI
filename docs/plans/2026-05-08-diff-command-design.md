@@ -171,7 +171,7 @@ impl Console {
 }
 ```
 
-Single macro replaces both existing ones:
+One parametrized macro plus three thin convenience wrappers:
 
 ```rust
 #[macro_export]
@@ -183,17 +183,27 @@ macro_rules! cprint {
             .print($level, &format!($($arg)*))
     };
 }
+
+#[macro_export]
+macro_rules! cprint_quiet   { ($($arg:tt)*) => { $crate::cprint!($crate::console::console::Level::Quiet,   $($arg)*) }; }
+#[macro_export]
+macro_rules! cprint_normal  { ($($arg:tt)*) => { $crate::cprint!($crate::console::console::Level::Normal,  $($arg)*) }; }
+#[macro_export]
+macro_rules! cprint_verbose { ($($arg:tt)*) => { $crate::cprint!($crate::console::console::Level::Verbose, $($arg)*) }; }
 ```
 
-Call sites:
+Call sites pick whichever form reads best:
 
 ```rust
-cprint!(Level::Quiet,   "Critical surfacing info");   // was print_force
-cprint!(Level::Normal,  "Done.");                      // was cprint!
-cprint!(Level::Verbose, "Inspecting field {}", name);  // was cprint_verbose!
+cprint_quiet!("Critical surfacing info");
+cprint_normal!("Done.");
+cprint_verbose!("Inspecting field {}", name);
+
+// or, when the level is dynamic:
+cprint!(level, "...");
 ```
 
-Migration: existing `cprint!(...)` invocations become `cprint!(Level::Normal, ...)`, existing `cprint_verbose!(...)` become `cprint!(Level::Verbose, ...)`. The old `cprint_verbose!` macro is removed. Touched files outside diff scope: `src/cli/{edit,pull}.rs`, `src/edit/{add,non_nullable,update_refs}.rs` — straight find-and-replace.
+Migration: existing `cprint!(...)` invocations (which currently always print) become `cprint_normal!(...)`. Existing `cprint_verbose!(...)` keeps its name with unchanged semantics (gated by the new `Level::Verbose` rule, identical effect to the old verbose-flag check). Touched files outside diff scope: `src/cli/{edit,pull}.rs`, `src/edit/{add,non_nullable,update_refs}.rs` — straight find-and-replace for `cprint!` → `cprint_normal!`.
 
 CLI: a global `--quiet`/`-q` flag is declared on the root `Cli` struct alongside `--verbose`/`-v`, with `conflicts_with = "verbose"`. `main()` resolves the pair into a single `Level` (`(verbose, quiet) ↦ Level::Verbose | Level::Quiet | Level::Normal`) and passes it to `Console::new`.
 
@@ -470,7 +480,7 @@ if functional && !v_new.bumped_functional(&v_old) {
 Ok(if functional { VersionBumpKind::Functional } else { VersionBumpKind::Technical })
 ```
 
-Verbose-only side effects: `cprint!(Level::Verbose, ...)` the diff JSON (without `old_schemas`/`new_schemas`) and the "Functional / Technical release bump is needed" line, before the bump-direction checks.
+Verbose-only side effects: `cprint_verbose!(...)` the diff JSON (without `old_schemas`/`new_schemas`) and the "Functional / Technical release bump is needed" line, before the bump-direction checks.
 
 ---
 
@@ -537,11 +547,11 @@ impl Executable for Diff {
 
 1. `let old = read_schemas(&a.input_dir_base)?;`
 2. `let new = read_schemas(&a.input_dir_comp)?;`
-3. `cprint!(Level::Normal, "Comparing JSON-schemas...");`
+3. `cprint_normal!("Comparing JSON-schemas...");`
 4. `let changes = diff_schemas(&old, &new);`
-5. `cprint!(Level::Normal, "Compared JSON-schemas.");`
+5. `cprint_normal!("Compared JSON-schemas.");`
 6. `write_changes(&changes, &a.output_file)?;`
-7. `cprint!(Level::Normal, "Saved Diff to file: {}", a.output_file.display());`
+7. `cprint_normal!("Saved Diff to file: {}", a.output_file.display());`
 
 `run_matrix`:
 
@@ -556,7 +566,7 @@ impl Executable for Diff {
 1. `let mut diffs = read_changes_from_diff_files(std::slice::from_ref(&a.diff_file))?;`
 2. `let changes = diffs.pop().ok_or("Empty diff file list")?;`
 3. `let kind = check_version_bump(&changes, a.major_bump_allowed)?;`
-4. `cprint!(Level::Normal, "Valid {:?} version bump.", kind);`
+4. `cprint_normal!("Valid {:?} version bump.", kind);`
 
 `--quiet` and `--verbose` are global flags on `Cli`, mutually exclusive, and resolved into a single `Level` passed into `Console::new` from `main`. The run functions don't read them directly.
 
