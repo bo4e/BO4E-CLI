@@ -34,13 +34,26 @@ impl Console {
         message_level <= self.level
     }
 
-    /// Emit `msg` iff `message_level <= self.level`, after applying the highlighter.
-    pub fn print(&self, message_level: Level, msg: &str) {
+    /// Emit an informational message to stdout iff `message_level <= self.level`,
+    /// after applying the highlighter.
+    pub fn print_info(&self, message_level: Level, msg: &str) {
         if !self.would_emit(message_level) {
             return;
         }
         let highlighted = self.highlighter.read().unwrap().apply(msg);
-        eprintln!("{}", highlighted); // NOTE: stderr keeps stdout clean for piping
+        println!("{highlighted}");
+    }
+
+    /// Emit a warning to stderr. Never suppressed (warnings are always shown).
+    pub fn print_warn(&self, msg: &str) {
+        let highlighted = self.highlighter.read().unwrap().apply(msg);
+        eprintln!("{highlighted}");
+    }
+
+    /// Emit an error to stderr. Never suppressed.
+    pub fn print_error(&self, msg: &str) {
+        let highlighted = self.highlighter.read().unwrap().apply(msg);
+        eprintln!("{highlighted}");
     }
 
     /// Register schema names for dynamic highlighting (call once after read_schemas).
