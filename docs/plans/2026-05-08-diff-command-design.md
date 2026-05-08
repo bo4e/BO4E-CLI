@@ -131,26 +131,71 @@ Semantics: at equal semantic version, a dirty version sorts *strictly newer* tha
 
 ### `src/console/console.rs`
 
-Add `quiet` mode. Default `print` becomes "print unless quiet"; verbose is independent of quiet (and the two are mutually exclusive at CLI parse time):
+The three modes (quiet, normal, verbose) form a logging-level system. Each message has a level, the console has a level, and a message is emitted iff `message_level <= console_level`:
+
+| Console | Message | Emitted |
+|---|---|---|
+| Quiet   | Quiet   | yes |
+| Quiet   | Normal  | no  |
+| Quiet   | Verbose | no  |
+| Normal  | Quiet   | yes |
+| Normal  | Normal  | yes |
+| Normal  | Verbose | no  |
+| Verbose | Quiet   | yes |
+| Verbose | Normal  | yes |
+| Verbose | Verbose | yes |
 
 ```rust
+/// Importance of a console message. Lower discriminants are more important —
+/// a message is emitted iff its level is `<=` the console's level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum Level {
+    /// Must always be surfaced, including under `--quiet`.
+    Quiet = 0,
+    /// Default informational output.
+    Normal = 1,
+    /// Detail emitted only under `--verbose`.
+    Verbose = 2,
+}
+
 pub struct Console {
-    verbose: bool,
-    quiet: bool,
+    level: Level,
     highlighter: RwLock<Highlighter>,
 }
 
 impl Console {
-    pub fn new(verbose: bool, quiet: bool) -> Self;
-    pub fn print(&self, msg: &str);          // print unless quiet
-    pub fn print_verbose(&self, msg: &str);  // print only if verbose
-    pub fn print_force(&self, msg: &str);    // always print, ignores quiet
+    pub fn new(level: Level) -> Self;
+    /// Emit `msg` iff `level <= self.level`.
+    pub fn print(&self, level: Level, msg: &str);
 }
 ```
 
-Macros: `cprint!` and `cprint_verbose!` keep their names with shifted semantics (now respect quiet). New `cprint_force!` macro for the rare must-surface case.
+Single macro replaces both existing ones:
 
-`main()` is updated to thread the new `quiet` global into `Console::new(verbose, quiet)`. The CLI gets a global `--quiet` / `-q` flag declared on the root `Cli` struct with `conflicts_with = "verbose"`.
+```rust
+#[macro_export]
+macro_rules! cprint {
+    ($level:expr, $($arg:tt)*) => {
+        $crate::console::console::CONSOLE
+            .get()
+            .expect("CONSOLE not initialized")
+            .print($level, &format!($($arg)*))
+    };
+}
+```
+
+Call sites:
+
+```rust
+cprint!(Level::Quiet,   "Critical surfacing info");   // was print_force
+cprint!(Level::Normal,  "Done.");                      // was cprint!
+cprint!(Level::Verbose, "Inspecting field {}", name);  // was cprint_verbose!
+```
+
+Migration: existing `cprint!(...)` invocations become `cprint!(Level::Normal, ...)`, existing `cprint_verbose!(...)` become `cprint!(Level::Verbose, ...)`. The old `cprint_verbose!` macro is removed. Touched files outside diff scope: `src/cli/{edit,pull}.rs`, `src/edit/{add,non_nullable,update_refs}.rs` — straight find-and-replace.
+
+CLI: a global `--quiet`/`-q` flag is declared on the root `Cli` struct alongside `--verbose`/`-v`, with `conflicts_with = "verbose"`. `main()` resolves the pair into a single `Level` (`(verbose, quiet) ↦ Level::Verbose | Level::Quiet | Level::Normal`) and passes it to `Console::new`.
 
 ---
 
@@ -425,7 +470,7 @@ if functional && !v_new.bumped_functional(&v_old) {
 Ok(if functional { VersionBumpKind::Functional } else { VersionBumpKind::Technical })
 ```
 
-Verbose-only side effects: `cprint_verbose!` the diff JSON (without `old_schemas`/`new_schemas`) and the "Functional / Technical release bump is needed" line, before the bump-direction checks.
+Verbose-only side effects: `cprint!(Level::Verbose, ...)` the diff JSON (without `old_schemas`/`new_schemas`) and the "Functional / Technical release bump is needed" line, before the bump-direction checks.
 
 ---
 
@@ -492,11 +537,11 @@ impl Executable for Diff {
 
 1. `let old = read_schemas(&a.input_dir_base)?;`
 2. `let new = read_schemas(&a.input_dir_comp)?;`
-3. `cprint!("Comparing JSON-schemas...");`
+3. `cprint!(Level::Normal, "Comparing JSON-schemas...");`
 4. `let changes = diff_schemas(&old, &new);`
-5. `cprint!("Compared JSON-schemas.");`
+5. `cprint!(Level::Normal, "Compared JSON-schemas.");`
 6. `write_changes(&changes, &a.output_file)?;`
-7. `cprint!("Saved Diff to file: {}", a.output_file.display());`
+7. `cprint!(Level::Normal, "Saved Diff to file: {}", a.output_file.display());`
 
 `run_matrix`:
 
@@ -511,9 +556,9 @@ impl Executable for Diff {
 1. `let mut diffs = read_changes_from_diff_files(std::slice::from_ref(&a.diff_file))?;`
 2. `let changes = diffs.pop().ok_or("Empty diff file list")?;`
 3. `let kind = check_version_bump(&changes, a.major_bump_allowed)?;`
-4. `cprint!("Valid {:?} version bump.", kind);`
+4. `cprint!(Level::Normal, "Valid {:?} version bump.", kind);`
 
-`--quiet` global is consulted by the Console singleton; the run functions don't read it directly.
+`--quiet` and `--verbose` are global flags on `Cli`, mutually exclusive, and resolved into a single `Level` passed into `Console::new` from `main`. The run functions don't read them directly.
 
 ---
 
@@ -533,7 +578,7 @@ Following the established TDD convention: tests live in the same file under `#[c
 |---|---|
 | `models/version.rs` | `version_eq_dirty_when_clean_and_equal_semantically`; `version_lt_dirty_at_same_semantic_version`; `version_eq_clean_dirty`; `dirty_gt_clean_at_same_semantic_version`; `dirty_lt_clean_when_older` |
 | `models/matrix.rs` | `roundtrip_compatibility_symbol_emoji`; `roundtrip_compatibility_text`; `compatibility_serializes_emoji_first_then_text` |
-| `console/console.rs` | `print_respects_quiet`; `print_verbose_respects_verbose`; `print_force_ignores_quiet` |
+| `console/console.rs` | Full 3×3 emission table: for each `(console_level, message_level)` pair assert that emission matches the table above |
 | `io/changes.rs` | `roundtrip_write_then_read_preserves_changes`; `read_missing_file_errors` |
 | `io/matrix.rs` | `csv_golden_3_versions_3_modules`; `json_roundtrip_preserves_module_order` |
 | `diff/filters.rs` | `is_change_critical_full_table` (one expected boolean per `ChangeType` variant); `has_critical_finds_one_in_mixed`; `has_critical_returns_false_for_only_non_critical` |
