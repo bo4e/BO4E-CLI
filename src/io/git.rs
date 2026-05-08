@@ -52,6 +52,10 @@ pub fn is_branch(value: &str) -> io::Result<bool> {
         .map(|exit_status| exit_status.success())
 }
 
+/// Returns true if `value` resolves to a commit (any ref `git branch --contains` accepts).
+///
+/// Note: this returns true for tag and branch names too. Call this after
+/// `is_version_tag` and `is_branch` if you want strict "is this a raw commit hash" classification.
 pub fn is_commit_hash(value: &str) -> io::Result<bool> {
     match get_branches_containing_commit(value) {
         Ok(_) => Ok(true),
@@ -60,7 +64,6 @@ pub fn is_commit_hash(value: &str) -> io::Result<bool> {
     }
 }
 
-#[allow(dead_code)]
 fn get_branches_containing_commit(commit: &str) -> io::Result<Vec<String>> {
     let output = Command::new("git")
         .args(["branch", "-a", "--contains", commit])
@@ -179,6 +182,14 @@ pub fn tags_merged(reference: &str) -> io::Result<Vec<String>> {
         .collect())
 }
 
+/// Classify a user-supplied ref string as a tag, branch, or commit, and resolve it.
+///
+/// Precedence (when a value matches multiple): tag → branch → commit. If the value
+/// resolves to none of these, falls back to the current HEAD's SHA and emits an
+/// info message via `cprint_normal!`.
+///
+/// For `RefKind::Commit`, the returned string is always a concrete 40-char SHA —
+/// shorthand like `HEAD` or `HEAD~3` is resolved via `git rev-parse`.
 pub fn get_ref(value: &str) -> io::Result<(RefKind, String)> {
     if is_version_tag(value)? {
         return Ok((RefKind::Tag, value.to_string()));
@@ -187,13 +198,11 @@ pub fn get_ref(value: &str) -> io::Result<(RefKind, String)> {
         return Ok((RefKind::Branch, value.to_string()));
     }
     if is_commit_hash(value)? {
-        return Ok((RefKind::Commit, value.to_string()));
-    }
-    if value == "HEAD" {
-        return Ok((RefKind::Commit, get_commit_sha("HEAD")?));
+        return Ok((RefKind::Commit, get_commit_sha(value)?));
     }
     let cur = get_commit_sha("HEAD")?;
-    crate::cprint_normal!("'{value}' is not a tag, branch, or commit; falling back to HEAD ({cur}).");
+    let short: String = cur.chars().take(7).collect();
+    crate::cprint_normal!("'{value}' is not a tag, branch, or commit; falling back to HEAD ({short}).");
     Ok((RefKind::Commit, cur))
 }
 
@@ -271,5 +280,11 @@ mod tests {
         let (kind, value) = get_ref("definitely-not-a-ref").unwrap();
         assert_eq!(kind, crate::models::git::RefKind::Commit);
         assert_eq!(value.len(), 40); // full SHA from `git rev-parse HEAD`
+
+        // "HEAD" should resolve to a concrete SHA, not pass through as a literal.
+        let (kind, value) = get_ref("HEAD").unwrap();
+        assert_eq!(kind, crate::models::git::RefKind::Commit);
+        assert_eq!(value.len(), 40);
+        assert!(value.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }
