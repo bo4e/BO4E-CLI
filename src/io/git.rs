@@ -162,8 +162,9 @@ pub fn tags_merged(reference: &str) -> io::Result<Vec<String>> {
     check_success(&output, "Failed to list merged tags.")?;
     Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
-        .map(|l| l.trim().to_string())
+        .map(|l| l.trim())
         .filter(|l| !l.is_empty())
+        .map(String::from)
         .collect())
 }
 
@@ -171,10 +172,17 @@ pub fn tags_merged(reference: &str) -> io::Result<Vec<String>> {
 mod tests {
     use super::*;
     use std::process::Command;
+    use std::sync::Mutex;
 
-    /// Initialize a git repo with 3 tagged commits.
-    /// Returns the tempdir guard (drop = cleanup).
-    fn make_git_repo() -> tempfile::TempDir {
+    // Serializes tests that mutate process cwd. Cargo runs tests in parallel by default;
+    // any test in this module that calls set_current_dir must hold this lock.
+    static CWD_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Initialize a git repo with 3 tagged commits, acquire the cwd lock, and set
+    /// the process cwd to the tempdir. Returns both so the caller holds them for the
+    /// test's full lifetime — dropping either ends the exclusive window.
+    fn make_git_repo() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
+        let guard = CWD_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path();
         let run = |args: &[&str]| {
@@ -199,13 +207,13 @@ mod tests {
         run(&["commit", "--allow-empty", "-m", "c3", "-q"]);
         run(&["tag", "v202401.1.0"]);
         run(&["tag", "not-a-version"]);
-        dir
+        std::env::set_current_dir(p).unwrap();
+        (dir, guard)
     }
 
     #[test]
     fn test_tags_merged_returns_descending_version_order() {
-        let dir = make_git_repo();
-        let _g = std::env::set_current_dir(dir.path()).unwrap();
+        let (_dir, _guard) = make_git_repo();
         let tags = tags_merged("HEAD").unwrap();
         // Descending: 1.0 first, then 0.2, 0.1, then non-version tag.
         assert_eq!(tags[0], "v202401.1.0");
