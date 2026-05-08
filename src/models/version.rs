@@ -303,6 +303,35 @@ impl DirtyVersion {
     }
 }
 
+impl PartialEq<DirtyVersion> for Version {
+    /// `Version == DirtyVersion` iff same semver and the dirty side is clean.
+    fn eq(&self, other: &DirtyVersion) -> bool {
+        *self == other.version && !other.is_dirty()
+    }
+}
+
+impl PartialOrd<DirtyVersion> for Version {
+    /// At equal semver, a dirty `DirtyVersion` is strictly newer than a clean `Version`.
+    fn partial_cmp(&self, other: &DirtyVersion) -> Option<Ordering> {
+        match self.cmp(&other.version) {
+            Ordering::Equal if other.is_dirty() => Some(Ordering::Less),
+            ord => Some(ord),
+        }
+    }
+}
+
+impl PartialEq<Version> for DirtyVersion {
+    fn eq(&self, o: &Version) -> bool {
+        o == self
+    }
+}
+
+impl PartialOrd<Version> for DirtyVersion {
+    fn partial_cmp(&self, o: &Version) -> Option<Ordering> {
+        o.partial_cmp(self).map(Ordering::reverse)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,5 +361,39 @@ mod tests {
         let with_commit: DirtyVersion = "v202401.0.1+gabcdef".parse().unwrap();
         assert!(!clean.is_dirty());
         assert!(with_commit.is_dirty());
+    }
+
+    #[test]
+    fn test_version_eq_clean_dirty_at_same_semver() {
+        let v: Version = "v202401.0.1".parse().unwrap();
+        let dv_clean: DirtyVersion = "v202401.0.1".parse().unwrap();
+        let dv_dirty: DirtyVersion = "v202401.0.1+gabc".parse().unwrap();
+        assert!(v == dv_clean);
+        assert!(!(v == dv_dirty)); // dirty is strictly newer at same semver
+    }
+
+    #[test]
+    fn test_version_lt_dirty_at_same_semver() {
+        let v: Version = "v202401.0.1".parse().unwrap();
+        let dv_dirty: DirtyVersion = "v202401.0.1+gabc".parse().unwrap();
+        assert!(v < dv_dirty);
+        assert!(dv_dirty > v);
+    }
+
+    #[test]
+    fn test_version_cmp_dirty_when_semver_differs() {
+        let v_old: Version = "v202401.0.1".parse().unwrap();
+        let dv_new: DirtyVersion = "v202401.0.2".parse().unwrap();
+        assert!(v_old < dv_new);
+        let v_new: Version = "v202401.0.2".parse().unwrap();
+        let dv_old: DirtyVersion = "v202401.0.1+gabc".parse().unwrap();
+        assert!(v_new > dv_old);
+    }
+
+    #[test]
+    fn test_dirty_eq_clean_symmetric() {
+        let v: Version = "v202401.0.1".parse().unwrap();
+        let dv: DirtyVersion = "v202401.0.1".parse().unwrap();
+        assert!(dv == v);
     }
 }
