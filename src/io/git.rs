@@ -3,7 +3,6 @@ use std::io;
 use std::path::Path;
 use std::process::{Command, Output};
 
-#[allow(dead_code)]
 fn check_success(output: &Output, error_message: &str) -> io::Result<()> {
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -148,4 +147,70 @@ fn get_last_n_tags(
         io::ErrorKind::Unsupported,
         "This function is not implemented yet.",
     ))
+}
+
+pub fn tags_merged(reference: &str) -> io::Result<Vec<String>> {
+    let output = Command::new("git")
+        .args([
+            "tag",
+            "--merged",
+            reference,
+            "--sort=-version:refname",
+            "--sort=-creatordate",
+        ])
+        .output()?;
+    check_success(&output, "Failed to list merged tags.")?;
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    /// Initialize a git repo with 3 tagged commits.
+    /// Returns the tempdir guard (drop = cleanup).
+    fn make_git_repo() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let run = |args: &[&str]| {
+            let out = Command::new("git")
+                .args(args)
+                .current_dir(p)
+                .output()
+                .expect("git invocation failed");
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "t@t.t"]);
+        run(&["config", "user.name", "t"]);
+        run(&["commit", "--allow-empty", "-m", "c1", "-q"]);
+        run(&["tag", "v202401.0.1"]);
+        run(&["commit", "--allow-empty", "-m", "c2", "-q"]);
+        run(&["tag", "v202401.0.2"]);
+        run(&["commit", "--allow-empty", "-m", "c3", "-q"]);
+        run(&["tag", "v202401.1.0"]);
+        run(&["tag", "not-a-version"]);
+        dir
+    }
+
+    #[test]
+    fn test_tags_merged_returns_descending_version_order() {
+        let dir = make_git_repo();
+        let _g = std::env::set_current_dir(dir.path()).unwrap();
+        let tags = tags_merged("HEAD").unwrap();
+        // Descending: 1.0 first, then 0.2, 0.1, then non-version tag.
+        assert_eq!(tags[0], "v202401.1.0");
+        assert!(tags.contains(&"v202401.0.2".to_string()));
+        assert!(tags.contains(&"v202401.0.1".to_string()));
+        assert!(tags.contains(&"not-a-version".to_string()));
+    }
 }
