@@ -55,7 +55,7 @@ pub fn read_schemas(input_dir: &std::path::Path) -> Result<Schemas, String> {
     for entry in WalkDir::new(input_dir)
         .into_iter()
         .filter_map(|e| {
-            e.map_err(|err| eprintln!("Warning: skipping unreadable entry: {}", err))
+            e.map_err(|err| crate::cwarn!("skipping unreadable entry: {}", err))
                 .ok()
         })
         .filter(|e| {
