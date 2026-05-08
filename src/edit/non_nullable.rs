@@ -1,6 +1,6 @@
 use crate::models::json_schema::{PrimitiveValue, SchemaRootObject, SchemaRootType, SchemaType, TypeBase};
 use crate::models::schema_meta::Schemas;
-use crate::{cprint, cprint_verbose};
+use crate::{cprint_normal, cprint_verbose};
 
 /// Remove the `null` variant from a nullable `AnyOf` property.
 ///
@@ -103,7 +103,7 @@ pub fn transform_all_non_nullable_fields(
         let root = match schema.schema_mut() {
             Ok(r) => r,
             Err(e) => {
-                cprint!("Warning: could not parse schema '{}': {}", module_path, e);
+                cprint_normal!("Warning: could not parse schema '{}': {}", module_path, e);
                 continue;
             }
         };
@@ -148,9 +148,9 @@ pub fn transform_all_non_nullable_fields(
             }
         }
         if match_count == 0 {
-            cprint!("Warning: non-nullable pattern '{}' did not match any fields", pattern);
+            cprint_normal!("Warning: non-nullable pattern '{}' did not match any fields", pattern);
         } else {
-            cprint!("Applied non-nullable pattern '{}' to {} field(s)", pattern, match_count);
+            cprint_normal!("Applied non-nullable pattern '{}' to {} field(s)", pattern, match_count);
         }
     }
 
@@ -160,12 +160,12 @@ pub fn transform_all_non_nullable_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::console::{Console, CONSOLE};
+    use crate::console::console::{Console, Level, CONSOLE};
     use crate::models::json_schema::*;
     use std::collections::BTreeMap;
 
     fn init_console() {
-        let _ = CONSOLE.set(Console::new(false));
+        let _ = CONSOLE.set(Console::new(Level::Normal));
     }
 
     fn make_nullable_object(field_name: &str) -> SchemaRootObject {

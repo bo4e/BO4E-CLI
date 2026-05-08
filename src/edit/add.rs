@@ -1,7 +1,7 @@
 use crate::models::config::{AdditionalEnumItem, AdditionalField};
 use crate::models::json_schema::{SchemaRootType, SchemaType};
 use crate::models::schema_meta::Schemas;
-use crate::{cprint, cprint_verbose};
+use crate::{cprint_normal, cprint_verbose};
 
 /// Insert additional fields into matching `SchemaRootObject` schemas.
 pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut Schemas) {
@@ -16,7 +16,7 @@ pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut
             let root = match schema.schema_mut() {
                 Ok(r) => r,
                 Err(e) => {
-                    cprint!("Warning: could not parse schema '{}': {}", module_path, e);
+                    cprint_normal!("Warning: could not parse schema '{}': {}", module_path, e);
                     continue;
                 }
             };
@@ -40,9 +40,9 @@ pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut
             }
         }
         if match_count == 0 {
-            cprint!("Warning: pattern '{}' did not match any schemas", field.pattern);
+            cprint_normal!("Warning: pattern '{}' did not match any schemas", field.pattern);
         } else {
-            cprint!("Pattern '{}' matched {} schema(s)", field.pattern, match_count);
+            cprint_normal!("Pattern '{}' matched {} schema(s)", field.pattern, match_count);
         }
     }
 }
@@ -80,7 +80,7 @@ pub fn transform_all_additional_enum_items(items: &[AdditionalEnumItem], schemas
             let root = match schema.schema_mut() {
                 Ok(r) => r,
                 Err(e) => {
-                    cprint!("Warning: could not parse schema '{}': {}", module_path, e);
+                    cprint_normal!("Warning: could not parse schema '{}': {}", module_path, e);
                     continue;
                 }
             };
@@ -96,9 +96,9 @@ pub fn transform_all_additional_enum_items(items: &[AdditionalEnumItem], schemas
             }
         }
         if match_count == 0 {
-            cprint!("Warning: pattern '{}' did not match any schemas", item.pattern);
+            cprint_normal!("Warning: pattern '{}' did not match any schemas", item.pattern);
         } else {
-            cprint!("Pattern '{}' matched {} schema(s)", item.pattern, match_count);
+            cprint_normal!("Pattern '{}' matched {} schema(s)", item.pattern, match_count);
         }
     }
 }
@@ -106,7 +106,7 @@ pub fn transform_all_additional_enum_items(items: &[AdditionalEnumItem], schemas
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::console::{Console, CONSOLE};
+    use crate::console::console::{Console, Level, CONSOLE};
     use crate::models::config::{AdditionalEnumItem, AdditionalField};
     use crate::models::json_schema::*;
     use crate::models::schema_meta::{Schema, Schemas};
@@ -118,7 +118,7 @@ mod tests {
     use std::str::FromStr;
 
     fn init_console() {
-        let _ = CONSOLE.set(Console::new(false));
+        let _ = CONSOLE.set(Console::new(Level::Normal));
     }
 
     fn make_schemas() -> Schemas {

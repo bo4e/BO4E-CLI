@@ -7,7 +7,7 @@ use crate::io::cleanse::clear_dir_if_needed;
 use crate::io::config::{get_additional_schemas, load_config};
 use crate::io::schemas::{read_schemas, write_schemas};
 use crate::models::json_schema::{PrimitiveValue, SchemaRootType};
-use crate::{cprint, cprint_verbose};
+use crate::{cprint_normal, cprint_verbose};
 use clap::Args;
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -63,16 +63,16 @@ impl Executable for Edit {
                 .get()
                 .expect("CONSOLE not initialized")
                 .add_schema_names(&names);
-            cprint!("Added all additional models");
+            cprint_normal!("Added all additional models");
 
             transform_all_additional_fields(&config.additional_fields, &mut schemas);
-            cprint!("Added all additional fields");
+            cprint_normal!("Added all additional fields");
 
             transform_all_non_nullable_fields(&config.non_nullable_fields, &mut schemas)?;
-            cprint!("Transformed all non nullable fields");
+            cprint_normal!("Transformed all non nullable fields");
 
             transform_all_additional_enum_items(&config.additional_enum_items, &mut schemas);
-            cprint!("Added all additional enum items");
+            cprint_normal!("Added all additional enum items");
         }
 
         if !self.no_default_version {
@@ -82,7 +82,7 @@ impl Executable for Edit {
                 let root = match schema.schema_mut() {
                     Ok(r) => r,
                     Err(e) => {
-                        cprint!("Warning: could not parse schema for version stamping: {}", e);
+                        cprint_normal!("Warning: could not parse schema for version stamping: {}", e);
                         continue;
                     }
                 };
@@ -101,7 +101,7 @@ impl Executable for Edit {
                     base.default = Some(PrimitiveValue::String(version_str.clone()));
                 }
             }
-            cprint!("Set default versions");
+            cprint_normal!("Set default versions");
         }
 
         update_references_all(&mut schemas)?;
@@ -113,12 +113,12 @@ impl Executable for Edit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::console::{Console, CONSOLE};
+    use crate::console::console::{Console, Level, CONSOLE};
     use std::fs;
     use tempfile::TempDir;
 
     fn init_console() {
-        let _ = CONSOLE.set(Console::new(false));
+        let _ = CONSOLE.set(Console::new(Level::Normal));
     }
 
     fn make_input_dir() -> TempDir {
