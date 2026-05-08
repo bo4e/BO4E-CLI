@@ -12,6 +12,16 @@ mod utils;
 
 use clap::Parser;
 
+/// A process-global mutex used by tests in multiple modules that call
+/// `std::env::set_current_dir`. Cargo runs tests in parallel by default;
+/// any test that mutates the process cwd must hold this lock for the
+/// duration of the test.
+#[cfg(test)]
+pub(crate) mod test_lock {
+    use std::sync::Mutex;
+    pub(crate) static CWD_LOCK: Mutex<()> = Mutex::new(());
+}
+
 fn main() -> Result<(), String> {
     let cli = cli::base::Cli::parse();
     let level = match (cli.verbose, cli.quiet) {

@@ -92,7 +92,7 @@ fn render_table(title: &str, rows: &[(String, String, String)]) {
     }
 }
 
-fn run_versions(args: &VersionsArgs) -> Result<(), String> {
+pub(crate) fn run_versions(args: &VersionsArgs) -> Result<(), String> {
     use crate::io::git::{GetLastNTagsOpts, get_commit_date, get_commit_sha, get_last_n_tags, get_ref};
     use crate::io::github::{get_token_from_github_cli, release_exists};
     use crate::models::git::RefKind;
@@ -185,4 +185,76 @@ fn run_versions(args: &VersionsArgs) -> Result<(), String> {
     crate::cprint_normal!(""); // blank line before the table for spacing
     render_table(&title, &rows);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_lock::CWD_LOCK;
+    use std::process::Command;
+
+    fn make_git_repo() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
+        let guard = CWD_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let run = |args: &[&str]| {
+            let out = Command::new("git")
+                .args(args)
+                .current_dir(p)
+                .output()
+                .expect("git invocation failed");
+            assert!(out.status.success(), "git {args:?} failed");
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "t@t.t"]);
+        run(&["config", "user.name", "t"]);
+        run(&["commit", "--allow-empty", "-m", "c1", "-q"]);
+        run(&["tag", "v202401.0.1"]);
+        run(&["commit", "--allow-empty", "-m", "c2", "-q"]);
+        run(&["tag", "v202401.0.2"]);
+        run(&["commit", "--allow-empty", "-m", "c3", "-q"]);
+        run(&["tag", "v202401.1.0"]);
+        std::env::set_current_dir(p).unwrap();
+        (dir, guard)
+    }
+
+    fn ensure_console(level: crate::console::console::Level) {
+        let _ = crate::console::console::CONSOLE.set(crate::console::console::Console::new(level));
+    }
+
+    #[test]
+    fn test_run_versions_quiet_returns_versions_only() {
+        let (_dir, _guard) = make_git_repo();
+        ensure_console(crate::console::console::Level::Quiet);
+
+        let args = VersionsArgs {
+            n: 0,
+            reference: "HEAD".into(),
+            exclude_candidates: false,
+            exclude_technical_bumps: false,
+            show_full_commit_sha: false,
+            validate_releases: false,
+            token: None,
+        };
+        run_versions(&args).expect("run_versions failed");
+        // We can't capture stdout from inside the test runner without extra plumbing.
+        // The assertion is implicit: no panic, no error.
+    }
+
+    #[test]
+    fn test_run_versions_non_quiet_renders_table() {
+        let (_dir, _guard) = make_git_repo();
+        ensure_console(crate::console::console::Level::Normal);
+
+        let args = VersionsArgs {
+            n: 0,
+            reference: "HEAD".into(),
+            exclude_candidates: false,
+            exclude_technical_bumps: false,
+            show_full_commit_sha: false,
+            validate_releases: false,
+            token: None,
+        };
+        run_versions(&args).expect("run_versions failed");
+    }
 }

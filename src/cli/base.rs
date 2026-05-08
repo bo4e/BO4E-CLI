@@ -1,6 +1,7 @@
 use crate::cli::diff::Diff;
 use crate::cli::edit::Edit;
 use crate::cli::pull::Pull;
+use crate::cli::repo::Repo;
 use clap::{CommandFactory, Parser, Subcommand};
 
 pub trait Executable {
@@ -38,6 +39,7 @@ pub enum SubcommandsLevel1 {
     Pull(Pull),
     Edit(Edit),
     Diff(Diff),
+    Repo(Repo),
 }
 
 impl Executable for SubcommandsLevel1 {
@@ -46,6 +48,7 @@ impl Executable for SubcommandsLevel1 {
             SubcommandsLevel1::Pull(pull) => pull.run(),
             SubcommandsLevel1::Edit(edit) => edit.run(),
             SubcommandsLevel1::Diff(diff) => diff.run(),
+            SubcommandsLevel1::Repo(repo) => repo.run(),
         }
     }
 }

@@ -213,12 +213,8 @@ pub fn get_ref(value: &str) -> io::Result<(RefKind, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_lock::CWD_LOCK;
     use std::process::Command;
-    use std::sync::Mutex;
-
-    // Serializes tests that mutate process cwd. Cargo runs tests in parallel by default;
-    // any test in this module that calls set_current_dir must hold this lock.
-    static CWD_LOCK: Mutex<()> = Mutex::new(());
 
     /// Initialize a git repo with 3 tagged commits, acquire the cwd lock, and set
     /// the process cwd to the tempdir. Returns both so the caller holds them for the
