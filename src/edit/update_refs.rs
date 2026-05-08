@@ -103,12 +103,12 @@ pub fn update_references_all(schemas: &mut Schemas) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::console::{Console, CONSOLE};
+    use crate::console::console::{Console, Level, CONSOLE};
     use crate::models::json_schema::ReferenceSchema;
     use std::collections::HashMap;
 
     fn init_console() {
-        let _ = CONSOLE.set(Console::new(false));
+        let _ = CONSOLE.set(Console::new(Level::Normal));
     }
 
     fn make_ref(r: &str) -> ReferenceSchema {
