@@ -3,19 +3,20 @@ pub mod highlighter;
 pub mod palette;
 pub mod progress_bar;
 
-/// Print a formatted message at an explicit `Level`. Emitted only if
-/// `level <= CONSOLE.level`.
+/// Print a formatted info message at an explicit `Level`. Goes to stdout.
+/// Emitted only if `level <= CONSOLE.level`.
 #[macro_export]
 macro_rules! cprint {
     ($level:expr, $($arg:tt)*) => {
         $crate::console::console::CONSOLE
             .get()
             .expect("CONSOLE not initialized — call CONSOLE.set() in main() before dispatch")
-            .print($level, &format!($($arg)*))
+            .print_info($level, &format!($($arg)*))
     };
 }
 
-/// Print a `Level::Quiet` message. Emitted under every console level (including `--quiet`).
+/// Print a `Level::Quiet` info message. Emitted under every console level (including `--quiet`).
+/// Goes to stdout.
 #[macro_export]
 macro_rules! cprint_quiet {
     ($($arg:tt)*) => {
@@ -23,7 +24,7 @@ macro_rules! cprint_quiet {
     };
 }
 
-/// Print a `Level::Normal` message. Default informational output.
+/// Print a `Level::Normal` info message. Default informational output. Goes to stdout.
 #[macro_export]
 macro_rules! cprint_normal {
     ($($arg:tt)*) => {
@@ -31,11 +32,33 @@ macro_rules! cprint_normal {
     };
 }
 
-/// Print a `Level::Verbose` message. Emitted only under `--verbose`.
+/// Print a `Level::Verbose` info message. Emitted only under `--verbose`. Goes to stdout.
 #[macro_export]
 macro_rules! cprint_verbose {
     ($($arg:tt)*) => {
         $crate::cprint!($crate::console::console::Level::Verbose, $($arg)*)
+    };
+}
+
+/// Print a warning to stderr. Always shown, regardless of `--quiet`.
+#[macro_export]
+macro_rules! cwarn {
+    ($($arg:tt)*) => {
+        $crate::console::console::CONSOLE
+            .get()
+            .expect("CONSOLE not initialized — call CONSOLE.set() in main() before dispatch")
+            .print_warn(&format!($($arg)*))
+    };
+}
+
+/// Print an error to stderr. Always shown, regardless of `--quiet`.
+#[macro_export]
+macro_rules! cerror {
+    ($($arg:tt)*) => {
+        $crate::console::console::CONSOLE
+            .get()
+            .expect("CONSOLE not initialized — call CONSOLE.set() in main() before dispatch")
+            .print_error(&format!($($arg)*))
     };
 }
 
@@ -54,5 +77,7 @@ mod tests {
         crate::cprint_quiet!("forced");
         crate::cprint_normal!("default");
         crate::cprint_verbose!("detail {}", 42);
+        crate::cwarn!("warn {}", "msg");
+        crate::cerror!("error {}", "msg");
     }
 }
