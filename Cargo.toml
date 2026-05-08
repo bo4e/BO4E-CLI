@@ -32,4 +32,4 @@ walkdir = "2.5"
 tempfile = "3"
 
 [patch.crates-io]
-console = { path = "../../public/console" }
+console = { path = "../console" }
