@@ -194,6 +194,28 @@ impl Schemas {
     pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Rc<RefCell<Schema>>> {
         self.schemas.iter_mut()
     }
+
+    /// Schemas in `self` whose module is not present in `other`.
+    pub fn module_difference<'a>(
+        &'a self,
+        other: &'a Self,
+    ) -> impl Iterator<Item = &'a Rc<RefCell<Schema>>> {
+        let other_modules = other.modules();
+        self.schemas
+            .iter()
+            .filter(move |s| !other_modules.iter().any(|m| m.as_slice() == s.borrow().module()))
+    }
+
+    /// Schemas whose module is present in both `self` and `other` (returns self's value).
+    pub fn module_intersection<'a>(
+        &'a self,
+        other: &'a Self,
+    ) -> impl Iterator<Item = &'a Rc<RefCell<Schema>>> {
+        let other_modules = other.modules();
+        self.schemas
+            .iter()
+            .filter(move |s| other_modules.iter().any(|m| m.as_slice() == s.borrow().module()))
+    }
 }
 
 impl<'a> IntoIterator for &'a Schemas {
@@ -237,5 +259,47 @@ impl TryFrom<(Vec<Schema>, DirtyVersion)> for Schemas {
             schemas_coll.add_schema(Rc::new(RefCell::new(schema)))?;
         }
         Ok(schemas_coll)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::version::DirtyVersion;
+
+    fn schema(module: &[&str]) -> Rc<RefCell<Schema>> {
+        let m: Vec<String> = module.iter().map(|s| s.to_string()).collect();
+        Rc::new(RefCell::new(Schema::new(m, None).unwrap()))
+    }
+
+    fn collection(modules: &[&[&str]]) -> Schemas {
+        let v: DirtyVersion = "v202401.0.1".parse().unwrap();
+        let mut s = Schemas::new(v);
+        for m in modules {
+            s.add_schema(schema(m)).unwrap();
+        }
+        s
+    }
+
+    #[test]
+    fn test_module_difference_returns_only_unique_to_self() {
+        let a = collection(&[&["bo", "Angebot"], &["com", "Adresse"]]);
+        let b = collection(&[&["com", "Adresse"], &["enum", "Typ"]]);
+        let only_a: Vec<Vec<String>> = a
+            .module_difference(&b)
+            .map(|s| s.borrow().module().to_vec())
+            .collect();
+        assert_eq!(only_a, vec![vec!["bo".to_string(), "Angebot".to_string()]]);
+    }
+
+    #[test]
+    fn test_module_intersection_returns_self_values_in_both() {
+        let a = collection(&[&["bo", "Angebot"], &["com", "Adresse"]]);
+        let b = collection(&[&["com", "Adresse"], &["enum", "Typ"]]);
+        let common: Vec<Vec<String>> = a
+            .module_intersection(&b)
+            .map(|s| s.borrow().module().to_vec())
+            .collect();
+        assert_eq!(common, vec![vec!["com".to_string(), "Adresse".to_string()]]);
     }
 }
