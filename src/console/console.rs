@@ -51,6 +51,7 @@ impl Console {
     }
 
     /// Emit an error to stderr. Never suppressed.
+    #[allow(dead_code)]
     pub fn print_error(&self, msg: &str) {
         let highlighted = self.highlighter.read().unwrap().apply(msg);
         eprintln!("{highlighted}");
