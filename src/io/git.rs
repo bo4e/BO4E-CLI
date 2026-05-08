@@ -1,7 +1,10 @@
 use crate::models::git::{RefKind, Reference};
+use crate::models::version::Version;
+use crate::repo::filter::{FilterOptions, filter_tags};
 use std::io;
 use std::path::Path;
 use std::process::{Command, Output};
+use std::str::FromStr;
 
 fn check_success(output: &Output, error_message: &str) -> io::Result<()> {
     if !output.status.success() {
@@ -100,8 +103,7 @@ pub fn get_commit_sha(branch_or_tag: &str) -> io::Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-#[allow(dead_code)]
-fn get_commit_date(commit: &str) -> io::Result<String> {
+pub fn get_commit_date(commit: &str) -> io::Result<String> {
     let output = Command::new("git")
         .args(["show", "-s", "--format=%ci", commit])
         .output()?;
@@ -128,39 +130,41 @@ fn parse_reference(value: String) -> io::Result<Reference> {
     }
 }
 
-// def get_last_n_tags(
-//     n: int,
-//     *,
-//     ref: str = "main",
-//     exclude_candidates: bool = True,
-//     exclude_technical_bumps: bool = False,
-//     token: str | None = None,
-// ) -> Iterable[Version]:
-//     """
-//     Get the last n tags in chronological descending order starting from `ref`.
-//     If `ref` is a branch, it will start from the current HEAD of the branch.
-//     If `ref` is a tag, it will start from the tag itself. But the tag itself will not be included in the output.
-//     If `ref` is neither nor, the main branch will be used as fallback.
-//     If `exclude_candidates` is True, candidate versions will be excluded from the output.
-//     If the number of found versions is less than `n`, a warning will be logged.
-//     If n=0, all versions since v202401.0.0 will be taken into account.
-//     If exclude_technical_bumps is True, from each functional release group,
-//     the highest technical release will be returned.
-//     """
+pub struct GetLastNTagsOpts<'a, F>
+where
+    F: FnMut(&Version) -> Result<bool, String>,
+{
+    pub n: u32,
+    pub reference: &'a str,
+    pub exclude_candidates: bool,
+    pub exclude_technical_bumps: bool,
+    pub skip_first: bool,
+    pub is_release: F,
+}
 
-#[allow(dead_code, unused_variables)]
-fn get_last_n_tags(
-    n: u8,
-    ref_value: String,
-    token: Option<&str>,
-    exclude_candidates: bool,
-    exclude_technical_bumps: bool,
-) -> io::Result<Vec<Reference>> {
-    let reference = parse_reference(ref_value.to_string())?;
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "This function is not implemented yet.",
-    ))
+pub fn get_last_n_tags<F>(opts: GetLastNTagsOpts<'_, F>) -> Result<Vec<Version>, String>
+where
+    F: FnMut(&Version) -> Result<bool, String>,
+{
+    let raw = tags_merged(opts.reference).map_err(|e| e.to_string())?;
+
+    let mut candidates: Vec<Version> = Vec::with_capacity(raw.len());
+    for tag in raw {
+        match Version::from_str(&tag) {
+            Ok(v) => candidates.push(v),
+            Err(_) => crate::cwarn!("skipping unparseable tag '{tag}'"),
+        }
+    }
+
+    let filter_opts = FilterOptions {
+        n: opts.n,
+        exclude_candidates: opts.exclude_candidates,
+        exclude_technical_bumps: opts.exclude_technical_bumps,
+        skip_first: opts.skip_first,
+        threshold: Version::from_str("v202401.0.0").expect("hardcoded threshold parses"),
+    };
+
+    filter_tags(&candidates, &filter_opts, opts.is_release)
 }
 
 pub fn tags_merged(reference: &str) -> io::Result<Vec<String>> {
@@ -286,5 +290,28 @@ mod tests {
         assert_eq!(kind, crate::models::git::RefKind::Commit);
         assert_eq!(value.len(), 40);
         assert!(value.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_get_last_n_tags_returns_valid_versions_in_order() {
+        let (_dir, _guard) = make_git_repo();
+
+        use crate::console::console::{Console, Level, CONSOLE};
+        let _ = CONSOLE.set(Console::new(Level::Quiet));
+
+        let opts = GetLastNTagsOpts {
+            n: 0,
+            reference: "HEAD",
+            exclude_candidates: false,
+            exclude_technical_bumps: false,
+            skip_first: false,
+            is_release: |_| Ok(true),
+        };
+        let out = get_last_n_tags(opts).unwrap();
+        // The 'not-a-version' tag is dropped; 3 valid versions remain in descending order.
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0].to_string(), "v202401.1.0");
+        assert_eq!(out[1].to_string(), "v202401.0.2");
+        assert_eq!(out[2].to_string(), "v202401.0.1");
     }
 }
