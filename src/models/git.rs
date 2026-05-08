@@ -5,3 +5,11 @@ pub enum Reference {
     Commit(String),
     Head,
 }
+
+/// Lightweight classification of a git reference, returned by `io::git::get_ref`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RefKind {
+    Tag,
+    Branch,
+    Commit,
+}
