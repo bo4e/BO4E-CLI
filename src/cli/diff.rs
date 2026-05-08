@@ -175,4 +175,51 @@ mod tests {
         let text = fs::read_to_string(&out_path).unwrap();
         assert!(text.contains("v202401.0.1"));
     }
+
+    fn write_minimal_schema_dir(dir: &std::path::Path, version: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join(".version"), version).unwrap();
+        let bo = dir.join("bo");
+        std::fs::create_dir_all(&bo).unwrap();
+        std::fs::write(
+            bo.join("Angebot.json"),
+            r#"{"type":"object","title":"Angebot","properties":{},"required":[],"additionalProperties":false}"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_end_to_end_schemas_then_matrix_then_version_bump() {
+        ensure_console();
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("base");
+        let comp = dir.path().join("comp");
+        write_minimal_schema_dir(&base, "v202401.0.1");
+        write_minimal_schema_dir(&comp, "v202401.0.2");
+
+        let diff_file = dir.path().join("diff.json");
+        run_schemas(&DiffSchemasArgs {
+            input_dir_base: base,
+            input_dir_comp: comp,
+            output_file: diff_file.clone(),
+        })
+        .unwrap();
+        assert!(diff_file.exists());
+
+        let matrix_file = dir.path().join("m.csv");
+        run_matrix(&DiffMatrixArgs {
+            input_diff_files: vec![diff_file.clone()],
+            output_file: matrix_file.clone(),
+            output_type: MatrixOutputType::Csv,
+            use_emotes: false,
+        })
+        .unwrap();
+        assert!(matrix_file.exists());
+
+        run_version_bump(&VersionBumpArgs {
+            diff_file,
+            major_bump_allowed: true,
+        })
+        .unwrap();
+    }
 }
