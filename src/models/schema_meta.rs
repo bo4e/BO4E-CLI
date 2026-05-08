@@ -1,6 +1,5 @@
 use crate::models::json_schema::SchemaRootType;
 use crate::models::version::DirtyVersion;
-use color_eyre::owo_colors::OwoColorize;
 use itertools::chain;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -174,17 +173,6 @@ impl Schemas {
         } else {
             None
         }
-    }
-
-    fn try_from_iter<T: IntoIterator<Item = Schema>>(
-        iter: T,
-        version: DirtyVersion,
-    ) -> Result<Self, String> {
-        let mut schemas = Schemas::new(version);
-        for schema in iter {
-            schemas.add_schema(Rc::new(RefCell::new(schema)))?;
-        }
-        Ok(schemas)
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, Rc<RefCell<Schema>>> {

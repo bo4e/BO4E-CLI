@@ -8,6 +8,7 @@ use std::ops::ControlFlow;
 /// and avoids runtime borrow checking (RefCell) for mutable traversal.
 pub trait Visitable: Any + Debug {
     /// Visit each direct child of this node.
+    #[allow(dead_code)]
     fn for_each_child(&self, f: &mut dyn FnMut(&dyn Visitable));
     /// Visit each direct child of this node with mutable access.
     fn for_each_child_mut(&mut self, f: &mut dyn FnMut(&mut dyn Visitable));
@@ -16,6 +17,7 @@ pub trait Visitable: Any + Debug {
 impl dyn Visitable {
     /// Visit every node in the subtree whose concrete type is `T`.
     /// Traversal is depth-first pre-order (self before children).
+    #[allow(dead_code)]
     pub fn visit_all<T: Any>(&self, f: &mut dyn FnMut(&T)) {
         if let Some(t) = (self as &dyn Any).downcast_ref::<T>() {
             f(t);
@@ -26,6 +28,7 @@ impl dyn Visitable {
     /// Like `visit_all`, but the closure can stop traversal early by returning
     /// `ControlFlow::Break(b)`. Returns `ControlFlow::Continue(())` if the whole
     /// tree was visited, or `ControlFlow::Break(b)` from the first break encountered.
+    #[allow(dead_code)]
     pub fn try_visit_all<T: Any, B>(
         &self,
         f: &mut dyn FnMut(&T) -> ControlFlow<B>,
@@ -51,6 +54,7 @@ impl dyn Visitable {
     }
 
     /// Mutably visit every node in the subtree whose concrete type is `T`.
+    #[allow(dead_code)]
     pub fn visit_all_mut<T: Any>(&mut self, f: &mut dyn FnMut(&mut T)) {
         {
             // Inner block: drop self_any before for_each_child_mut re-borrows self.

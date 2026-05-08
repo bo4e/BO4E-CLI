@@ -1,14 +1,11 @@
 use crate::cli::base::Executable;
 use crate::io::cleanse::clear_dir_if_needed;
-use crate::io::github::{
-    get_schemas_from_github, get_token_from_github_cli, resolve_latest_version,
-};
+use crate::io::github::{get_schemas_from_github, resolve_latest_version};
 use crate::io::schemas::write_schemas;
 use crate::models::cli::{Token, get_token_as_string};
 use crate::models::version::Version;
 use crate::utils::tokio::get_runtime;
 use clap::{Args, value_parser};
-use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 

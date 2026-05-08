@@ -1,7 +1,6 @@
 use crate::console::palette;
 use indicatif::ProgressStyle;
 use lazy_static::lazy_static;
-use octocrab::models::code_scannings::Message;
 
 lazy_static! {
     static ref PROGRESS_BAR_STYLE_RUNNING: ProgressStyle = ProgressStyle::with_template(&format!(
@@ -24,7 +23,6 @@ pub fn new_progress_bar(total: u64, message: Option<String>) -> indicatif::Progr
     if let Some(msg) = message {
         pb.set_message(msg);
     }
-    format!("");
     pb
 }
 

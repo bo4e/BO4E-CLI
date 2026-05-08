@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 use std::process::{Command, Output};
 
+#[allow(dead_code)]
 fn check_success(output: &Output, error_message: &str) -> io::Result<()> {
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -16,6 +17,7 @@ fn check_success(output: &Output, error_message: &str) -> io::Result<()> {
     }
 }
 
+#[allow(dead_code)]
 pub fn clone_repo(repo_url: &str, branch_or_tag: &str, dest: &Path) -> io::Result<()> {
     let output = Command::new("git")
         .args(["clone", "--branch", branch_or_tag, "--depth", "1", repo_url])
@@ -25,6 +27,7 @@ pub fn clone_repo(repo_url: &str, branch_or_tag: &str, dest: &Path) -> io::Resul
     check_success(&output, "Failed to clone repository.")
 }
 
+#[allow(dead_code)]
 fn is_version_tag(value: &str) -> io::Result<bool> {
     Command::new("git")
         .args(["show-ref", "--quiet", &format!("refs/tags/{value}")])
@@ -32,6 +35,7 @@ fn is_version_tag(value: &str) -> io::Result<bool> {
         .map(|exit_status| exit_status.success())
 }
 
+#[allow(dead_code)]
 fn is_branch(value: &str) -> io::Result<bool> {
     Command::new("git")
         .args([
@@ -43,6 +47,7 @@ fn is_branch(value: &str) -> io::Result<bool> {
         .map(|exit_status| exit_status.success())
 }
 
+#[allow(dead_code)]
 fn is_commit_hash(value: &str) -> io::Result<bool> {
     match get_branches_containing_commit(value) {
         Ok(_) => Ok(true),
@@ -51,6 +56,7 @@ fn is_commit_hash(value: &str) -> io::Result<bool> {
     }
 }
 
+#[allow(dead_code)]
 fn get_branches_containing_commit(commit: &str) -> io::Result<Vec<String>> {
     let output = Command::new("git")
         .args(["branch", "-a", "--contains", commit])
@@ -71,6 +77,7 @@ fn get_branches_containing_commit(commit: &str) -> io::Result<Vec<String>> {
         .collect())
 }
 
+#[allow(dead_code)]
 fn get_commit_sha(branch_or_tag: &str) -> io::Result<String> {
     let output = Command::new("git")
         .args(["rev-parse", branch_or_tag])
@@ -80,6 +87,7 @@ fn get_commit_sha(branch_or_tag: &str) -> io::Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+#[allow(dead_code)]
 fn get_commit_date(commit: &str) -> io::Result<String> {
     let output = Command::new("git")
         .args(["show", "-s", "--format=%ci", commit])
@@ -89,6 +97,7 @@ fn get_commit_date(commit: &str) -> io::Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+#[allow(dead_code)]
 fn parse_reference(value: String) -> io::Result<Reference> {
     if is_version_tag(&value)? {
         Ok(Reference::Tag(value))
@@ -126,6 +135,7 @@ fn parse_reference(value: String) -> io::Result<Reference> {
 //     the highest technical release will be returned.
 //     """
 
+#[allow(dead_code, unused_variables)]
 fn get_last_n_tags(
     n: u8,
     ref_value: String,

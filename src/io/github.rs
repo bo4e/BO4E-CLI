@@ -3,16 +3,11 @@ use crate::console::progress_bar::{
 };
 use crate::models::schema_meta::{Schema, Schemas};
 use crate::models::version::Version;
-use indicatif;
-use indicatif::ProgressFinish;
 use lazy_static::lazy_static;
 use octocrab::repos::RepoHandler;
-use serde::de::IntoDeserializer;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::str::FromStr;
 use tokio::task::JoinSet;
-use url::Url;
 
 lazy_static! {
     static ref REGEX_GITHUB_TOKEN: regex::Regex = regex::Regex::new(r"^(gh[pousr]_[A-Za-z0-9_]{36,251}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$").unwrap();

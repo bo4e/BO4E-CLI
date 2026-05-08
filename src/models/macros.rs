@@ -24,20 +24,6 @@ macro_rules! visitable_leaf {
     };
 }
 
-/// Implements `Visitable` for a type that has exactly one schema child at `self.$field`.
-macro_rules! visitable_forwarded {
-    ($name:ident, $field:ident) => {
-        impl Visitable for $name {
-            fn for_each_child(&self, f: &mut dyn FnMut(&dyn Visitable)) {
-                f(&self.$field);
-            }
-            fn for_each_child_mut(&mut self, f: &mut dyn FnMut(&mut dyn Visitable)) {
-                f(&mut self.$field);
-            }
-        }
-    };
-}
-
 /// Implements `Visitable` for a type whose children are the items of `self.$field` (a Vec or
 /// similar iterable).
 macro_rules! visitable_forwarded_iter {
@@ -79,6 +65,5 @@ macro_rules! visitable_dispatch_enum {
 
 pub(crate) use literal_enum;
 pub(crate) use visitable_dispatch_enum;
-pub(crate) use visitable_forwarded;
 pub(crate) use visitable_forwarded_iter;
 pub(crate) use visitable_leaf;
