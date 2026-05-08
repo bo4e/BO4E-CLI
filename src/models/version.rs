@@ -296,6 +296,8 @@ impl DirtyVersion {
         &self.version
     }
 
+    /// Check if the version is on a commit without a tag or if it corresponds to a dirty working
+    /// directory.
     pub fn is_dirty(&self) -> bool {
         self.commit_part.is_some() || self.dirty_worktree_date.is_some()
     }
