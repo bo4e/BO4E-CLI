@@ -149,4 +149,46 @@ mod tests {
         let out = filter_tags(&cands, &o, |_| Ok(true)).unwrap();
         assert_eq!(out, vec![v("v202401.3.0"), v("v202401.2.0")]);
     }
+
+    #[test]
+    fn test_is_release_false_skips_version() {
+        let cands = vec![v("v202401.3.0"), v("v202401.2.0"), v("v202401.1.0")];
+        let out = filter_tags(&cands, &opts(0), |x| Ok(*x != v("v202401.2.0"))).unwrap();
+        assert_eq!(out, vec![v("v202401.3.0"), v("v202401.1.0")]);
+    }
+
+    #[test]
+    fn test_is_release_err_aborts() {
+        let cands = vec![v("v202401.3.0"), v("v202401.2.0")];
+        let result = filter_tags(&cands, &opts(0), |_| Err("network".to_string()));
+        assert_eq!(result, Err("network".to_string()));
+    }
+
+    #[test]
+    fn test_combination_n_with_skip_rules() {
+        // n=3, exclude_candidates, exclude_technical_bumps, skip_first
+        // Input (descending):  rc, 3.5, 3.0, 2.0, 1.5, 1.0
+        // skip_first: drops rc (index 0)
+        // exclude_candidates: would also drop rc (no double-count)
+        // exclude_technical_bumps: from each functional group, keep newest:
+        //   3.x → 3.5, 2.x → 2.0, 1.x → 1.5
+        // n=3 cap: stop after 3 yields → 3.5, 2.0, 1.5
+        let cands = vec![
+            v("v202401.4.0-rc1"),
+            v("v202401.3.5"),
+            v("v202401.3.0"),
+            v("v202401.2.0"),
+            v("v202401.1.5"),
+            v("v202401.1.0"),
+        ];
+        let mut o = opts(3);
+        o.exclude_candidates = true;
+        o.exclude_technical_bumps = true;
+        o.skip_first = true;
+        let out = filter_tags(&cands, &o, |_| Ok(true)).unwrap();
+        assert_eq!(
+            out,
+            vec![v("v202401.3.5"), v("v202401.2.0"), v("v202401.1.5")]
+        );
+    }
 }
