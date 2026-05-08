@@ -213,3 +213,48 @@ pub async fn resolve_latest_version(token: Option<&str>) -> Result<Version, Stri
         .map_err(|e| e.to_string())?;
     Version::from_str(&latest_release.tag_name)
 }
+
+/// Check if a GitHub *Release* exists in `bo4e/BO4E-Schemas` for the given version.
+///
+/// Note: a Release is more than a pushed tag. A tag without an associated Release
+/// returns 404 from `releases().get_by_tag(...)` and is treated as `Ok(false)`.
+pub async fn release_exists(version: &Version, token: Option<&str>) -> Result<bool, String> {
+    let octocrab = get_octocrab_instance(token)?;
+    match get_bo4e_schemas_repo_handler(&octocrab)
+        .releases()
+        .get_by_tag(&version.to_string())
+        .await
+    {
+        Ok(_) => Ok(true),
+        Err(octocrab::Error::GitHub { source, .. })
+            if source.status_code == http::StatusCode::NOT_FOUND =>
+        {
+            Ok(false)
+        }
+        Err(octocrab::Error::GitHub { source, .. })
+            if source.status_code == http::StatusCode::FORBIDDEN =>
+        {
+            Err(format!(
+                "GitHub rate-limited the release-validation request ({}). \
+                 Pass --token, set GITHUB_TOKEN, or use --no-validate-releases.",
+                source.message
+            ))
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Compile-time check that `release_exists` has the expected signature.
+    /// We can't make a live network call in unit tests.
+    #[test]
+    fn test_release_exists_signature() {
+        fn _assert_signature(v: &Version) -> impl std::future::Future<Output = Result<bool, String>> + '_ {
+            release_exists(v, None)
+        }
+        let _ = _assert_signature; // silence unused
+    }
+}
