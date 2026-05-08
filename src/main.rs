@@ -3,6 +3,7 @@ use crate::console::console::{Console, Level, CONSOLE};
 
 mod cli;
 mod console;
+mod diff;
 mod edit;
 mod io;
 mod models;
