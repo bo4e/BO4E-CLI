@@ -22,7 +22,6 @@ pub struct VersionsArgs {
     pub n: u32,
 
     /// Git reference to start from (tag, branch, commit, or "HEAD").
-    /// Falls back to current HEAD if the value is none of those.
     #[arg(short = 'r', long = "ref", default_value = "main")]
     pub reference: String,
 
@@ -93,20 +92,28 @@ fn render_table(title: &str, rows: &[(String, String, String)]) {
 }
 
 pub(crate) fn run_versions(args: &VersionsArgs) -> Result<(), String> {
-    use crate::io::git::{GetLastNTagsOpts, get_commit_date, get_commit_sha, get_last_n_tags, get_ref};
+    use crate::io::git::{GetLastNTagsOpts, get_commit_date, get_commit_sha, get_last_n_tags, parse_reference};
     use crate::io::github::{get_token_from_github_cli, release_exists};
-    use crate::models::git::RefKind;
+    use crate::models::git::Reference;
     use crate::utils::tokio::get_runtime;
 
-    let (ref_kind, resolved_ref) = get_ref(&args.reference).map_err(|e| e.to_string())?;
+    let parsed = parse_reference(args.reference.clone()).map_err(|e| e.to_string())?;
 
-    let ref_display = match ref_kind {
-        RefKind::Tag => resolved_ref.clone(),
-        RefKind::Branch => format!("latest commit on branch {resolved_ref}"),
-        RefKind::Commit => {
-            let short: String = resolved_ref.chars().take(6).collect();
-            format!("commit {short}")
+    let (resolved_ref, ref_display, skip_first) = match parsed {
+        Reference::Tag(s) => {
+            let display = s.clone();
+            (s, display, true)
         }
+        Reference::Branch(s) => {
+            let display = format!("latest commit on branch {s}");
+            (s, display, false)
+        }
+        Reference::Commit(s) => {
+            let short: String = s.chars().take(6).collect();
+            let display = format!("commit {short}");
+            (s, display, false)
+        }
+        Reference::Head => ("HEAD".to_string(), "HEAD".to_string(), false),
     };
 
     let title = if args.n == 0 {
@@ -114,8 +121,6 @@ pub(crate) fn run_versions(args: &VersionsArgs) -> Result<(), String> {
     } else {
         format!("Last {} versions before {ref_display}", args.n)
     };
-
-    let skip_first = matches!(ref_kind, RefKind::Tag);
 
     // Resolve the token: prefer explicit --token / GITHUB_TOKEN, then fall back to gh CLI.
     let token: Option<String> = if args.validate_releases {

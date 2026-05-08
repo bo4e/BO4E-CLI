@@ -1,4 +1,4 @@
-use crate::models::git::{RefKind, Reference};
+use crate::models::git::Reference;
 use crate::models::version::Version;
 use crate::repo::filter::{FilterOptions, filter_tags};
 use std::io;
@@ -112,16 +112,21 @@ pub fn get_commit_date(commit: &str) -> io::Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-#[allow(dead_code)]
-fn parse_reference(value: String) -> io::Result<Reference> {
-    if is_version_tag(&value)? {
+/// Classify a user-supplied ref string as the literal `HEAD`, a tag, a branch, or a commit.
+///
+/// Precedence (when a value matches multiple): "HEAD" literal → tag → branch → commit.
+/// A value that matches none of those is rejected with `InvalidInput`. The "HEAD"
+/// check runs first because `git branch --contains HEAD` succeeds and would otherwise
+/// classify it as a commit.
+pub fn parse_reference(value: String) -> io::Result<Reference> {
+    if value == "HEAD" {
+        Ok(Reference::Head)
+    } else if is_version_tag(&value)? {
         Ok(Reference::Tag(value))
     } else if is_branch(&value)? {
         Ok(Reference::Branch(value))
     } else if is_commit_hash(&value)? {
         Ok(Reference::Commit(value))
-    } else if value == "HEAD" {
-        Ok(Reference::Head)
     } else {
         Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -186,30 +191,6 @@ pub fn tags_merged(reference: &str) -> io::Result<Vec<String>> {
         .collect())
 }
 
-/// Classify a user-supplied ref string as a tag, branch, or commit, and resolve it.
-///
-/// Precedence (when a value matches multiple): tag → branch → commit. If the value
-/// resolves to none of these, falls back to the current HEAD's SHA and emits an
-/// info message via `cprint_normal!`.
-///
-/// For `RefKind::Commit`, the returned string is always a concrete 40-char SHA —
-/// shorthand like `HEAD` or `HEAD~3` is resolved via `git rev-parse`.
-pub fn get_ref(value: &str) -> io::Result<(RefKind, String)> {
-    if is_version_tag(value)? {
-        return Ok((RefKind::Tag, value.to_string()));
-    }
-    if is_branch(value)? {
-        return Ok((RefKind::Branch, value.to_string()));
-    }
-    if is_commit_hash(value)? {
-        return Ok((RefKind::Commit, get_commit_sha(value)?));
-    }
-    let cur = get_commit_sha("HEAD")?;
-    let short: String = cur.chars().take(7).collect();
-    crate::cprint_normal!("'{value}' is not a tag, branch, or commit; falling back to HEAD ({short}).");
-    Ok((RefKind::Commit, cur))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,31 +242,26 @@ mod tests {
     }
 
     #[test]
-    fn test_get_ref_classifies_tag_branch_and_falls_back_to_head() {
+    fn test_parse_reference_classifies_tag_branch_head_and_rejects_unknown() {
         let (_dir, _guard) = make_git_repo();
 
-        // Existing console for the fallback's info message.
-        use crate::console::console::{Console, Level, CONSOLE};
-        let _ = CONSOLE.set(Console::new(Level::Quiet));
+        match parse_reference("v202401.0.1".to_string()).unwrap() {
+            Reference::Tag(s) => assert_eq!(s, "v202401.0.1"),
+            other => panic!("expected Tag, got {other:?}"),
+        }
 
-        let (kind, value) = get_ref("v202401.0.1").unwrap();
-        assert_eq!(kind, crate::models::git::RefKind::Tag);
-        assert_eq!(value, "v202401.0.1");
+        match parse_reference("main".to_string()).unwrap() {
+            Reference::Branch(s) => assert_eq!(s, "main"),
+            other => panic!("expected Branch, got {other:?}"),
+        }
 
-        let (kind, value) = get_ref("main").unwrap();
-        assert_eq!(kind, crate::models::git::RefKind::Branch);
-        assert_eq!(value, "main");
+        match parse_reference("HEAD".to_string()).unwrap() {
+            Reference::Head => {}
+            other => panic!("expected Head, got {other:?}"),
+        }
 
-        // Unknown value → fallback to HEAD's commit SHA.
-        let (kind, value) = get_ref("definitely-not-a-ref").unwrap();
-        assert_eq!(kind, crate::models::git::RefKind::Commit);
-        assert_eq!(value.len(), 40); // full SHA from `git rev-parse HEAD`
-
-        // "HEAD" should resolve to a concrete SHA, not pass through as a literal.
-        let (kind, value) = get_ref("HEAD").unwrap();
-        assert_eq!(kind, crate::models::git::RefKind::Commit);
-        assert_eq!(value.len(), 40);
-        assert!(value.chars().all(|c| c.is_ascii_hexdigit()));
+        let err = parse_reference("definitely-not-a-ref".to_string()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     }
 
     #[test]
