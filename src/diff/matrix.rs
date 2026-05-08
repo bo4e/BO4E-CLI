@@ -196,8 +196,7 @@ fn determine_compatibility(
         "ClassAdded/ClassRemoved must be the sole change in filtered list",
     );
 
-    let owned: Vec<Change> = filtered.iter().map(|c| (*c).clone()).collect();
-    if has_critical(&owned) {
+    if has_critical(filtered.iter().copied()) {
         wrap_symbol(use_emotes, Sym::ChangeCritical)
     } else {
         wrap_symbol(use_emotes, Sym::ChangeNonCritical)
