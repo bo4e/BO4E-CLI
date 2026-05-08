@@ -1,4 +1,4 @@
-use crate::models::git::Reference;
+use crate::models::git::{RefKind, Reference};
 use std::io;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -26,16 +26,22 @@ pub fn clone_repo(repo_url: &str, branch_or_tag: &str, dest: &Path) -> io::Resul
     check_success(&output, "Failed to clone repository.")
 }
 
-#[allow(dead_code)]
-fn is_version_tag(value: &str) -> io::Result<bool> {
+pub fn is_version_tag(value: &str) -> io::Result<bool> {
     Command::new("git")
         .args(["show-ref", "--quiet", &format!("refs/tags/{value}")])
         .status()
         .map(|exit_status| exit_status.success())
 }
 
-#[allow(dead_code)]
-fn is_branch(value: &str) -> io::Result<bool> {
+pub fn is_branch(value: &str) -> io::Result<bool> {
+    // Check local branches first, then remote-tracking branches.
+    let local = Command::new("git")
+        .args(["show-ref", "--quiet", &format!("refs/heads/{value}")])
+        .status()
+        .map(|s| s.success())?;
+    if local {
+        return Ok(true);
+    }
     Command::new("git")
         .args([
             "show-ref",
@@ -46,8 +52,7 @@ fn is_branch(value: &str) -> io::Result<bool> {
         .map(|exit_status| exit_status.success())
 }
 
-#[allow(dead_code)]
-fn is_commit_hash(value: &str) -> io::Result<bool> {
+pub fn is_commit_hash(value: &str) -> io::Result<bool> {
     match get_branches_containing_commit(value) {
         Ok(_) => Ok(true),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
@@ -61,7 +66,14 @@ fn get_branches_containing_commit(commit: &str) -> io::Result<Vec<String>> {
         .args(["branch", "-a", "--contains", commit])
         .output()?;
 
-    check_success(&output, "Failed to get branches containing commit.")?;
+    // `git branch --contains` may print "error: …" to stderr and exit non-zero for
+    // unknown/malformed refs — treat these as "not a commit" rather than a hard error.
+    if !output.status.success() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "No branches found containing the specified commit.",
+        ));
+    }
     let output = String::from_utf8_lossy(&output.stdout);
     let output = output.trim();
     if output.starts_with("error: no such commit") {
@@ -76,8 +88,7 @@ fn get_branches_containing_commit(commit: &str) -> io::Result<Vec<String>> {
         .collect())
 }
 
-#[allow(dead_code)]
-fn get_commit_sha(branch_or_tag: &str) -> io::Result<String> {
+pub fn get_commit_sha(branch_or_tag: &str) -> io::Result<String> {
     let output = Command::new("git")
         .args(["rev-parse", branch_or_tag])
         .output()?;
@@ -168,6 +179,24 @@ pub fn tags_merged(reference: &str) -> io::Result<Vec<String>> {
         .collect())
 }
 
+pub fn get_ref(value: &str) -> io::Result<(RefKind, String)> {
+    if is_version_tag(value)? {
+        return Ok((RefKind::Tag, value.to_string()));
+    }
+    if is_branch(value)? {
+        return Ok((RefKind::Branch, value.to_string()));
+    }
+    if is_commit_hash(value)? {
+        return Ok((RefKind::Commit, value.to_string()));
+    }
+    if value == "HEAD" {
+        return Ok((RefKind::Commit, get_commit_sha("HEAD")?));
+    }
+    let cur = get_commit_sha("HEAD")?;
+    crate::cprint_normal!("'{value}' is not a tag, branch, or commit; falling back to HEAD ({cur}).");
+    Ok((RefKind::Commit, cur))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,5 +249,27 @@ mod tests {
         assert!(tags.contains(&"v202401.0.2".to_string()));
         assert!(tags.contains(&"v202401.0.1".to_string()));
         assert!(tags.contains(&"not-a-version".to_string()));
+    }
+
+    #[test]
+    fn test_get_ref_classifies_tag_branch_and_falls_back_to_head() {
+        let (_dir, _guard) = make_git_repo();
+
+        // Existing console for the fallback's info message.
+        use crate::console::console::{Console, Level, CONSOLE};
+        let _ = CONSOLE.set(Console::new(Level::Quiet));
+
+        let (kind, value) = get_ref("v202401.0.1").unwrap();
+        assert_eq!(kind, crate::models::git::RefKind::Tag);
+        assert_eq!(value, "v202401.0.1");
+
+        let (kind, value) = get_ref("main").unwrap();
+        assert_eq!(kind, crate::models::git::RefKind::Branch);
+        assert_eq!(value, "main");
+
+        // Unknown value → fallback to HEAD's commit SHA.
+        let (kind, value) = get_ref("definitely-not-a-ref").unwrap();
+        assert_eq!(kind, crate::models::git::RefKind::Commit);
+        assert_eq!(value.len(), 40); // full SHA from `git rev-parse HEAD`
     }
 }
