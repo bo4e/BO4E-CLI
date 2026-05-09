@@ -26,7 +26,7 @@
 use crate::error::Error;
 use crate::naming::{module_file_name, to_snake_case};
 use crate::python::imports::ImportBlock;
-use crate::python::types::{Import, literal_default, map_pydantic};
+use crate::python::types::{Import, literal_default, map_pydantic, schema_base};
 use bo4e_schemas::Schemas;
 use bo4e_schemas::models::json_schema::SchemaRootType;
 use minijinja::{Environment, context};
@@ -150,7 +150,7 @@ fn render_enum(
     let fields: Vec<EnumMember> = members
         .iter()
         .map(|v| EnumMember {
-            name: v.clone(),
+            name: sanitize_enum_member_name(v),
             default: format!("\"{v}\""),
             docstring: None,
         })
@@ -165,7 +165,50 @@ fn render_enum(
         fields => fields,
     })?;
 
-    Ok(stitch(&imports, 1, &rendered))
+    Ok(stitch(class_name, &imports, 1, &rendered))
+}
+
+#[cfg(test)]
+mod sanitize_tests {
+    use super::{python_attr_name, sanitize_enum_member_name};
+
+    #[test]
+    fn keeps_valid_identifiers() {
+        assert_eq!(sanitize_enum_member_name("STROM"), "STROM");
+        assert_eq!(sanitize_enum_member_name("Z85_REALER"), "Z85_REALER");
+    }
+
+    #[test]
+    fn replaces_hyphens_and_prefixes_digit_starts() {
+        assert_eq!(sanitize_enum_member_name("2-01-7-001"), "_2_01_7_001");
+    }
+
+    #[test]
+    fn replaces_parens() {
+        assert_eq!(
+            sanitize_enum_member_name("Z88_VERGLEICHSMESSUNG(GEEICHT)"),
+            "Z88_VERGLEICHSMESSUNG_GEEICHT_"
+        );
+    }
+
+    #[test]
+    fn python_attr_name_strips_underscore_prefix() {
+        assert_eq!(python_attr_name("_typ"), "typ");
+        assert_eq!(python_attr_name("_version"), "version");
+    }
+
+    #[test]
+    fn python_attr_name_appends_underscore_on_builtin_clash() {
+        assert_eq!(python_attr_name("_id"), "id_");
+        assert_eq!(python_attr_name("_type"), "type_");
+        assert_eq!(python_attr_name("_class"), "class_");
+    }
+
+    #[test]
+    fn python_attr_name_unchanged_when_no_underscore_prefix() {
+        assert_eq!(python_attr_name("angebotsdatum"), "angebotsdatum");
+        assert_eq!(python_attr_name("anfragereferenz"), "anfragereferenz");
+    }
 }
 
 fn render_object(
@@ -175,12 +218,23 @@ fn render_object(
     depth: usize,
 ) -> Result<String, Error> {
     let mut imports = ImportBlock::new();
-    imports.extend([Import::Named {
-        module: "pydantic".into(),
-        name: "BaseModel".into(),
-    }]);
+    imports.extend([
+        Import::Named {
+            module: "pydantic".into(),
+            name: "BaseModel".into(),
+        },
+        Import::Named {
+            module: "pydantic".into(),
+            name: "ConfigDict".into(),
+        },
+        Import::Named {
+            module: "pydantic.alias_generators".into(),
+            name: "to_camel".into(),
+        },
+    ]);
 
     let mut fields: Vec<PydanticField> = Vec::new();
+    let mut needs_field_import = false;
     let required: BTreeSet<&str> = obj.required.iter().map(|s| s.as_str()).collect();
 
     for (prop_name, prop_schema) in &obj.properties {
@@ -191,14 +245,19 @@ fn render_object(
 
         // pydantic dialect: optional fields render as `T | None` only when the
         // mapper hasn't already produced that union (e.g. via anyOf with null).
-        let type_str = if is_required || mapped.rendered.contains("| None") {
+        // `Any` already covers None, so don't widen it.
+        let type_str = if is_required || mapped.rendered == "Any" || mapped.rendered.contains("| None") {
             mapped.rendered.clone()
         } else {
             format!("{} | None", mapped.rendered)
         };
 
         let name_snake = to_snake_case(prop_name);
-        let needs_alias = name_snake != *prop_name;
+        let python_name = python_attr_name(&name_snake);
+        // Pydantic's to_camel alias generator handles snake↔camel automatically.
+        // We only need an explicit alias when the rename strips a leading underscore
+        // (or otherwise diverges from to_camel's roundtrip).
+        let needs_alias = python_name != *prop_name;
 
         // Choose the default expression. The schema may carry a JSON `default`;
         // otherwise optional fields default to None and required fields have no default.
@@ -211,57 +270,61 @@ fn render_object(
             Some("None".into())
         };
 
-        // Special-case: `version` on objects defaults to the imported `__version__`.
-        let (default_expr, is_version_field) = if prop_name == "version" {
-            (Some("__version__".to_string()), true)
+        // Special-case: `_version` carries the BO4E version of the schema; default it
+        // to the live module-level `__version__` constant so generated objects round-trip.
+        let is_version_field = prop_name == "_version";
+        let default_expr = if is_version_field {
+            Some("__version__".to_string())
         } else {
-            (default_expr, false)
+            default_expr
         };
 
         if is_version_field {
-            // Sibling import shape: `from ..__version__ import __version__`. The
-            // ImportBlock lowercases the *last* segment of `module`; since
-            // `__version__` is already lowercase the result is unchanged.
             imports.extend([Import::Sibling {
                 module: vec!["__version__".into()],
                 name: "__version__".into(),
             }]);
         }
 
-        // Build the rendered field expression.
-        let (field_expr, represented_default, strip_default_none) = if needs_alias {
-            // Alias requires a Field(...) call regardless of default presence.
-            imports.extend([Import::Named {
-                module: "pydantic".into(),
-                name: "Field".into(),
-            }]);
+        let docstring = schema_base(prop_schema)
+            .description
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let (field_expr, represented_default, required_flag) = if needs_alias {
+            needs_field_import = true;
             let inner = match &default_expr {
                 Some(d) => format!("default={d}, alias=\"{prop_name}\""),
                 None => format!("..., alias=\"{prop_name}\""),
             };
             (Some(format!("Field({inner})")), String::new(), false)
-        } else if is_version_field {
-            // No alias but we still want the `= __version__` literal default.
-            (None, "__version__".to_string(), false)
         } else {
-            // Plain `name: type = default` (or no default for required). We keep
-            // `strip_default_none=false` so optional fields render as `= None`
-            // — matching the Python BO4E generator's parity contract.
             let rep = default_expr.clone().unwrap_or_default();
-            (None, rep, false)
+            (None, rep, is_required && !is_version_field)
         };
 
         fields.push(PydanticField {
-            name: name_snake,
+            name: python_name,
             type_hint: type_str,
             field: field_expr,
             annotated: None,
-            required: is_required && !needs_alias && !is_version_field,
+            required: required_flag,
             represented_default,
-            strip_default_none,
-            docstring: None,
+            strip_default_none: false,
+            docstring,
         });
     }
+
+    if needs_field_import {
+        imports.extend([Import::Named {
+            module: "pydantic".into(),
+            name: "Field".into(),
+        }]);
+    }
+
+    let model_config = "model_config = ConfigDict(alias_generator=to_camel, \
+                        populate_by_name=True, use_attribute_docstrings=True)";
 
     let tpl = env.get_template("python/pydantic/BaseModel.jinja2")?;
     let rendered = tpl.render(context! {
@@ -271,20 +334,71 @@ fn render_object(
         description => obj.base.description.clone(),
         fields => fields,
         methods => Vec::<String>::new(),
+        model_config => model_config,
         config => None::<String>,
         SQL => None::<String>,
     })?;
 
-    Ok(stitch(&imports, depth, &rendered))
+    Ok(stitch(class_name, &imports, depth, &rendered))
 }
 
-/// Prepend a rendered import block (if non-empty) to a template body.
-fn stitch(imports: &ImportBlock, depth: usize, body: &str) -> String {
+/// Python keywords + common builtins whose names a model attribute must not shadow.
+/// Used by [`python_attr_name`] when stripping a leading underscore exposes a clash
+/// (e.g. JSON `_id` → would-be Python `id`, which shadows the `id()` builtin).
+const PYTHON_RESERVED: &[&str] = &[
+    // keywords
+    "False", "None", "True", "and", "as", "assert", "async", "await", "break",
+    "class", "continue", "def", "del", "elif", "else", "except", "finally",
+    "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
+    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield",
+    // builtin shadows we care about
+    "id", "type", "list", "dict", "set", "tuple", "str", "int", "float",
+    "bool", "bytes", "object", "input", "print", "open", "range", "iter",
+    "next", "len", "min", "max", "sum", "any", "all", "map", "filter",
+];
+
+/// Translate a snake-case JSON property name into a valid Pydantic model attribute.
+///
+/// Pydantic v2 forbids leading-underscore field names. BO4E uses `_id`, `_typ`,
+/// `_version` for discriminator/identity slots; we strip the leading `_` and append
+/// a trailing `_` if that exposes a Python keyword/builtin clash.
+///
+/// The caller is responsible for emitting an explicit `Field(alias=...)` whenever
+/// the returned name differs from the original JSON name.
+fn python_attr_name(snake: &str) -> String {
+    let stripped = snake.strip_prefix('_').unwrap_or(snake);
+    if PYTHON_RESERVED.contains(&stripped) {
+        format!("{stripped}_")
+    } else {
+        stripped.to_string()
+    }
+}
+
+/// Make a BO4E enum member name a valid Python identifier.
+///
+/// BO4E enum values include shapes like `"2-01-7-001"` (digit-leading, hyphenated)
+/// and `"Z88_VERGLEICHSMESSUNG(GEEICHT)"` (parens). Replace any non-`[A-Za-z0-9_]`
+/// character with `_`, then prefix `_` if the result starts with a digit.
+fn sanitize_enum_member_name(raw: &str) -> String {
+    let cleaned: String = raw
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .collect();
+    if cleaned.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("_{cleaned}")
+    } else {
+        cleaned
+    }
+}
+
+/// Prepend module docstring + rendered import block to a template body.
+fn stitch(class_name: &str, imports: &ImportBlock, depth: usize, body: &str) -> String {
+    let docstring = format!("\"\"\"Contains class {class_name}.\"\"\"\n");
     let imports_text = imports.render(depth);
     let body_trimmed = body.trim_start_matches('\n');
     if imports_text.is_empty() {
-        body_trimmed.to_string()
+        format!("{docstring}\n{body_trimmed}")
     } else {
-        format!("{imports_text}\n\n{body_trimmed}")
+        format!("{docstring}\n{imports_text}\n\n{body_trimmed}")
     }
 }

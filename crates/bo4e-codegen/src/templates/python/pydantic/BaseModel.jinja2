@@ -19,8 +19,12 @@ class {{ class_name }}({% if base_class %}{{ base_class }}{% endif %}{% if SQL %
     {{ description | indent(4) }}
     """
 {%- endif %}
-{%- if not fields and not description %}
+{%- if not fields and not description and not model_config %}
     pass
+{%- endif %}
+{%- if model_config %}
+
+    {{ model_config }}
 {%- endif %}
 {%- if config %}
 {%- filter indent(4) %}

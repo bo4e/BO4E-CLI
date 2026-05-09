@@ -35,20 +35,29 @@ impl Executable for Generate {
             crate::cwarn!("{w}");
         }
 
-        let _spin = crate::console::spinner::squish(format!(
-            "Generating {:?} output",
-            self.output_type
-        ));
+        let written = {
+            let _spin = crate::console::spinner::squish(format!(
+                "Generating {:?} output",
+                self.output_type
+            ));
 
-        bo4e_codegen::generate(
-            &out.schemas,
-            self.output_type,
-            &self.output,
-            &bo4e_codegen::Options {
-                clear_output: self.clear_output,
-                templates_dir: self.templates_dir.as_deref(),
-            },
-        )
-        .map_err(|e| e.to_string())
+            bo4e_codegen::generate(
+                &out.schemas,
+                self.output_type,
+                &self.output,
+                &bo4e_codegen::Options {
+                    clear_output: self.clear_output,
+                    templates_dir: self.templates_dir.as_deref(),
+                },
+            )
+            .map_err(|e| e.to_string())?
+        };
+
+        crate::cprint_normal!(
+            "Wrote {} files to {}",
+            written.len(),
+            self.output.display()
+        );
+        Ok(())
     }
 }

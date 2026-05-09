@@ -104,10 +104,13 @@ fn pydantic_renders_richer_sql_fixture_without_error() {
 
     let angebot = std::fs::read_to_string(tmp.path().join("bo/angebot.py")).unwrap();
     // The pydantic flavour renders M:N as list[Adresse] | None (no junction concept);
-    // Any as Any | None; list[Decimal] as list[Decimal] | None.
+    // Any subsumes None so it stays bare; list[Decimal] as list[Decimal] | None.
     assert!(angebot.contains("class Angebot(BaseModel):"), "got:\n{angebot}");
     assert!(angebot.contains("adressen: list[Adresse]"), "got:\n{angebot}");
-    assert!(angebot.contains("extras: Any | None"), "got:\n{angebot}");
+    assert!(
+        angebot.contains("extras: Any") && !angebot.contains("Any | None"),
+        "got:\n{angebot}"
+    );
     assert!(angebot.contains("werte: list[Decimal]"), "got:\n{angebot}");
     assert!(!angebot.contains("__future__"));
     assert!(!angebot.contains("table=True"), "pydantic flavour must not emit table=True");

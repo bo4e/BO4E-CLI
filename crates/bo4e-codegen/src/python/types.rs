@@ -192,6 +192,12 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
                 all_imports.extend(m.imports.iter().cloned());
             }
 
+            // `Any` subsumes every other type (including None), so a union containing
+            // `Any` collapses to just `Any`.
+            if mapped.iter().any(|m| m.rendered == "Any") {
+                return MappedType { rendered: "Any".into(), imports: all_imports };
+            }
+
             let inner_rendered: Vec<&str> = mapped.iter().map(|m| m.rendered.as_str()).collect();
             let type_str = inner_rendered.join(" | ");
 
@@ -458,5 +464,41 @@ mod tests {
             module: "typing".into(),
             name: "Any".into(),
         }));
+    }
+
+    #[test]
+    fn map_anyof_any_with_null_collapses_to_any() {
+        // `anyOf: [Any, null]` → `Any` (not `Any | None`, since Any subsumes None).
+        let schema = SchemaType::AnyOf(AnyOfSchema {
+            base: TypeBase::default(),
+            any_of: vec![
+                SchemaType::AnySchema(AnySchema::default()),
+                SchemaType::NullSchema(NullSchema::default()),
+            ],
+        });
+        let result = map_pydantic(&schema);
+        assert_eq!(result.rendered, "Any");
+        assert!(result.imports.contains(&Import::Named {
+            module: "typing".into(),
+            name: "Any".into(),
+        }));
+    }
+
+    #[test]
+    fn map_anyof_str_and_any_collapses_to_any() {
+        // `anyOf: [str, Any]` → `Any` (Any swallows the rest).
+        let schema = SchemaType::AnyOf(AnyOfSchema {
+            base: TypeBase::default(),
+            any_of: vec![
+                SchemaType::StringSchema(StringSchema {
+                    base: TypeBase::default(),
+                    r#type: LiteralTypeString::String,
+                    format: None,
+                }),
+                SchemaType::AnySchema(AnySchema::default()),
+            ],
+        });
+        let result = map_pydantic(&schema);
+        assert_eq!(result.rendered, "Any");
     }
 }

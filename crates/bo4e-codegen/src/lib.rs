@@ -33,7 +33,7 @@ pub fn generate(
     output_type: OutputType,
     output_dir: &Path,
     options: &Options,
-) -> Result<(), Error> {
+) -> Result<Vec<std::path::PathBuf>, Error> {
     if options.clear_output {
         clear_dir_if_exists(output_dir)?;
     } else {
@@ -47,13 +47,11 @@ pub fn generate(
     match output_type {
         #[cfg(feature = "python-pydantic")]
         OutputType::PythonPydantic => {
-            python::pydantic::generate_pydantic(schemas, output_dir, &env)?;
-            Ok(())
+            python::pydantic::generate_pydantic(schemas, output_dir, &env)
         }
         #[cfg(feature = "python-sql-model")]
         OutputType::PythonSqlModel => {
-            python::sql_model::generate_sql_model(schemas, output_dir, &env)?;
-            Ok(())
+            python::sql_model::generate_sql_model(schemas, output_dir, &env)
         }
         // When all python features are compiled out, OutputType has no variants and
         // this match has no arms; the wildcard keeps the code well-formed.
