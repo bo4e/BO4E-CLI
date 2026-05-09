@@ -71,3 +71,67 @@ fn parse_every_schema() {
         panic!("{}", report);
     }
 }
+
+use bo4e_cli::cli::base::{Cli, Executable};
+use clap::Parser;
+
+fn ensure_console() {
+    use bo4e_cli::console::console::{CONSOLE, Console, Level};
+    let _ = CONSOLE.set(Console::new(Level::Normal));
+}
+
+fn drive_pipeline(generate_target: &str) {
+    let root = fixture_root();
+    require_fixture(&root);
+
+    ensure_console();
+
+    let workdir = tempfile::tempdir().unwrap();
+    let edited  = workdir.path().join("edited");
+    let diff_f  = workdir.path().join("diff.json");
+    let gen_out = workdir.path().join("generated");
+
+    // edit
+    Cli::try_parse_from([
+        "bo4e", "edit", "-i", root.to_str().unwrap(),
+        "-o", edited.to_str().unwrap(),
+    ])
+    .unwrap()
+    .run()
+    .expect("edit");
+
+    // diff (compare edited against itself — empty diff, exercises the read+write paths)
+    Cli::try_parse_from([
+        "bo4e", "diff", "schemas",
+        edited.to_str().unwrap(),
+        edited.to_str().unwrap(),
+        "-o", diff_f.to_str().unwrap(),
+    ])
+    .unwrap()
+    .run()
+    .expect("diff");
+
+    // generate
+    Cli::try_parse_from([
+        "bo4e", "generate", "-i", edited.to_str().unwrap(),
+        "-o", gen_out.to_str().unwrap(),
+        "-t", generate_target,
+    ])
+    .unwrap()
+    .run()
+    .expect("generate");
+
+    assert!(gen_out.exists(), "generate produced no output");
+}
+
+#[test]
+#[ignore = "requires .tmp/bo4e_latest; run scripts/fetch-bo4e-fixture.sh first"]
+fn pull_to_edit_to_diff_to_generate_pydantic() {
+    drive_pipeline("python-pydantic");
+}
+
+#[test]
+#[ignore = "requires .tmp/bo4e_latest; run scripts/fetch-bo4e-fixture.sh first"]
+fn pull_to_edit_to_diff_to_generate_sql_model() {
+    drive_pipeline("python-sql-model");
+}
