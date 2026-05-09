@@ -38,15 +38,26 @@ pub struct SchemaRootTypeBase {
     pub defs: BTreeMap<String, SchemaClassType>,
 }
 
+/// Default value for JSON-Schema `additionalProperties`, which is `true`
+/// when the keyword is omitted (per the JSON-Schema specification).
+fn default_additional_properties() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ObjectSchema {
     #[serde(flatten)]
     pub base: TypeBase,
     pub r#type: LiteralTypeObject,
 
-    #[serde(rename = "additionalProperties")]
+    #[serde(
+        rename = "additionalProperties",
+        default = "default_additional_properties"
+    )]
     pub additional_properties: bool,
+    #[serde(default)]
     pub properties: BTreeMap<String, SchemaType>,
+    #[serde(default)]
     pub required: Vec<String>,
 }
 
@@ -508,6 +519,44 @@ mod tests {
         let json = serde_json::to_string(&base).unwrap();
         let back: TypeBase = serde_json::from_str(&json).unwrap();
         assert_eq!(back.default, base.default);
+    }
+
+    #[test]
+    fn parses_object_schema_without_required() {
+        let raw = r#"{"type":"object","properties":{},"additionalProperties":true}"#;
+        let parsed: SchemaRootType = serde_json::from_str(raw).unwrap();
+        let SchemaRootType::Object(root) = parsed else {
+            panic!("expected SchemaRootType::Object");
+        };
+        assert!(root.object.required.is_empty());
+    }
+
+    #[test]
+    fn parses_object_schema_without_required_or_additional_properties() {
+        let raw = r#"{"type":"object","properties":{}}"#;
+        let parsed: SchemaRootType = serde_json::from_str(raw).unwrap();
+        let SchemaRootType::Object(root) = parsed else {
+            panic!("expected SchemaRootType::Object");
+        };
+        // JSON-Schema spec: additionalProperties defaults to true when omitted.
+        assert!(
+            root.object.additional_properties,
+            "additionalProperties default must be true per JSON-Schema spec"
+        );
+        assert!(root.object.required.is_empty());
+    }
+
+    #[test]
+    fn parses_object_schema_without_properties() {
+        // Neither `properties` nor `required` nor `additionalProperties` set.
+        let raw = r#"{"type":"object"}"#;
+        let parsed: SchemaRootType = serde_json::from_str(raw).unwrap();
+        let SchemaRootType::Object(root) = parsed else {
+            panic!("expected SchemaRootType::Object");
+        };
+        assert!(root.object.properties.is_empty());
+        assert!(root.object.required.is_empty());
+        assert!(root.object.additional_properties);
     }
 
     #[test]
