@@ -6,6 +6,10 @@ authors = ["Leon Haffmans <leon.haffmans@hochfrequenz.de>"]
 license = "MIT"
 edition = "2024"
 
+[lib]
+name = "bo4e_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "bo4e"
 path = "src/main.rs"
