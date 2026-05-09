@@ -50,7 +50,7 @@
     "werte": {
       "type": "array",
       "items": {
-        "type": "number",
+        "type": "string",
         "format": "decimal"
       }
     },

@@ -133,7 +133,7 @@ pub(crate) struct JunctionTable {
 /// Filled in across Tasks 6 and 7.
 pub(crate) fn build_plan(schemas: &Schemas) -> SqlPlan {
     let mut tables: BTreeMap<Vec<String>, TablePlan> = BTreeMap::new();
-    let junctions: Vec<JunctionTable> = Vec::new();
+    let mut junction_buf: Vec<JunctionTable> = Vec::new();
 
     for schema_rc in schemas {
         let mut schema = schema_rc.borrow_mut();
@@ -142,40 +142,54 @@ pub(crate) fn build_plan(schemas: &Schemas) -> SqlPlan {
         let parsed = schema.schema().expect("schema parsed").clone();
         drop(schema);
 
-        let table = match &parsed {
-            SchemaRootType::StrEnum(e) => TablePlan {
-                module: module.clone(),
-                class_name: class_name.clone(),
-                is_enum: true,
-                description: e.str_enum.base.description.clone(),
-                enum_members: e.str_enum.enum_values.clone(),
-                sql_fields: Vec::new(),
-            },
+        match &parsed {
+            SchemaRootType::StrEnum(e) => {
+                tables.insert(module.clone(), TablePlan {
+                    module: module.clone(),
+                    class_name: class_name.clone(),
+                    is_enum: true,
+                    description: e.str_enum.base.description.clone(),
+                    enum_members: e.str_enum.enum_values.clone(),
+                    sql_fields: Vec::new(),
+                });
+            }
             SchemaRootType::Object(o) => {
                 let id_field = synth_id_field(&o.object);
                 let mut fields = vec![id_field];
+                let mut local_junctions: Vec<JunctionTable> = Vec::new();
                 for (prop_name, prop_schema) in o.object.properties.iter() {
                     if prop_name == "_id" {
                         continue;
                     }
-                    if let Some(field) = simple_scalar_field(prop_name, prop_schema) {
-                        fields.push(field);
+                    if is_simple_scalar(prop_schema) {
+                        if let Some(field) = simple_scalar_field(prop_name, prop_schema) {
+                            fields.push(field);
+                        }
+                        continue;
                     }
+                    classify_property(
+                        &class_name,
+                        prop_name,
+                        prop_schema,
+                        schemas,
+                        &mut fields,
+                        &mut local_junctions,
+                    );
                 }
-                TablePlan {
+                tables.insert(module.clone(), TablePlan {
                     module: module.clone(),
                     class_name: class_name.clone(),
                     is_enum: false,
                     description: o.object.base.description.clone(),
                     enum_members: Vec::new(),
                     sql_fields: fields,
-                }
+                });
+                junction_buf.extend(local_junctions);
             }
-        };
-        tables.insert(module, table);
+        }
     }
 
-    SqlPlan { tables, junctions }
+    SqlPlan { tables, junctions: junction_buf }
 }
 
 fn synth_id_field(obj: &ObjectSchema) -> SqlField {
@@ -266,6 +280,286 @@ fn literal_description(schema: &SchemaType) -> Option<String> {
     schema_base(schema).description.clone()
 }
 
+/// Classify a non-simple-scalar JSON-Schema property and push the resulting
+/// `SqlField`(s) (and any `JunctionTable`) onto the buffers.
+fn classify_property(
+    owner_class: &str,
+    prop_name: &str,
+    schema: &SchemaType,
+    all_schemas: &Schemas,
+    fields: &mut Vec<SqlField>,
+    junctions: &mut Vec<JunctionTable>,
+) {
+    let snake = to_snake_case(prop_name);
+    let docstring = literal_description(schema);
+
+    if let SchemaType::ReferenceSchema(r) = schema {
+        if let Some(target) = ref_target_class(&r.r#ref) {
+            if is_enum_ref(&target, all_schemas) {
+                fields.push(SqlField::EnumColumn {
+                    name: snake,
+                    enum_class: target,
+                    is_list: false,
+                    nullable: false,
+                    default: None,
+                    title: literal_title(schema),
+                    docstring,
+                });
+            } else {
+                push_one_to_one(owner_class, &snake, &target, false, fields);
+            }
+            return;
+        }
+    }
+
+    if let SchemaType::Array(a) = schema {
+        match &*a.items {
+            SchemaType::ReferenceSchema(r) if ref_target_class(&r.r#ref).is_some() => {
+                let target = ref_target_class(&r.r#ref).unwrap();
+                if is_enum_ref(&target, all_schemas) {
+                    fields.push(SqlField::EnumColumn {
+                        name: snake,
+                        enum_class: target,
+                        is_list: true,
+                        nullable: false,
+                        default: None,
+                        title: literal_title(schema),
+                        docstring,
+                    });
+                } else {
+                    push_many_to_many(owner_class, &snake, &target, false, prop_name, fields, junctions);
+                }
+                return;
+            }
+            SchemaType::AnySchema(_) | SchemaType::ReferenceSchema(_) => {
+                // AnySchema or unresolvable ReferenceSchema (empty ref) → treat as Any array
+                fields.push(SqlField::AnyColumn { name: snake, is_array: true, nullable: false, docstring });
+                return;
+            }
+            inner if matches!(inner,
+                SchemaType::StringSchema(_) | SchemaType::IntegerSchema(_) | SchemaType::NumberSchema(_)
+                | SchemaType::BooleanSchema(_) | SchemaType::DecimalSchema(_)
+            ) => {
+                let (py_inner, sa_inner) = scalar_array_inners(inner);
+                fields.push(SqlField::ScalarArray {
+                    name: snake,
+                    py_inner,
+                    sa_inner,
+                    nullable: false,
+                    title: literal_title(schema),
+                    docstring,
+                });
+                return;
+            }
+            _ => {}
+        }
+    }
+
+    if let SchemaType::AnySchema(_) = schema {
+        fields.push(SqlField::AnyColumn { name: snake, is_array: false, nullable: false, docstring });
+        return;
+    }
+
+    if let SchemaType::AnyOf(a) = schema {
+        let nulls = a.any_of.iter().filter(|t| matches!(t, SchemaType::NullSchema(_))).count();
+        if nulls == 1 && a.any_of.len() == 2 {
+            let inner = a.any_of.iter().find(|t| !matches!(t, SchemaType::NullSchema(_))).unwrap();
+            classify_optional(owner_class, prop_name, &snake, inner, schema, all_schemas, fields, junctions);
+            return;
+        }
+    }
+    // Anything else falls through silently — out of scope per the spec.
+}
+
+fn classify_optional(
+    owner_class: &str,
+    prop_name: &str,
+    snake: &str,
+    inner: &SchemaType,
+    full_schema: &SchemaType,
+    all_schemas: &Schemas,
+    fields: &mut Vec<SqlField>,
+    junctions: &mut Vec<JunctionTable>,
+) {
+    let docstring = literal_description(full_schema);
+    let title = literal_title(full_schema);
+
+    match inner {
+        SchemaType::ReferenceSchema(r) => {
+            if let Some(target) = ref_target_class(&r.r#ref) {
+                if is_enum_ref(&target, all_schemas) {
+                    let default = literal_default(full_schema).and_then(|d| {
+                        if d == "None" {
+                            None
+                        } else {
+                            let trimmed = d.trim_matches('"').to_string();
+                            Some(format!("{target}.{trimmed}"))
+                        }
+                    });
+                    fields.push(SqlField::EnumColumn {
+                        name: snake.to_string(),
+                        enum_class: target,
+                        is_list: false,
+                        nullable: true,
+                        default,
+                        title,
+                        docstring,
+                    });
+                } else {
+                    push_one_to_one(owner_class, snake, &target, true, fields);
+                }
+            } else {
+                // Empty or unresolvable $ref — treat as Any (nullable)
+                fields.push(SqlField::AnyColumn { name: snake.to_string(), is_array: false, nullable: true, docstring });
+            }
+        }
+        SchemaType::Array(a) => match &*a.items {
+            SchemaType::ReferenceSchema(r) if ref_target_class(&r.r#ref).is_some() => {
+                let target = ref_target_class(&r.r#ref).unwrap();
+                if is_enum_ref(&target, all_schemas) {
+                    fields.push(SqlField::EnumColumn {
+                        name: snake.to_string(),
+                        enum_class: target,
+                        is_list: true,
+                        nullable: true,
+                        default: None,
+                        title,
+                        docstring,
+                    });
+                } else {
+                    push_many_to_many(owner_class, snake, &target, true, prop_name, fields, junctions);
+                }
+            }
+            SchemaType::AnySchema(_) | SchemaType::ReferenceSchema(_) => {
+                // AnySchema or unresolvable ReferenceSchema (empty ref) → treat as Any array
+                fields.push(SqlField::AnyColumn { name: snake.to_string(), is_array: true, nullable: true, docstring });
+            }
+            other if matches!(other,
+                SchemaType::StringSchema(_) | SchemaType::IntegerSchema(_) | SchemaType::NumberSchema(_)
+                | SchemaType::BooleanSchema(_) | SchemaType::DecimalSchema(_)
+            ) => {
+                let (py_inner, sa_inner) = scalar_array_inners(other);
+                fields.push(SqlField::ScalarArray {
+                    name: snake.to_string(),
+                    py_inner,
+                    sa_inner,
+                    nullable: true,
+                    title,
+                    docstring,
+                });
+            }
+            _ => {}
+        },
+        SchemaType::AnySchema(_) => {
+            fields.push(SqlField::AnyColumn { name: snake.to_string(), is_array: false, nullable: true, docstring });
+        }
+        _ => {}
+    }
+}
+
+fn push_one_to_one(
+    owner_class: &str,
+    snake: &str,
+    target_class: &str,
+    nullable: bool,
+    fields: &mut Vec<SqlField>,
+) {
+    let fk_name = format!("{snake}_id");
+    let target_table = target_class.to_ascii_lowercase();
+    fields.push(SqlField::ForeignKey {
+        name: fk_name.clone(),
+        target_class: target_class.to_string(),
+        target_table,
+        nullable,
+        ondelete: if nullable { Some("SET NULL".to_string()) } else { None },
+        docstring: Some(format!(
+            "The id to implement the relationship (field {snake} references {target_class})."
+        )),
+    });
+    fields.push(SqlField::Relationship {
+        name: snake.to_string(),
+        target_class: target_class.to_string(),
+        owner_class: owner_class.to_string(),
+        fk_field_name: fk_name,
+        nullable,
+        docstring: None,
+    });
+}
+
+fn push_many_to_many(
+    owner_class: &str,
+    snake: &str,
+    target_class: &str,
+    nullable: bool,
+    source_field: &str,
+    fields: &mut Vec<SqlField>,
+    junctions: &mut Vec<JunctionTable>,
+) {
+    let pascal_field = pascal_case(snake);
+    let link_class = format!("{owner_class}{pascal_field}Link");
+    fields.push(SqlField::ManyRelationship {
+        name: snake.to_string(),
+        target_class: target_class.to_string(),
+        link_class: link_class.clone(),
+        nullable,
+        docstring: None,
+    });
+    let owner_table = owner_class.to_ascii_lowercase();
+    let target_table = target_class.to_ascii_lowercase();
+    junctions.push(JunctionTable {
+        class_name: link_class,
+        owner_class: owner_class.to_string(),
+        owner_table: owner_table.clone(),
+        owner_id_field: format!("{owner_table}_id"),
+        target_class: target_class.to_string(),
+        target_table: target_table.clone(),
+        target_id_field: format!("{target_table}_id"),
+        source_field: source_field.to_string(),
+    });
+}
+
+fn scalar_array_inners(inner: &SchemaType) -> (String, &'static str) {
+    match inner {
+        SchemaType::StringSchema(_) => ("str".into(), "String"),
+        SchemaType::IntegerSchema(_) => ("int".into(), "Integer"),
+        SchemaType::NumberSchema(_) => ("float".into(), "Float"),
+        SchemaType::BooleanSchema(_) => ("bool".into(), "Boolean"),
+        SchemaType::DecimalSchema(_) => ("Decimal".into(), "Numeric"),
+        _ => unreachable!("scalar_array_inners called with non-scalar inner"),
+    }
+}
+
+fn ref_target_class(ref_str: &str) -> Option<String> {
+    let path = ref_str.split('#').next().unwrap_or(ref_str);
+    let last = path.rsplit('/').next()?;
+    last.strip_suffix(".json").map(|s| s.to_string())
+}
+
+fn is_enum_ref(target_class: &str, all_schemas: &Schemas) -> bool {
+    for schema_rc in all_schemas {
+        let mut s = schema_rc.borrow_mut();
+        if s.name() != target_class {
+            continue;
+        }
+        return matches!(s.schema(), Ok(SchemaRootType::StrEnum(_)));
+    }
+    false
+}
+
+fn pascal_case(snake: &str) -> String {
+    snake
+        .split('_')
+        .filter(|s| !s.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(c) => c.to_ascii_uppercase().to_string() + chars.as_str(),
+            }
+        })
+        .collect()
+}
+
 fn schema_base(schema: &SchemaType) -> &bo4e_schemas::models::json_schema::TypeBase {
     match schema {
         SchemaType::StringSchema(s) => &s.base,
@@ -352,5 +646,122 @@ mod tests {
         assert_eq!(nummer.0, "str | None");
         assert!(nummer.1);
         assert_eq!(nummer.2.as_deref(), Some("None"));
+    }
+
+    fn angebot_table(plan: &SqlPlan) -> &TablePlan {
+        plan.tables.get(&vec!["bo".to_string(), "Angebot".to_string()])
+            .expect("Angebot table present")
+    }
+
+    #[test]
+    fn one_to_one_reference_emits_fk_then_relationship() {
+        let plan = build_plan(&fixture_schemas());
+        let angebot = angebot_table(&plan);
+
+        let fk_idx = angebot.sql_fields.iter().position(|f| matches!(f,
+            SqlField::ForeignKey { name, .. } if name == "adresse_id"
+        )).expect("adresse_id FK present");
+        let rel_idx = angebot.sql_fields.iter().position(|f| matches!(f,
+            SqlField::Relationship { name, .. } if name == "adresse"
+        )).expect("adresse Relationship present");
+
+        assert_eq!(rel_idx, fk_idx + 1, "Relationship must follow FK directly");
+
+        match &angebot.sql_fields[fk_idx] {
+            SqlField::ForeignKey { target_class, target_table, nullable, ondelete, .. } => {
+                assert_eq!(target_class, "Adresse");
+                assert_eq!(target_table, "adresse");
+                assert!(*nullable);
+                assert_eq!(ondelete.as_deref(), Some("SET NULL"));
+            }
+            _ => unreachable!(),
+        }
+        match &angebot.sql_fields[rel_idx] {
+            SqlField::Relationship { target_class, owner_class, fk_field_name, nullable, .. } => {
+                assert_eq!(target_class, "Adresse");
+                assert_eq!(owner_class, "Angebot");
+                assert_eq!(fk_field_name, "adresse_id");
+                assert!(*nullable);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn many_reference_emits_many_relationship_and_junction() {
+        let plan = build_plan(&fixture_schemas());
+        let angebot = angebot_table(&plan);
+
+        let many = angebot.sql_fields.iter().find_map(|f| match f {
+            SqlField::ManyRelationship { name, target_class, link_class, nullable, .. }
+                if name == "adressen" => Some((target_class.clone(), link_class.clone(), *nullable)),
+            _ => None,
+        }).expect("adressen ManyRelationship present");
+        assert_eq!(many.0, "Adresse");
+        assert_eq!(many.1, "AngebotAdressenLink");
+        assert!(!many.2, "list[Reference] without Optional should not be nullable");
+
+        let junction = plan.junctions.iter().find(|j| j.class_name == "AngebotAdressenLink")
+            .expect("AngebotAdressenLink junction present");
+        assert_eq!(junction.owner_class, "Angebot");
+        assert_eq!(junction.owner_table, "angebot");
+        assert_eq!(junction.owner_id_field, "angebot_id");
+        assert_eq!(junction.target_class, "Adresse");
+        assert_eq!(junction.target_table, "adresse");
+        assert_eq!(junction.target_id_field, "adresse_id");
+        assert_eq!(junction.source_field, "adressen");
+    }
+
+    #[test]
+    fn enum_reference_with_default_emits_enum_column() {
+        let plan = build_plan(&fixture_schemas());
+        let angebot = angebot_table(&plan);
+        let typ = angebot.sql_fields.iter().find_map(|f| match f {
+            SqlField::EnumColumn { name, enum_class, is_list, nullable, default, .. }
+                if name == "_typ" => Some((enum_class.clone(), *is_list, *nullable, default.clone())),
+            _ => None,
+        }).expect("_typ EnumColumn present");
+        assert_eq!(typ.0, "Typ");
+        assert!(!typ.1);
+        assert!(typ.2);
+        assert_eq!(typ.3.as_deref(), Some("Typ.ANGEBOT"));
+    }
+
+    #[test]
+    fn scalar_array_of_decimal_emits_scalar_array() {
+        let plan = build_plan(&fixture_schemas());
+        let angebot = angebot_table(&plan);
+        let werte = angebot.sql_fields.iter().find_map(|f| match f {
+            SqlField::ScalarArray { name, py_inner, sa_inner, nullable, .. } if name == "werte" => {
+                Some((py_inner.clone(), *sa_inner, *nullable))
+            }
+            _ => None,
+        }).expect("werte ScalarArray present");
+        assert_eq!(werte.0, "Decimal");
+        assert_eq!(werte.1, "Numeric");
+        assert!(!werte.2);
+    }
+
+    #[test]
+    fn any_field_emits_any_column() {
+        let plan = build_plan(&fixture_schemas());
+        let angebot = angebot_table(&plan);
+        let extras = angebot.sql_fields.iter().find_map(|f| match f {
+            SqlField::AnyColumn { name, is_array, nullable, .. } if name == "extras" => {
+                Some((*is_array, *nullable))
+            }
+            _ => None,
+        }).expect("extras AnyColumn present");
+        assert!(!extras.0);
+        assert!(extras.1);
+
+        let anhaenge = angebot.sql_fields.iter().find_map(|f| match f {
+            SqlField::AnyColumn { name, is_array, nullable, .. } if name == "anhaenge" => {
+                Some((*is_array, *nullable))
+            }
+            _ => None,
+        }).expect("anhaenge AnyColumn present");
+        assert!(anhaenge.0);
+        assert!(!anhaenge.1);
     }
 }
