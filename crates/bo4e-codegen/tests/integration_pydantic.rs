@@ -87,3 +87,28 @@ fn ban_future_imports_globally() {
         );
     }
 }
+
+#[test]
+fn pydantic_renders_richer_sql_fixture_without_error() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/bo4e_sql_min");
+    let tmp = tempfile::tempdir().unwrap();
+    let out = bo4e_schemas::io::schemas::read_schemas(&fixture).expect("read_schemas");
+
+    bo4e_codegen::generate(
+        &out.schemas,
+        bo4e_codegen::OutputType::PythonPydantic,
+        tmp.path(),
+        &bo4e_codegen::Options { clear_output: true, templates_dir: None },
+    ).expect("generate");
+
+    let angebot = std::fs::read_to_string(tmp.path().join("bo/angebot.py")).unwrap();
+    // The pydantic flavour renders M:N as list[Adresse] | None (no junction concept);
+    // Any as Any | None; list[Decimal] as list[Decimal] | None.
+    assert!(angebot.contains("class Angebot(BaseModel):"), "got:\n{angebot}");
+    assert!(angebot.contains("adressen: list[Adresse]"), "got:\n{angebot}");
+    assert!(angebot.contains("extras: Any | None"), "got:\n{angebot}");
+    assert!(angebot.contains("werte: list[Decimal]"), "got:\n{angebot}");
+    assert!(!angebot.contains("__future__"));
+    assert!(!angebot.contains("table=True"), "pydantic flavour must not emit table=True");
+}

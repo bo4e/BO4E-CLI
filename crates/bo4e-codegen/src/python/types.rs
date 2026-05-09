@@ -192,10 +192,15 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
 
         // ── $ref ─────────────────────────────────────────────────────────────
         SchemaType::ReferenceSchema(r) => {
-            let (module, class_name) = parse_ref(&r.r#ref);
-            let mut imports = BTreeSet::new();
-            imports.insert(Import::Sibling { module, name: class_name.clone() });
-            MappedType { rendered: class_name, imports }
+            // Empty $ref (from deserializing bare `{}`) should map to Any, not an empty string.
+            if r.r#ref.is_empty() {
+                with_import("Any", "typing", "Any")
+            } else {
+                let (module, class_name) = parse_ref(&r.r#ref);
+                let mut imports = BTreeSet::new();
+                imports.insert(Import::Sibling { module, name: class_name.clone() });
+                MappedType { rendered: class_name, imports }
+            }
         }
 
         // ── Inline enum (string enum as a schema-type fragment) ──────────────
