@@ -186,6 +186,7 @@ pub async fn get_schemas_from_github(
         get_target_commitish_from_tag(&get_bo4e_schemas_repo_handler(&octocrab), version_tag)
             .await?;
 
+    // Scoped so the spinner drops before the download progress bar takes over.
     let schema_downloads = {
         let _spin = spinner::earth("Querying GitHub tree");
         _get_schemas_from_github_recursive(
