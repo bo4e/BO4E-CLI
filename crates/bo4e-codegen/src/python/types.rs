@@ -133,7 +133,7 @@ pub fn map_pydantic_v2(schema_type: &SchemaType) -> MappedType {
         SchemaType::NullSchema(_) => simple("None"),
 
         // ── Any ──────────────────────────────────────────────────────────────
-        SchemaType::AnySchema(_) => simple("Any"),
+        SchemaType::AnySchema(_) => with_import("Any", "typing", "Any"),
 
         // ── Array ────────────────────────────────────────────────────────────
         SchemaType::Array(a) => {
@@ -180,7 +180,7 @@ pub fn map_pydantic_v2(schema_type: &SchemaType) -> MappedType {
                 map_pydantic_v2(&a.all_of[0])
             } else {
                 // Multi-branch allOf is rare in BO4E; emit an intersection approximation.
-                let mapped: Vec<MappedType> = a.all_of.iter().map(|t| map_pydantic_v2(t)).collect();
+                let mapped: Vec<MappedType> = a.all_of.iter().map(map_pydantic_v2).collect();
                 let mut all_imports: BTreeSet<Import> = BTreeSet::new();
                 for m in &mapped {
                     all_imports.extend(m.imports.iter().cloned());
@@ -205,9 +205,10 @@ pub fn map_pydantic_v2(schema_type: &SchemaType) -> MappedType {
 
         // ── Inline object ────────────────────────────────────────────────────
         // Inline object definitions inside another schema are rare; map to Any.
-        SchemaType::Object(_) => simple("Any"),
+        SchemaType::Object(_) => with_import("Any", "typing", "Any"),
 
         // ── Constant ─────────────────────────────────────────────────────────
+        // TODO(generate plan task 8): render as Literal["<value>"] with typing.Literal import
         SchemaType::ConstantSchema(_) => simple("str"),
     }
 }
@@ -218,9 +219,9 @@ pub fn map_pydantic_v2(schema_type: &SchemaType) -> MappedType {
 mod tests {
     use super::*;
     use bo4e_schemas::models::json_schema::{
-        AnyOfSchema, ArraySchema, BooleanSchema, DecimalSchema, IntegerSchema, LiteralFormatDecimal,
-        LiteralTypeArray, LiteralTypeBoolean, LiteralTypeDecimal, LiteralTypeInteger, LiteralTypeNumber,
-        LiteralTypeString, NullSchema, NumberSchema, ReferenceSchema, StringSchema, StringSchemaFormat, TypeBase,
+        AnyOfSchema, AnySchema, ArraySchema, BooleanSchema, DecimalSchema, IntegerSchema, LiteralFormatDecimal,
+        LiteralTypeArray, LiteralTypeDecimal, LiteralTypeString, NullSchema, NumberSchema, ReferenceSchema,
+        StringSchema, StringSchemaFormat, TypeBase,
     };
 
     // ── Case 1: plain string ──────────────────────────────────────────────────
@@ -410,33 +411,13 @@ mod tests {
     }
 
     #[test]
-    fn map_integer_default_constructors() {
-        // Test that Default constructors work for LiteralType* types.
-        let schema = SchemaType::IntegerSchema(IntegerSchema {
-            base: TypeBase::default(),
-            r#type: LiteralTypeInteger::Integer,
-        });
-        let result = map_pydantic_v2(&schema);
-        assert_eq!(result.rendered, "int");
-    }
-
-    #[test]
-    fn map_number_default_constructors() {
-        let schema = SchemaType::NumberSchema(NumberSchema {
-            base: TypeBase::default(),
-            r#type: LiteralTypeNumber::Number,
-        });
-        let result = map_pydantic_v2(&schema);
-        assert_eq!(result.rendered, "float");
-    }
-
-    #[test]
-    fn map_boolean_default_constructors() {
-        let schema = SchemaType::BooleanSchema(BooleanSchema {
-            base: TypeBase::default(),
-            r#type: LiteralTypeBoolean::Boolean,
-        });
-        let result = map_pydantic_v2(&schema);
-        assert_eq!(result.rendered, "bool");
+    fn map_any_includes_typing_import() {
+        let result = map_pydantic_v2(&SchemaType::AnySchema(AnySchema::default()));
+        assert_eq!(result.rendered, "Any");
+        assert_eq!(result.imports.len(), 1);
+        assert!(result.imports.contains(&Import::Named {
+            module: "typing".into(),
+            name: "Any".into(),
+        }));
     }
 }
