@@ -2,6 +2,7 @@ use crate::console::progress_bar::{
     abandon_progress_bar_with_error, finish_progress_bar, new_progress_bar,
 };
 use crate::console::spinner;
+use crate::cprint_verbose;
 use bo4e_schemas::models::schema_meta::{Schema, Schemas};
 use bo4e_schemas::models::version::Version;
 use lazy_static::lazy_static;
@@ -63,13 +64,14 @@ async fn _get_schemas_from_github_recursive(
                         let file_content = get_bo4e_schemas_repo_handler(&octocrab)
                             .get_content()
                             .r#ref(target_commitish)
-                            .path(file_path)
+                            .path(file_path.clone())
                             .send()
                             .await
                             .map_err(|e| e.to_string())?
                             .items[0]
                             .decoded_content()
                             .ok_or("Failed to retrieve and decode file content".to_string())?;
+                        cprint_verbose!("Fetched schema {}", file_path);
                         let mut schema =
                             Schema::new(path_slice.split('/').map(String::from).collect(), None)?;
                         schema.load_schema(file_content);
@@ -172,6 +174,11 @@ async fn get_target_commitish_from_tag(
         .get_by_tag(&version_tag.to_string())
         .await
         .map_err(|e| e.to_string())?;
+    cprint_verbose!(
+        "Resolved tag {} → commitish {}",
+        version_tag,
+        reference.target_commitish
+    );
     Ok(reference.target_commitish)
 }
 
