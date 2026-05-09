@@ -25,6 +25,11 @@ impl ImportBlock {
     }
 
     pub fn render(&self, module_path_depth: usize) -> String {
+        debug_assert!(
+            module_path_depth >= 1,
+            "module_path_depth must be >= 1 (root-level module is depth 1)"
+        );
+
         use std::collections::BTreeMap;
 
         let mut stdlib: BTreeMap<&String, BTreeSet<&String>> = BTreeMap::new();
@@ -54,12 +59,16 @@ impl ImportBlock {
                     bucket.entry(module).or_default().insert(name);
                 }
                 Import::Sibling { module, name } => {
+                    let Some((last, head)) = module.split_last() else {
+                        // Empty sibling module path — skip silently rather than panic.
+                        // (BO4E inputs don't produce this, but we don't want to panic on the type.)
+                        continue;
+                    };
                     let dots: String = ".".repeat(module_path_depth);
-                    let last_idx = module.len() - 1;
-                    let dotted: String = module[..last_idx]
+                    let dotted: String = head
                         .iter()
-                        .chain(std::iter::once(&module[last_idx].to_ascii_lowercase()))
                         .cloned()
+                        .chain(std::iter::once(last.to_ascii_lowercase()))
                         .collect::<Vec<_>>()
                         .join(".");
                     let key = format!("{dots}{dotted}");
@@ -68,14 +77,13 @@ impl ImportBlock {
             }
         }
 
-        fn fmt_block(block: &BTreeMap<&String, BTreeSet<&String>>) -> String {
+        fn fmt<K: std::fmt::Display>(block: &BTreeMap<K, BTreeSet<&String>>) -> String {
             block
                 .iter()
                 .map(|(module, names)| {
                     let names_csv = names
                         .iter()
-                        .cloned()
-                        .cloned()
+                        .map(|s| s.as_str())
                         .collect::<Vec<_>>()
                         .join(", ");
                     format!("from {module} import {names_csv}")
@@ -84,31 +92,11 @@ impl ImportBlock {
                 .join("\n")
         }
 
-        fn fmt_relative(block: &BTreeMap<String, BTreeSet<&String>>) -> String {
-            block
-                .iter()
-                .map(|(module, names)| {
-                    let names_csv = names
-                        .iter()
-                        .cloned()
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    format!("from {module} import {names_csv}")
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
-        }
-
-        [
-            fmt_block(&stdlib),
-            fmt_block(&third_party),
-            fmt_relative(&relative),
-        ]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n")
+        [fmt(&stdlib), fmt(&third_party), fmt(&relative)]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 }
 
@@ -181,5 +169,27 @@ mod tests {
         let mut b2 = ImportBlock::new();
         b2.extend([sibling(&["com", "Adresse"], "Adresse")]);
         assert!(b2.render(2).contains("from ..com.adresse import Adresse"));
+    }
+
+    #[test]
+    fn renders_exact_block_with_separators() {
+        let mut b = ImportBlock::new();
+        b.extend([
+            named("decimal", "Decimal"),
+            named("typing", "Annotated"),
+            named("typing", "Optional"),
+            named("pydantic", "BaseModel"),
+            sibling(&["com", "Adresse"], "Adresse"),
+            sibling(&["bo", "Geschaeftspartner"], "Geschaeftspartner"),
+        ]);
+        let expected = "\
+from decimal import Decimal
+from typing import Annotated, Optional
+
+from pydantic import BaseModel
+
+from ..bo.geschaeftspartner import Geschaeftspartner
+from ..com.adresse import Adresse";
+        assert_eq!(b.render(2), expected);
     }
 }
