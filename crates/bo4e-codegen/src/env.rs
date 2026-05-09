@@ -10,6 +10,19 @@ pub(crate) fn make_environment(
     } else {
         load_embedded(&mut env)?;
     }
+    // Support Jinja2-style `.items()` / `.dict()` method calls on map values,
+    // which the vendored templates use (e.g. `SQL.fields.items()`).
+    env.set_unknown_method_callback(|state, value, method, args| {
+        use minijinja::value::{ValueKind, from_args};
+        use minijinja::{Error as MjError, ErrorKind};
+        match (value.kind(), method) {
+            (ValueKind::Map, "items" | "dict") => {
+                let _: () = from_args(args)?;
+                state.apply_filter("items", &[value.clone()])
+            }
+            _ => Err(MjError::from(ErrorKind::UnknownMethod)),
+        }
+    });
     Ok(env)
 }
 
