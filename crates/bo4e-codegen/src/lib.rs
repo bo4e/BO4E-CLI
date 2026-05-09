@@ -18,7 +18,8 @@ pub fn generate(
     _schemas: &Schemas,
     output_type: OutputType,
     _output_dir: &Path,
-    _options: &Options,
+    options: &Options,
 ) -> Result<(), Error> {
+    let _env = env::make_environment(options.templates_dir)?;
     Err(Error::OutputTypeNotCompiledIn(output_type.as_str()))
 }

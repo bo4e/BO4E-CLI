@@ -30,7 +30,6 @@ impl OutputType {
             // Safety: when no features are compiled in, OutputType has no variants and this
             // branch is unreachable. When at least one feature is enabled, the arms above
             // cover every variant exhaustively.
-            #[allow(unused_variables)]
             _ => unreachable!("OutputType variant not handled"),
         }
     }
