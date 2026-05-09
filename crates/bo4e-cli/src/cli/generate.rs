@@ -35,6 +35,11 @@ impl Executable for Generate {
             crate::cwarn!("{w}");
         }
 
+        let _spin = crate::console::spinner::squish(format!(
+            "Generating {:?} output",
+            self.output_type
+        ));
+
         bo4e_codegen::generate(
             &out.schemas,
             self.output_type,
