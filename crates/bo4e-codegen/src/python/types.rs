@@ -13,7 +13,7 @@
 // Until those crates reference this module, the compiler sees them as dead code.
 #![allow(dead_code)]
 
-use bo4e_schemas::models::json_schema::{SchemaType, StringSchemaFormat};
+use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaType, StringSchemaFormat};
 use std::collections::BTreeSet;
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -101,6 +101,40 @@ fn with_import(rendered: impl Into<String>, module: &str, name: &str) -> MappedT
     let mut imports = BTreeSet::new();
     imports.insert(Import::Named { module: module.to_string(), name: name.to_string() });
     MappedType { rendered: rendered.into(), imports }
+}
+
+// ── Public helper functions ───────────────────────────────────────────────────
+
+/// Extract the [`TypeBase`] (default/title/description) common to every schema variant.
+pub(crate) fn schema_base(schema: &SchemaType) -> &bo4e_schemas::models::json_schema::TypeBase {
+    match schema {
+        SchemaType::StringSchema(s) => &s.base,
+        SchemaType::IntegerSchema(s) => &s.base,
+        SchemaType::NumberSchema(s) => &s.base,
+        SchemaType::BooleanSchema(s) => &s.base,
+        SchemaType::DecimalSchema(s) => &s.base,
+        SchemaType::NullSchema(s) => &s.base,
+        SchemaType::AnySchema(s) => &s.base,
+        SchemaType::Array(s) => &s.base,
+        SchemaType::AnyOf(s) => &s.base,
+        SchemaType::AllOf(s) => &s.base,
+        SchemaType::ConstantSchema(s) => &s.base,
+        SchemaType::ReferenceSchema(s) => &s.base,
+        SchemaType::Object(s) => &s.base,
+        SchemaType::StrEnum(s) => &s.base,
+    }
+}
+
+/// Render a JSON Schema `default` (when present, primitive) as a Python literal expression.
+pub(crate) fn literal_default(schema: &SchemaType) -> Option<String> {
+    schema_base(schema).default.as_ref().map(|v| match v {
+        PrimitiveValue::Null => "None".into(),
+        PrimitiveValue::Bool(true) => "True".into(),
+        PrimitiveValue::Bool(false) => "False".into(),
+        PrimitiveValue::Integer(i) => i.to_string(),
+        PrimitiveValue::Float(f) => f.to_string(),
+        PrimitiveValue::String(s) => format!("\"{s}\""),
+    })
 }
 
 // ── Public mapping function ───────────────────────────────────────────────────

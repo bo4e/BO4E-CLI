@@ -26,9 +26,9 @@
 use crate::error::Error;
 use crate::naming::{module_file_name, to_snake_case};
 use crate::python::imports::ImportBlock;
-use crate::python::types::{Import, map_pydantic};
+use crate::python::types::{Import, literal_default, map_pydantic};
 use bo4e_schemas::Schemas;
-use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootType, SchemaType};
+use bo4e_schemas::models::json_schema::SchemaRootType;
 use minijinja::{Environment, context};
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -313,31 +313,4 @@ fn stitch(imports: &ImportBlock, depth: usize, body: &str) -> String {
     } else {
         format!("{imports_text}\n\n{body_trimmed}")
     }
-}
-
-/// Render a JSON Schema `default` (when present, primitive) as a Python literal expression.
-fn literal_default(schema: &SchemaType) -> Option<String> {
-    let base = match schema {
-        SchemaType::StringSchema(s) => &s.base,
-        SchemaType::IntegerSchema(s) => &s.base,
-        SchemaType::NumberSchema(s) => &s.base,
-        SchemaType::BooleanSchema(s) => &s.base,
-        SchemaType::DecimalSchema(s) => &s.base,
-        SchemaType::NullSchema(s) => &s.base,
-        SchemaType::AnySchema(s) => &s.base,
-        SchemaType::Array(s) => &s.base,
-        SchemaType::AnyOf(s) => &s.base,
-        SchemaType::AllOf(s) => &s.base,
-        SchemaType::ConstantSchema(s) => &s.base,
-        SchemaType::ReferenceSchema(s) => &s.base,
-        SchemaType::Object(s) => &s.base,
-        SchemaType::StrEnum(s) => &s.base,
-    };
-    base.default.as_ref().map(|v| match v {
-        PrimitiveValue::Null => "None".into(),
-        PrimitiveValue::Bool(b) => if *b { "True".into() } else { "False".into() },
-        PrimitiveValue::Integer(i) => i.to_string(),
-        PrimitiveValue::Float(f) => f.to_string(),
-        PrimitiveValue::String(s) => format!("\"{s}\""),
-    })
 }

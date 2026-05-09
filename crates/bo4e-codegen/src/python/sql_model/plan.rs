@@ -7,9 +7,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::naming::to_snake_case;
-use crate::python::types::map_pydantic;
+use crate::python::types::{literal_default, map_pydantic, schema_base};
 use bo4e_schemas::Schemas;
-use bo4e_schemas::models::json_schema::{ObjectSchema, PrimitiveValue, SchemaRootType, SchemaType};
+use bo4e_schemas::models::json_schema::{ObjectSchema, SchemaRootType, SchemaType};
 
 /// All tables and junctions produced by the pre-pass.
 #[derive(Debug)]
@@ -275,18 +275,6 @@ fn is_simple_scalar(schema: &SchemaType) -> bool {
         }
         _ => false,
     }
-}
-
-fn literal_default(schema: &SchemaType) -> Option<String> {
-    let base = schema_base(schema);
-    base.default.as_ref().map(|v| match v {
-        PrimitiveValue::Null => "None".into(),
-        PrimitiveValue::Bool(true) => "True".into(),
-        PrimitiveValue::Bool(false) => "False".into(),
-        PrimitiveValue::Integer(i) => i.to_string(),
-        PrimitiveValue::Float(f) => f.to_string(),
-        PrimitiveValue::String(s) => format!("\"{s}\""),
-    })
 }
 
 fn literal_title(schema: &SchemaType) -> Option<String> {
@@ -564,25 +552,6 @@ fn pascal_case(snake: &str) -> String {
             }
         })
         .collect()
-}
-
-fn schema_base(schema: &SchemaType) -> &bo4e_schemas::models::json_schema::TypeBase {
-    match schema {
-        SchemaType::StringSchema(s) => &s.base,
-        SchemaType::IntegerSchema(s) => &s.base,
-        SchemaType::NumberSchema(s) => &s.base,
-        SchemaType::BooleanSchema(s) => &s.base,
-        SchemaType::DecimalSchema(s) => &s.base,
-        SchemaType::NullSchema(s) => &s.base,
-        SchemaType::AnySchema(s) => &s.base,
-        SchemaType::Array(s) => &s.base,
-        SchemaType::AnyOf(s) => &s.base,
-        SchemaType::AllOf(s) => &s.base,
-        SchemaType::ConstantSchema(s) => &s.base,
-        SchemaType::ReferenceSchema(s) => &s.base,
-        SchemaType::Object(s) => &s.base,
-        SchemaType::StrEnum(s) => &s.base,
-    }
 }
 
 #[cfg(test)]
