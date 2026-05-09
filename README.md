@@ -232,7 +232,13 @@ Generate Python code from BO4E JSON schemas.
 bo4e generate -i <input-dir> -o <output-dir> -t <output-type> [--no-clear-output] [--templates-dir <dir>]
 ```
 
-Flags:
+Example:
+
+```bash
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic-v2
+```
+
+<a name="supported-languages"></a>Flags:
 
 | Flag | Short | Description |
 |---|---|---|
