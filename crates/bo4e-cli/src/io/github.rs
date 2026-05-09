@@ -97,12 +97,15 @@ async fn _get_schemas_from_github_recursive(
 
 async fn _execute_futures_with_progress_bar<T: 'static>(
     futures: Vec<AsyncInvokeLater<T>>,
-    enable_output: bool,
 ) -> Result<Vec<T>, String> {
     let total = futures.len();
     let start_message = "Downloading schemas...";
     let finish_message = "Downloaded schemas.   ";
-    let pb = enable_output.then(|| new_progress_bar(total as u64, Some(start_message.to_string())));
+    let visible = crate::console::console::CONSOLE
+        .get()
+        .map(|c| c.would_emit(crate::console::console::Level::Normal))
+        .unwrap_or(true);
+    let pb = visible.then(|| new_progress_bar(total as u64, Some(start_message.to_string())));
 
     let mut join_set: JoinSet<T> = JoinSet::new();
     for future in futures {
@@ -179,7 +182,6 @@ async fn get_target_commitish_from_tag(
 pub async fn get_schemas_from_github(
     version_tag: &Version,
     token: Option<&str>,
-    enable_output: bool,
 ) -> Result<Schemas, String> {
     let octocrab = get_octocrab_instance(token)?;
     let target_commitish =
@@ -198,10 +200,7 @@ pub async fn get_schemas_from_github(
     };
     let local_set = tokio::task::LocalSet::new();
     let schemas_vector = local_set
-        .run_until(_execute_futures_with_progress_bar(
-            schema_downloads,
-            enable_output,
-        ))
+        .run_until(_execute_futures_with_progress_bar(schema_downloads))
         .await?
         .into_iter()
         .collect::<Result<Vec<Schema>, String>>()?;

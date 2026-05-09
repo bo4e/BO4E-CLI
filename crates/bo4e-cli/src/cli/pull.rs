@@ -66,7 +66,7 @@ impl Executable for Pull {
                 Version::from_str(&self.version_tag)
             }
         }?;
-        let schemas = runtime.block_on(get_schemas_from_github(&version, token, true))?;
+        let schemas = runtime.block_on(get_schemas_from_github(&version, token))?;
         write_schemas(&schemas, self.output_dir.as_path())
             .map_err(|err| format!("Failed to write schemas to output directory: {}", err))
     }
