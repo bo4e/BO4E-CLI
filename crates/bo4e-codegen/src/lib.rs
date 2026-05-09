@@ -3,6 +3,13 @@ mod error;
 pub mod naming;
 mod output_type;
 
+#[cfg(any(
+    feature = "python-pydantic-v1",
+    feature = "python-pydantic-v2",
+    feature = "python-sql-model",
+))]
+mod python;
+
 pub use error::Error;
 pub use output_type::OutputType;
 
