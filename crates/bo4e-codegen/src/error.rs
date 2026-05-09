@@ -1,0 +1,22 @@
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("template render error: {0}")]
+    TemplateRender(#[from] minijinja::Error),
+
+    #[error("template not found: {name}")]
+    TemplateNotFound { name: String },
+
+    #[error("schema lookup miss: {0}")]
+    SchemaLookup(String),
+
+    #[error("output type {0} is not compiled in (enable the corresponding Cargo feature)")]
+    OutputTypeNotCompiledIn(&'static str),
+
+    #[error("schema model error: {0}")]
+    Schema(String),
+}

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/bo4e-cli", "crates/bo4e-schemas"]
+members = ["crates/bo4e-cli", "crates/bo4e-schemas", "crates/bo4e-codegen"]
 
 [workspace.package]
 edition = "2024"
