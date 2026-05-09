@@ -4,16 +4,17 @@
 //! [`plan::SqlPlan`]; a render pass consumes the plan and writes Python files
 //! via vendored MiniJinja templates.
 
-#![allow(dead_code)] // render_table, render_enum, helpers — wired up in Task 11.
-
 pub(crate) mod plan;
 
+use bo4e_schemas::Schemas;
 use crate::error::Error;
+use crate::naming::module_file_name;
 use minijinja::{Environment, context};
 use plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
 use serde::Serialize;
 use serde_json::Map as JsonMap;
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
 /// Per-field row passed to `BaseModel.jinja2`'s `SQL.fields` map.
 #[derive(Debug, Serialize)]
@@ -526,6 +527,73 @@ pub(crate) fn render_init(env: &Environment<'_>, plan: &SqlPlan) -> Result<Strin
 
 pub(crate) fn render_version(version: &str) -> String {
     format!("__version__: str = \"{version}\"\n")
+}
+
+/// Orchestrate the entire SQL model code generation: walk the plan, render each table,
+/// write per-class files at the right paths, and write root-level __init__, __version__,
+/// and per-subpackage __init__ files.
+pub(crate) fn generate_sql_model(
+    schemas: &Schemas,
+    output_dir: &Path,
+    env: &Environment<'_>,
+) -> Result<Vec<PathBuf>, Error> {
+    std::fs::create_dir_all(output_dir)?;
+    let mut written: Vec<PathBuf> = Vec::new();
+    let plan = plan::build_plan(schemas);
+
+    // ── Per-class files ────────────────────────────────────────────────────────
+    for table in plan.tables.values() {
+        let path_segments: Vec<String> = table.module.iter()
+            .take(table.module.len().saturating_sub(1))
+            .map(|s| s.to_ascii_lowercase())
+            .collect();
+        let mut out_dir = output_dir.to_path_buf();
+        for seg in &path_segments {
+            out_dir.push(seg);
+        }
+        std::fs::create_dir_all(&out_dir)?;
+        let file_name = format!("{}.py", module_file_name(&table.module));
+        let depth = path_segments.len() + 1;
+        let body = render_table(env, table, depth)?;
+        let out_path = out_dir.join(&file_name);
+        std::fs::write(&out_path, body)?;
+        written.push(out_path);
+    }
+
+    // ── many.py at the root (only if there are junctions) ──────────────────────
+    if !plan.junctions.is_empty() {
+        let many = render_many(env, &plan.junctions)?;
+        let many_path = output_dir.join("many.py");
+        std::fs::write(&many_path, many)?;
+        written.push(many_path);
+    }
+
+    // ── __init__.py + __version__.py at the root ───────────────────────────────
+    let init_body = render_init(env, &plan)?;
+    let init_path = output_dir.join("__init__.py");
+    std::fs::write(&init_path, init_body)?;
+    written.push(init_path);
+
+    let version_path = output_dir.join("__version__.py");
+    std::fs::write(&version_path, render_version(&schemas.version.to_string()))?;
+    written.push(version_path);
+
+    // ── Empty __init__.py per first-level subdirectory ─────────────────────────
+    let mut subdirs: BTreeSet<String> = BTreeSet::new();
+    for table in plan.tables.values() {
+        if table.module.len() > 1 {
+            subdirs.insert(table.module[0].to_ascii_lowercase());
+        }
+    }
+    for sub in subdirs {
+        let p = output_dir.join(&sub).join("__init__.py");
+        if !p.exists() {
+            std::fs::write(&p, "")?;
+            written.push(p);
+        }
+    }
+
+    Ok(written)
 }
 
 #[cfg(test)]

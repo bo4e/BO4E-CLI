@@ -51,7 +51,10 @@ pub fn generate(
             Ok(())
         }
         #[cfg(feature = "python-sql-model")]
-        OutputType::PythonSqlModel => Err(Error::OutputTypeNotCompiledIn(output_type.as_str())),
+        OutputType::PythonSqlModel => {
+            python::sql_model::generate_sql_model(schemas, output_dir, &env)?;
+            Ok(())
+        }
         // When all python features are compiled out, OutputType has no variants and
         // this match has no arms; the wildcard keeps the code well-formed.
         _ => unreachable!("OutputType variant not handled"),
