@@ -1,4 +1,4 @@
-#![cfg(feature = "python-pydantic-v2")]
+#![cfg(feature = "python-pydantic")]
 
 // NOTE: Each fixture object schema must include `"required": []` until
 // bo4e-schemas adds `#[serde(default)]` on `ObjectSchema::required`.
@@ -17,7 +17,7 @@ fn generate_into_tmp() -> tempfile::TempDir {
 
     bo4e_codegen::generate(
         &schemas,
-        bo4e_codegen::OutputType::PythonPydanticV2,
+        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: true,

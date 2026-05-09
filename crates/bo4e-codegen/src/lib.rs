@@ -4,7 +4,7 @@ pub mod naming;
 mod output_type;
 
 #[cfg(any(
-    feature = "python-pydantic-v2",
+    feature = "python-pydantic",
     feature = "python-sql-model",
 ))]
 mod python;
@@ -24,7 +24,7 @@ pub struct Options<'a> {
 pub fn generate(
     #[cfg_attr(
         not(any(
-            feature = "python-pydantic-v2",
+            feature = "python-pydantic",
             feature = "python-sql-model",
         )),
         allow(unused_variables)
@@ -45,9 +45,9 @@ pub fn generate(
 
     #[allow(unreachable_patterns)]
     match output_type {
-        #[cfg(feature = "python-pydantic-v2")]
-        OutputType::PythonPydanticV2 => {
-            python::pydantic_v2::generate_pydantic_v2(schemas, output_dir, &env)?;
+        #[cfg(feature = "python-pydantic")]
+        OutputType::PythonPydantic => {
+            python::pydantic::generate_pydantic(schemas, output_dir, &env)?;
             Ok(())
         }
         #[cfg(feature = "python-sql-model")]

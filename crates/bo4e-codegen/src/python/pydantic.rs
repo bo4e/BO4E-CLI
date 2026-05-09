@@ -1,4 +1,4 @@
-//! pydantic-v2 generator orchestration.
+//! pydantic generator orchestration.
 //!
 //! Walks a [`Schemas`] collection and writes one Python module per schema, plus a
 //! root `__init__.py`, `__version__.py`, and one empty `__init__.py` per subpackage
@@ -6,7 +6,7 @@
 //!
 //! ## Approach (Option A from Task 8 plan)
 //!
-//! The vendored Jinja2 templates under `templates/python/pydantic_v2/` are byte-identical
+//! The vendored Jinja2 templates under `templates/python/pydantic/` are byte-identical
 //! to the upstream `data-model-code-generator` templates used by the Python implementation
 //! of `bo4e generate`. They expect a *rich* per-field context (`name`, `type_hint`, `field`,
 //! `annotated`, `required`, `represented_default`, `strip_default_none`, `docstring`) and
@@ -18,15 +18,15 @@
 //!
 //! - **`config` is never set.** The vendored `BaseModel.jinja2` `{%- if config %}` branch
 //!   `{% include 'Config.jinja2' %}`s a template we don't ship. As long as `config` is
-//!   `None` the include is skipped at render time. (pydantic-v2 outputs don't need `Config`.)
+//!   `None` the include is skipped at render time. (pydantic outputs don't need `Config`.)
 //! - **Imports are prepended to the rendered body.** The vendored `BaseModel.jinja2` only
-//!   emits an import section for the SQL flavour; for the plain pydantic-v2 path we own
+//!   emits an import section for the SQL flavour; for the plain pydantic path we own
 //!   the import block and stitch it on before writing the file.
 
 use crate::error::Error;
 use crate::naming::{module_file_name, to_snake_case};
 use crate::python::imports::ImportBlock;
-use crate::python::types::{Import, map_pydantic_v2};
+use crate::python::types::{Import, map_pydantic};
 use bo4e_schemas::Schemas;
 use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootType, SchemaType};
 use minijinja::{Environment, context};
@@ -59,7 +59,7 @@ struct EnumMember {
     docstring: Option<String>,
 }
 
-pub(crate) fn generate_pydantic_v2(
+pub(crate) fn generate_pydantic(
     schemas: &Schemas,
     output_dir: &Path,
     env: &Environment<'static>,
@@ -117,7 +117,7 @@ pub(crate) fn generate_pydantic_v2(
     written.push(version_path);
 
     // ── Root __init__.py with re-exports ───────────────────────────────────────
-    let init_tpl = env.get_template("python/pydantic_v2/__init__.jinja2")?;
+    let init_tpl = env.get_template("python/pydantic/__init__.jinja2")?;
     let init_classes: Vec<_> = schemas
         .iter()
         .map(|s| {
@@ -182,7 +182,7 @@ fn render_enum(
         })
         .collect();
 
-    let tpl = env.get_template("python/pydantic_v2/Enum.jinja2")?;
+    let tpl = env.get_template("python/pydantic/Enum.jinja2")?;
     let rendered = tpl.render(context! {
         decorators => Vec::<String>::new(),
         class_name => class_name,
@@ -210,12 +210,12 @@ fn render_object(
     let required: BTreeSet<&str> = obj.required.iter().map(|s| s.as_str()).collect();
 
     for (prop_name, prop_schema) in &obj.properties {
-        let mapped = map_pydantic_v2(prop_schema);
+        let mapped = map_pydantic(prop_schema);
         imports.extend(mapped.imports.iter().cloned());
 
         let is_required = required.contains(prop_name.as_str());
 
-        // pydantic-v2 dialect: optional fields render as `T | None` only when the
+        // pydantic dialect: optional fields render as `T | None` only when the
         // mapper hasn't already produced that union (e.g. via anyOf with null).
         let type_str = if is_required || mapped.rendered.contains("| None") {
             mapped.rendered.clone()
@@ -289,7 +289,7 @@ fn render_object(
         });
     }
 
-    let tpl = env.get_template("python/pydantic_v2/BaseModel.jinja2")?;
+    let tpl = env.get_template("python/pydantic/BaseModel.jinja2")?;
     let rendered = tpl.render(context! {
         decorators => Vec::<String>::new(),
         class_name => class_name,

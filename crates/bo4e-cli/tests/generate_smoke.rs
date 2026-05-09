@@ -1,4 +1,4 @@
-#![cfg(feature = "python-pydantic-v2")]
+#![cfg(feature = "python-pydantic")]
 
 use std::process::Command;
 use std::path::PathBuf;
@@ -18,7 +18,7 @@ fn bo4e_generate_writes_output_directory() {
         .arg("generate")
         .args(["-i", fixture.to_str().unwrap()])
         .args(["-o", tmp.path().to_str().unwrap()])
-        .args(["-t", "python-pydantic-v2"])
+        .args(["-t", "python-pydantic"])
         .output()
         .unwrap();
     assert!(

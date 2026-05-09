@@ -1,4 +1,4 @@
-#![cfg(feature = "python-pydantic-v2")]
+#![cfg(feature = "python-pydantic")]
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -24,7 +24,7 @@ fn generated_angebot_parses_as_python_and_has_expected_class() {
 
     bo4e_codegen::generate(
         &out.schemas,
-        bo4e_codegen::OutputType::PythonPydanticV2,
+        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options { clear_output: true, templates_dir: None },
     ).unwrap();

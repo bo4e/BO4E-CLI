@@ -1,6 +1,6 @@
-#[cfg(feature = "python-pydantic-v2")]
+#[cfg(feature = "python-pydantic")]
 #[test]
-fn generate_pydantic_v2_writes_at_least_one_file() {
+fn generate_pydantic_writes_at_least_one_file() {
     let tmp = tempfile::tempdir().unwrap();
     let mut schemas = bo4e_schemas::Schemas::new("v202401.0.0".parse().unwrap());
 
@@ -12,7 +12,7 @@ fn generate_pydantic_v2_writes_at_least_one_file() {
 
     bo4e_codegen::generate(
         &schemas,
-        bo4e_codegen::OutputType::PythonPydanticV2,
+        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: false,

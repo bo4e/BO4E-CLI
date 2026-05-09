@@ -5,7 +5,7 @@
 //! depends on.  The caller (the per-output-type generator) merges these imports into the file's
 //! import block.
 //!
-//! The pydantic-v2 dialect emits:
+//! The pydantic dialect emits:
 //! - PEP 604 union syntax (`T | None`, `A | B`) — not `Optional[T]` / `Union[A, B]`.
 //! - PEP 585 generics (`list[T]`, `dict[K, V]`) — not `List[T]` / `Dict[K, V]`.
 
@@ -105,12 +105,12 @@ fn with_import(rendered: impl Into<String>, module: &str, name: &str) -> MappedT
 
 // ── Public mapping function ───────────────────────────────────────────────────
 
-/// Map a JSON Schema fragment to its pydantic-v2 Python type expression.
+/// Map a JSON Schema fragment to its pydantic Python type expression.
 ///
 /// The returned [`MappedType::rendered`] is the type string that should appear inline in
 /// generated code.  [`MappedType::imports`] contains the import statements that `rendered`
 /// depends on.
-pub fn map_pydantic_v2(schema_type: &SchemaType) -> MappedType {
+pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
     match schema_type {
         // ── Scalar primitives ────────────────────────────────────────────────
         SchemaType::StringSchema(s) => match &s.format {
@@ -137,7 +137,7 @@ pub fn map_pydantic_v2(schema_type: &SchemaType) -> MappedType {
 
         // ── Array ────────────────────────────────────────────────────────────
         SchemaType::Array(a) => {
-            let inner = map_pydantic_v2(&a.items);
+            let inner = map_pydantic(&a.items);
             let rendered = format!("list[{}]", inner.rendered);
             MappedType { rendered, imports: inner.imports }
         }
@@ -151,7 +151,7 @@ pub fn map_pydantic_v2(schema_type: &SchemaType) -> MappedType {
             let is_optional = !null_branches.is_empty();
 
             // Map each non-null branch.
-            let mapped: Vec<MappedType> = non_null_branches.iter().map(|t| map_pydantic_v2(t)).collect();
+            let mapped: Vec<MappedType> = non_null_branches.iter().map(|t| map_pydantic(t)).collect();
 
             let mut all_imports: BTreeSet<Import> = BTreeSet::new();
             for m in &mapped {
@@ -177,10 +177,10 @@ pub fn map_pydantic_v2(schema_type: &SchemaType) -> MappedType {
         // ── AllOf — treated as a single-item wrapper (pydantic inheritance) ──
         SchemaType::AllOf(a) => {
             if a.all_of.len() == 1 {
-                map_pydantic_v2(&a.all_of[0])
+                map_pydantic(&a.all_of[0])
             } else {
                 // Multi-branch allOf is rare in BO4E; emit an intersection approximation.
-                let mapped: Vec<MappedType> = a.all_of.iter().map(map_pydantic_v2).collect();
+                let mapped: Vec<MappedType> = a.all_of.iter().map(map_pydantic).collect();
                 let mut all_imports: BTreeSet<Import> = BTreeSet::new();
                 for m in &mapped {
                     all_imports.extend(m.imports.iter().cloned());
@@ -232,7 +232,7 @@ mod tests {
             r#type: LiteralTypeString::String,
             format: None,
         });
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "str");
         assert!(result.imports.is_empty());
     }
@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn map_integer() {
         let schema = SchemaType::IntegerSchema(IntegerSchema::default());
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "int");
         assert!(result.imports.is_empty());
     }
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn map_number() {
         let schema = SchemaType::NumberSchema(NumberSchema::default());
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "float");
         assert!(result.imports.is_empty());
     }
@@ -259,7 +259,7 @@ mod tests {
     #[test]
     fn map_boolean() {
         let schema = SchemaType::BooleanSchema(BooleanSchema::default());
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "bool");
         assert!(result.imports.is_empty());
     }
@@ -278,7 +278,7 @@ mod tests {
                 SchemaType::NullSchema(NullSchema::default()),
             ],
         });
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "str | None");
         assert!(result.imports.is_empty());
     }
@@ -295,7 +295,7 @@ mod tests {
                 format: None,
             })),
         });
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "list[str]");
         assert!(result.imports.is_empty());
     }
@@ -308,7 +308,7 @@ mod tests {
             r#type: LiteralTypeDecimal::Number,
             format: LiteralFormatDecimal::Decimal,
         });
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "Decimal");
         assert_eq!(result.imports.len(), 1);
         assert!(result.imports.contains(&Import::Named {
@@ -325,7 +325,7 @@ mod tests {
             r#type: LiteralTypeString::String,
             format: Some(StringSchemaFormat::DateTime),
         });
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "datetime");
         assert_eq!(result.imports.len(), 1);
         assert!(result.imports.contains(&Import::Named {
@@ -341,7 +341,7 @@ mod tests {
             base: TypeBase::default(),
             r#ref: "../bo/Geschaeftspartner.json".to_string(),
         });
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "Geschaeftspartner");
         assert_eq!(result.imports.len(), 1);
         assert!(result.imports.contains(&Import::Sibling {
@@ -382,7 +382,7 @@ mod tests {
             r#type: LiteralTypeString::String,
             format: Some(StringSchemaFormat::Uuid),
         });
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "UUID");
         assert!(result.imports.contains(&Import::Named {
             module: "uuid".to_string(),
@@ -402,7 +402,7 @@ mod tests {
                 SchemaType::NullSchema(NullSchema::default()),
             ],
         });
-        let result = map_pydantic_v2(&schema);
+        let result = map_pydantic(&schema);
         assert_eq!(result.rendered, "Adresse | None");
         assert!(result.imports.contains(&Import::Sibling {
             module: vec!["bo".to_string(), "Adresse".to_string()],
@@ -412,7 +412,7 @@ mod tests {
 
     #[test]
     fn map_any_includes_typing_import() {
-        let result = map_pydantic_v2(&SchemaType::AnySchema(AnySchema::default()));
+        let result = map_pydantic(&SchemaType::AnySchema(AnySchema::default()));
         assert_eq!(result.rendered, "Any");
         assert_eq!(result.imports.len(), 1);
         assert!(result.imports.contains(&Import::Named {

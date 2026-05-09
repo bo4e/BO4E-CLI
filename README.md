@@ -235,7 +235,7 @@ bo4e generate -i <input-dir> -o <output-dir> -t <output-type> [--no-clear-output
 Example:
 
 ```bash
-bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic-v2
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic
 ```
 
 <a name="supported-languages"></a>Flags:
@@ -244,7 +244,7 @@ bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydant
 |---|---|---|
 | `--input` | `-i` | Directory containing input JSON schemas. |
 | `--output` | `-o` | Directory to write generated code to. |
-| `--output-type` | `-t` | One of `python-pydantic-v2`, `python-sql-model` (gated by Cargo feature). |
+| `--output-type` | `-t` | One of `python-pydantic`, `python-sql-model` (gated by Cargo feature). |
 | `--no-clear-output` |  | Skip clearing the output directory before writing (default: clear). |
 | `--templates-dir` |  | Override embedded templates with a directory of Jinja templates. |
 
@@ -253,10 +253,10 @@ bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydant
 By default `cargo install bo4e-cli` includes both Python output types. To install with only the type you need:
 
 ```
-cargo install bo4e-cli --no-default-features --features python-pydantic-v2
+cargo install bo4e-cli --no-default-features --features python-pydantic
 ```
 
-Available features: `python` (umbrella), `python-pydantic-v2`, `python-sql-model`.
+Available features: `python` (umbrella), `python-pydantic`, `python-sql-model`.
 
 ## `bo4e diff schemas`
 
