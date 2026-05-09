@@ -184,8 +184,9 @@ fn synth_id_field(obj: &ObjectSchema) -> SqlField {
         .get("_id")
         .and_then(|s| literal_title(s))
         .unwrap_or_else(|| "Primary key ID-Field".to_string());
+    let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
     let default = format!(
-        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, alias=\"_id\", title=\"{title}\")"
+        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, alias=\"_id\", title=\"{escaped_title}\")"
     );
     SqlField::Scalar {
         name: "id".to_string(),
@@ -227,6 +228,9 @@ fn is_simple_scalar(schema: &SchemaType) -> bool {
         | SchemaType::BooleanSchema(_)
         | SchemaType::DecimalSchema(_)
         | SchemaType::ConstantSchema(_) => true,
+        // AnyOf with a non-scalar variant (reference, array, Any, …) is not a simple
+        // scalar — it falls through to `None` in `simple_scalar_field`, where the
+        // caller deliberately skips it so Task 7 can pick it up.
         SchemaType::AnyOf(a) => {
             a.any_of.iter().all(|t| matches!(t,
                 SchemaType::StringSchema(_)
