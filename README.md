@@ -226,23 +226,31 @@ bo4e edit -i ./bo4e_schemas_latest -o ./bo4e_schemas_edited -c ./my_config_file.
 
 ## `bo4e generate`
 
-This is a code-generation command. It creates all BO4E-models from the input JSON-schemas for a supported
-output-type.
+Generate Python code from BO4E JSON schemas.
 
-<a name="supported-languages"></a>Currently supported output types are:
-
-- `python-pydantic-v1`: Programming language Python. Class definitions are
-  in [pydantic](https://github.com/pydantic/pydantic) v1 style.
-- `python-pydantic-v2`: Programming language Python. Class definitions are
-  in [pydantic](https://github.com/pydantic/pydantic) v2 style.
-- `python-sql-model`: Programming language Python. Class definitions are
-  in [SQLModel](https://github.com/fastapi/sqlmodel) style.
-
-Example:
-
-```bash
-bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic-v2
 ```
+bo4e generate -i <input-dir> -o <output-dir> -t <output-type> [--no-clear-output] [--templates-dir <dir>]
+```
+
+Flags:
+
+| Flag | Short | Description |
+|---|---|---|
+| `--input` | `-i` | Directory containing input JSON schemas. |
+| `--output` | `-o` | Directory to write generated code to. |
+| `--output-type` | `-t` | One of `python-pydantic-v1`, `python-pydantic-v2`, `python-sql-model` (gated by Cargo feature). |
+| `--no-clear-output` |  | Skip clearing the output directory before writing (default: clear). |
+| `--templates-dir` |  | Override embedded templates with a directory of Jinja templates. |
+
+### Slim install via Cargo features
+
+By default `cargo install bo4e-cli` includes all three Python output types. To install with only the type you need:
+
+```
+cargo install bo4e-cli --no-default-features --features python-pydantic-v2
+```
+
+Available features: `python` (umbrella), `python-pydantic-v1`, `python-pydantic-v2`, `python-sql-model`.
 
 ## `bo4e diff schemas`
 
