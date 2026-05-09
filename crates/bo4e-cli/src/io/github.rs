@@ -21,17 +21,64 @@ pub fn is_valid_github_token(token: &str) -> bool {
 }
 
 pub fn get_token_from_github_cli() -> Option<String> {
-    std::process::Command::new("gh")
+    let output = match std::process::Command::new("gh")
         .arg("auth")
         .arg("token")
         .output()
-        .ok()
-        .and_then(|output| output.status.success().then(|| output))
-        .and_then(|output| {
-            let token_str = String::from_utf8_lossy(&output.stdout);
-            let token_str = token_str.trim();
-            is_valid_github_token(token_str).then(|| token_str.to_string())
-        })
+    {
+        Ok(o) => o,
+        Err(e) => {
+            cprint_verbose!("`gh auth token` not invokable ({e}); skipping CLI token lookup");
+            return None;
+        }
+    };
+    if !output.status.success() {
+        cprint_verbose!(
+            "`gh auth token` exited with {}; not logged in to gh? skipping",
+            output.status
+        );
+        return None;
+    }
+    let token_str = String::from_utf8_lossy(&output.stdout);
+    let token_str = token_str.trim();
+    if token_str.is_empty() {
+        cprint_verbose!("`gh auth token` returned empty output; skipping");
+        return None;
+    }
+    if !is_valid_github_token(token_str) {
+        cprint_verbose!(
+            "`gh auth token` returned a token whose format isn't recognised by bo4e-cli's \
+             validator; ignoring it. Pass --token explicitly or set GITHUB_ACCESS_TOKEN."
+        );
+        return None;
+    }
+    cprint_verbose!("Using GitHub token discovered via `gh auth token`");
+    Some(token_str.to_string())
+}
+
+/// Format an `octocrab::Error` for end-user display.
+///
+/// FORBIDDEN responses almost always mean unauthenticated rate-limiting; surface
+/// an actionable hint rather than the bare "GitHub" debug string.
+fn format_octocrab_error(e: octocrab::Error, context: &str) -> String {
+    if let octocrab::Error::GitHub { source, .. } = &e {
+        if source.status_code == http::StatusCode::FORBIDDEN {
+            return format!(
+                "GitHub rate-limited the {context} request ({}). \
+                 Authenticate to lift the limit: pass --token, set GITHUB_ACCESS_TOKEN, \
+                 or run `gh auth login`.",
+                source.message
+            );
+        }
+        if source.status_code == http::StatusCode::NOT_FOUND {
+            return format!("GitHub returned 404 for the {context} request: {}", source.message);
+        }
+        return format!(
+            "GitHub returned {} for the {context} request: {}",
+            source.status_code, source.message
+        );
+    }
+    format!("{context} failed: {e}")
 }
 
 type AsyncInvokeLater<T> = Pin<Box<dyn Future<Output = T>>>;
@@ -47,7 +94,7 @@ async fn _get_schemas_from_github_recursive(
         .path(dir_path)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_octocrab_error(e, "schema directory listing"))?;
 
     let mut futures: Vec<AsyncInvokeLater<Result<Schema, String>>> = Vec::new();
 
@@ -67,7 +114,7 @@ async fn _get_schemas_from_github_recursive(
                             .path(file_path.clone())
                             .send()
                             .await
-                            .map_err(|e| e.to_string())?
+                            .map_err(|e| format_octocrab_error(e, "schema file fetch"))?
                             .items[0]
                             .decoded_content()
                             .ok_or("Failed to retrieve and decode file content".to_string())?;
@@ -173,7 +220,7 @@ async fn get_target_commitish_from_tag(
         .releases()
         .get_by_tag(&version_tag.to_string())
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_octocrab_error(e, "release lookup"))?;
     cprint_verbose!(
         "Resolved tag {} → commitish {}",
         version_tag,
@@ -223,7 +270,7 @@ pub async fn resolve_latest_version(token: Option<&str>) -> Result<Version, Stri
         .releases()
         .get_latest()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_octocrab_error(e, "latest-release lookup"))?;
     Version::from_str(&latest_release.tag_name)
 }
 
@@ -244,16 +291,7 @@ pub async fn release_exists(version: &Version, token: Option<&str>) -> Result<bo
         {
             Ok(false)
         }
-        Err(octocrab::Error::GitHub { source, .. })
-            if source.status_code == http::StatusCode::FORBIDDEN =>
-        {
-            Err(format!(
-                "GitHub rate-limited the release-validation request ({}). \
-                 Pass --token, set GITHUB_TOKEN, or use --no-validate-releases.",
-                source.message
-            ))
-        }
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(format_octocrab_error(e, "release validation")),
     }
 }
 
