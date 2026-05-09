@@ -4,9 +4,7 @@
 //! `build_plan` is pure — it has no side effects and writes no files. The renderer in
 //! [`super`] consumes the plan and produces source.
 
-#![allow(dead_code)] // Filled in across Tasks 6, 7. Wired up in Task 11.
-
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::naming::to_snake_case;
 use crate::python::types::map_pydantic;
@@ -46,9 +44,11 @@ pub(crate) enum SqlField {
         name: String,
         /// Type expression as it appears inline (already includes `| None` for nullable).
         type_: String,
+        #[allow(dead_code)]
         nullable: bool,
         /// Already-quoted Python default expression, or `None` for required.
         default: Option<String>,
+        #[allow(dead_code)]
         title: Option<String>,
         docstring: Option<String>,
     },
@@ -57,6 +57,7 @@ pub(crate) enum SqlField {
     ForeignKey {
         /// The FK column name, already `_id`-suffixed (e.g. `"adresse_id"`).
         name: String,
+        #[allow(dead_code)]
         target_class: String,
         target_table: String,
         nullable: bool,
@@ -92,6 +93,7 @@ pub(crate) enum SqlField {
         nullable: bool,
         /// e.g. `Some("Typ.ANGEBOT")` or `None`.
         default: Option<String>,
+        #[allow(dead_code)]
         title: Option<String>,
         docstring: Option<String>,
     },
@@ -101,6 +103,7 @@ pub(crate) enum SqlField {
         py_inner: String,
         sa_inner: &'static str,
         nullable: bool,
+        #[allow(dead_code)]
         title: Option<String>,
         docstring: Option<String>,
     },
@@ -119,9 +122,11 @@ pub(crate) struct JunctionTable {
     /// Class + lower-cased table name (e.g. `"AngebotAdressenLink"`).
     pub(crate) class_name: String,
     pub(crate) owner_class: String,
+    #[allow(dead_code)]
     pub(crate) owner_table: String,
     pub(crate) owner_id_field: String,
     pub(crate) target_class: String,
+    #[allow(dead_code)]
     pub(crate) target_table: String,
     pub(crate) target_id_field: String,
     /// The source field on the owner (diagnostic only — appears in the junction class docstring).
@@ -132,6 +137,18 @@ pub(crate) struct JunctionTable {
 ///
 /// Filled in across Tasks 6 and 7.
 pub(crate) fn build_plan(schemas: &Schemas) -> SqlPlan {
+    // Precompute enum class names to avoid O(n²) classification
+    let enum_names: BTreeSet<String> = schemas.iter()
+        .filter_map(|schema_rc| {
+            let mut s = schema_rc.borrow_mut();
+            let name = s.name().to_string();
+            match s.schema() {
+                Ok(SchemaRootType::StrEnum(_)) => Some(name),
+                _ => None,
+            }
+        })
+        .collect();
+
     let mut tables: BTreeMap<Vec<String>, TablePlan> = BTreeMap::new();
     let mut junction_buf: Vec<JunctionTable> = Vec::new();
 
@@ -171,7 +188,7 @@ pub(crate) fn build_plan(schemas: &Schemas) -> SqlPlan {
                         &class_name,
                         prop_name,
                         prop_schema,
-                        schemas,
+                        &enum_names,
                         &mut fields,
                         &mut local_junctions,
                     );
@@ -286,7 +303,7 @@ fn classify_property(
     owner_class: &str,
     prop_name: &str,
     schema: &SchemaType,
-    all_schemas: &Schemas,
+    enum_names: &BTreeSet<String>,
     fields: &mut Vec<SqlField>,
     junctions: &mut Vec<JunctionTable>,
 ) {
@@ -295,7 +312,7 @@ fn classify_property(
 
     if let SchemaType::ReferenceSchema(r) = schema {
         if let Some(target) = ref_target_class(&r.r#ref) {
-            if is_enum_ref(&target, all_schemas) {
+            if enum_names.contains(&target) {
                 fields.push(SqlField::EnumColumn {
                     name: snake,
                     enum_class: target,
@@ -316,7 +333,7 @@ fn classify_property(
         match &*a.items {
             SchemaType::ReferenceSchema(r) if ref_target_class(&r.r#ref).is_some() => {
                 let target = ref_target_class(&r.r#ref).unwrap();
-                if is_enum_ref(&target, all_schemas) {
+                if enum_names.contains(&target) {
                     fields.push(SqlField::EnumColumn {
                         name: snake,
                         enum_class: target,
@@ -364,7 +381,7 @@ fn classify_property(
         let nulls = a.any_of.iter().filter(|t| matches!(t, SchemaType::NullSchema(_))).count();
         if nulls == 1 && a.any_of.len() == 2 {
             let inner = a.any_of.iter().find(|t| !matches!(t, SchemaType::NullSchema(_))).unwrap();
-            classify_optional(owner_class, prop_name, &snake, inner, schema, all_schemas, fields, junctions);
+            classify_optional(owner_class, prop_name, &snake, inner, schema, enum_names, fields, junctions);
             return;
         }
     }
@@ -377,7 +394,7 @@ fn classify_optional(
     snake: &str,
     inner: &SchemaType,
     full_schema: &SchemaType,
-    all_schemas: &Schemas,
+    enum_names: &BTreeSet<String>,
     fields: &mut Vec<SqlField>,
     junctions: &mut Vec<JunctionTable>,
 ) {
@@ -387,7 +404,7 @@ fn classify_optional(
     match inner {
         SchemaType::ReferenceSchema(r) => {
             if let Some(target) = ref_target_class(&r.r#ref) {
-                if is_enum_ref(&target, all_schemas) {
+                if enum_names.contains(&target) {
                     let default = literal_default(full_schema).and_then(|d| {
                         if d == "None" {
                             None
@@ -416,7 +433,7 @@ fn classify_optional(
         SchemaType::Array(a) => match &*a.items {
             SchemaType::ReferenceSchema(r) if ref_target_class(&r.r#ref).is_some() => {
                 let target = ref_target_class(&r.r#ref).unwrap();
-                if is_enum_ref(&target, all_schemas) {
+                if enum_names.contains(&target) {
                     fields.push(SqlField::EnumColumn {
                         name: snake.to_string(),
                         enum_class: target,
@@ -533,17 +550,6 @@ fn ref_target_class(ref_str: &str) -> Option<String> {
     let path = ref_str.split('#').next().unwrap_or(ref_str);
     let last = path.rsplit('/').next()?;
     last.strip_suffix(".json").map(|s| s.to_string())
-}
-
-fn is_enum_ref(target_class: &str, all_schemas: &Schemas) -> bool {
-    for schema_rc in all_schemas {
-        let mut s = schema_rc.borrow_mut();
-        if s.name() != target_class {
-            continue;
-        }
-        return matches!(s.schema(), Ok(SchemaRootType::StrEnum(_)));
-    }
-    false
 }
 
 fn pascal_case(snake: &str) -> String {
