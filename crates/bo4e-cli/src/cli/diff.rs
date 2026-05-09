@@ -1,4 +1,5 @@
 use crate::cli::base::Executable;
+use crate::console::spinner;
 use crate::cprint_normal;
 use crate::diff::diff::diff_schemas;
 use crate::diff::matrix::{build_chain, create_compatibility_matrix};
@@ -85,8 +86,10 @@ fn run_schemas(a: &DiffSchemasArgs) -> Result<(), String> {
         crate::cwarn!("{w}");
     }
     let new = out_new.schemas;
-    cprint_normal!("Comparing JSON-schemas...");
-    let changes = diff_schemas(&old, &new);
+    let changes = {
+        let _spin = spinner::squish("Comparing JSON-schemas...");
+        diff_schemas(&old, &new)
+    };
     cprint_normal!("Compared JSON-schemas.");
     write_changes(&changes, &a.output_file)?;
     cprint_normal!("Saved Diff to file: {}", a.output_file.display());
@@ -94,9 +97,13 @@ fn run_schemas(a: &DiffSchemasArgs) -> Result<(), String> {
 }
 
 fn run_matrix(a: &DiffMatrixArgs) -> Result<(), String> {
-    let diffs = read_changes_from_diff_files(&a.input_diff_files)?;
-    let chain = build_chain(diffs)?;
-    let matrix = create_compatibility_matrix(&chain, a.use_emotes);
+    let (chain, matrix) = {
+        let _spin = spinner::squish("Creating compatibility matrix...");
+        let diffs = read_changes_from_diff_files(&a.input_diff_files)?;
+        let chain = build_chain(diffs)?;
+        let matrix = create_compatibility_matrix(&chain, a.use_emotes);
+        (chain, matrix)
+    };
     let path: Vec<String> = chain.nodes.iter().map(|n| n.version_key.clone()).collect();
     match a.output_type {
         MatrixOutputType::Csv => write_compatibility_matrix_csv(&a.output_file, &matrix, &path)?,
