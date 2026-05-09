@@ -1,7 +1,7 @@
 use crate::models::macros::{
     literal_enum, visitable_dispatch_enum, visitable_forwarded_iter, visitable_leaf,
 };
-use crate::utils::visitable::Visitable;
+use crate::visitable::Visitable;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

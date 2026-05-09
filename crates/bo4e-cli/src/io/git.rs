@@ -1,5 +1,5 @@
 use crate::models::git::Reference;
-use crate::models::version::Version;
+use bo4e_schemas::models::version::Version;
 use crate::repo::filter::{FilterOptions, filter_tags};
 use std::io;
 use std::path::Path;

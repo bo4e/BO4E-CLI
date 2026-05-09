@@ -161,6 +161,7 @@ name = "bo4e-cli"
 version = "0.1.0"
 dependencies = [
  "bimap",
+ "bo4e-schemas",
  "chrono",
  "clap",
  "color-eyre",
@@ -182,6 +183,20 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "walkdir",
+]
+
+[[package]]
+name = "bo4e-schemas"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "itertools",
+ "lazy_static",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
  "walkdir",
 ]
 

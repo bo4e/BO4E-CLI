@@ -1,4 +1,4 @@
-use crate::models::json_schema::{SchemaRootObject, SchemaRootStrEnum, SchemaType};
+use bo4e_schemas::models::json_schema::{SchemaRootObject, SchemaRootStrEnum, SchemaType};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 

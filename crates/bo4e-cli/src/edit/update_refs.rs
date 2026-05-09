@@ -1,7 +1,7 @@
 use crate::cprint_verbose;
-use crate::models::json_schema::ReferenceSchema;
-use crate::models::schema_meta::{Schema, Schemas};
-use crate::utils::visitable::{Visitable, cntrl_to_result, result_to_cntrl};
+use bo4e_schemas::models::json_schema::ReferenceSchema;
+use bo4e_schemas::models::schema_meta::{Schema, Schemas};
+use bo4e_schemas::visitable::{Visitable, cntrl_to_result, result_to_cntrl};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::DerefMut;
@@ -104,7 +104,7 @@ pub fn update_references_all(schemas: &mut Schemas) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::console::console::{Console, Level, CONSOLE};
-    use crate::models::json_schema::ReferenceSchema;
+    use bo4e_schemas::models::json_schema::ReferenceSchema;
     use std::collections::HashMap;
 
     fn init_console() {

@@ -33,8 +33,8 @@ pub fn write_changes(changes: &Changes, file_path: &Path) -> Result<(), String> 
 mod tests {
     use super::*;
     use crate::models::changes::Changes;
-    use crate::models::schema_meta::Schemas;
-    use crate::models::version::DirtyVersion;
+    use bo4e_schemas::models::schema_meta::Schemas;
+    use bo4e_schemas::models::version::DirtyVersion;
 
     fn empty_changes(old: &str, new: &str) -> Changes {
         let v_old: DirtyVersion = old.parse().unwrap();

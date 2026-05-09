@@ -1,5 +1,5 @@
-use crate::models::json_schema::{PrimitiveValue, SchemaRootObject, SchemaRootType, SchemaType, TypeBase};
-use crate::models::schema_meta::Schemas;
+use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootObject, SchemaRootType, SchemaType, TypeBase};
+use bo4e_schemas::models::schema_meta::Schemas;
 use crate::{cprint_normal, cprint_verbose, cwarn};
 
 /// Remove the `null` variant from a nullable `AnyOf` property.
@@ -161,7 +161,7 @@ pub fn transform_all_non_nullable_fields(
 mod tests {
     use super::*;
     use crate::console::console::{Console, Level, CONSOLE};
-    use crate::models::json_schema::*;
+    use bo4e_schemas::models::json_schema::*;
     use std::collections::BTreeMap;
 
     fn init_console() {

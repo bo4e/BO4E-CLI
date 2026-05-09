@@ -2,8 +2,8 @@ use crate::models::config::{
     AdditionalEnumItem, AdditionalField, AdditionalFieldOrRef, AdditionalModel, Config,
     SchemaRootTypeOrReference,
 };
-use crate::models::json_schema::SchemaRootType;
-use crate::models::schema_meta::Schema;
+use bo4e_schemas::models::json_schema::SchemaRootType;
+use bo4e_schemas::models::schema_meta::Schema;
 use std::path::Path;
 
 /// Resolved config — `additional_fields` is always a flat list of concrete `AdditionalField`

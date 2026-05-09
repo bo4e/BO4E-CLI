@@ -1,6 +1,6 @@
-use crate::models::json_schema::SchemaType;
-use crate::models::schema_meta::Schemas;
-use crate::models::version::DirtyVersion;
+use bo4e_schemas::models::json_schema::SchemaType;
+use bo4e_schemas::models::schema_meta::Schemas;
+use bo4e_schemas::models::version::DirtyVersion;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::path::PathBuf;

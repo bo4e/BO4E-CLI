@@ -1,10 +1,10 @@
 use crate::diff::filters::has_critical;
 use crate::models::changes::{Change, ChangeType, ChangeValue, Changes};
-use crate::models::json_schema::{
+use bo4e_schemas::models::json_schema::{
     AllOfSchema, AnyOfSchema, ArraySchema, ObjectSchema, ReferenceSchema, SchemaRootType,
     SchemaType, StrEnumSchema, StringSchema, TypeBase,
 };
-use crate::models::schema_meta::Schemas;
+use bo4e_schemas::models::schema_meta::Schemas;
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -447,12 +447,12 @@ fn diff_enum_schemas(
 mod tests {
     use super::*;
     use crate::models::changes::ChangeType;
-    use crate::models::json_schema::{
+    use bo4e_schemas::models::json_schema::{
         LiteralTypeObject, LiteralTypeString, ObjectSchema, SchemaRootObject, SchemaRootStrEnum,
         SchemaRootType, SchemaRootTypeBase, SchemaType, StrEnumSchema, TypeBase,
     };
-    use crate::models::schema_meta::{Schema, Schemas};
-    use crate::models::version::DirtyVersion;
+    use bo4e_schemas::models::schema_meta::{Schema, Schemas};
+    use bo4e_schemas::models::version::DirtyVersion;
     use std::cell::RefCell;
     use std::collections::BTreeMap;
     use std::rc::Rc;
@@ -565,7 +565,7 @@ mod tests {
 
     #[test]
     fn test_diff_type_base_skips_version_field_default_change() {
-        use crate::models::json_schema::PrimitiveValue;
+        use bo4e_schemas::models::json_schema::PrimitiveValue;
         let mut a = base(None, Some(" Version"));
         let mut b = base(None, Some(" Version"));
         a.default = Some(PrimitiveValue::String("v202401.0.1".into()));
@@ -601,7 +601,7 @@ mod tests {
 
     #[test]
     fn test_ref_change_emits_field_reference_changed() {
-        use crate::models::json_schema::ReferenceSchema;
+        use bo4e_schemas::models::json_schema::ReferenceSchema;
         let r1 = ReferenceSchema {
             base: TypeBase::default(),
             r#ref: "#/A".into(),
@@ -618,7 +618,7 @@ mod tests {
 
     #[test]
     fn test_string_format_change() {
-        use crate::models::json_schema::{StringSchema, StringSchemaFormat};
+        use bo4e_schemas::models::json_schema::{StringSchema, StringSchemaFormat};
         let mut a = StringSchema::default();
         let mut b = StringSchema::default();
         a.format = None;
@@ -630,12 +630,12 @@ mod tests {
     }
 
     fn string_schema_t() -> SchemaType {
-        use crate::models::json_schema::StringSchema;
+        use bo4e_schemas::models::json_schema::StringSchema;
         SchemaType::StringSchema(StringSchema::default())
     }
 
     fn ref_t(r: &str) -> SchemaType {
-        use crate::models::json_schema::ReferenceSchema;
+        use bo4e_schemas::models::json_schema::ReferenceSchema;
         SchemaType::ReferenceSchema(ReferenceSchema {
             base: TypeBase::default(),
             r#ref: r.to_string(),
@@ -644,7 +644,7 @@ mod tests {
 
     #[test]
     fn test_any_of_variant_added_emits_field_any_of_type_added() {
-        use crate::models::json_schema::AnyOfSchema;
+        use bo4e_schemas::models::json_schema::AnyOfSchema;
         let old = AnyOfSchema {
             base: TypeBase::default(),
             any_of: vec![string_schema_t()],
@@ -664,7 +664,7 @@ mod tests {
 
     #[test]
     fn test_any_of_variant_removed() {
-        use crate::models::json_schema::AnyOfSchema;
+        use bo4e_schemas::models::json_schema::AnyOfSchema;
         let old = AnyOfSchema {
             base: TypeBase::default(),
             any_of: vec![string_schema_t(), ref_t("#/A")],
@@ -684,7 +684,7 @@ mod tests {
 
     #[test]
     fn test_any_of_pairs_with_non_critical_inner_change() {
-        use crate::models::json_schema::{AnyOfSchema, StringSchema};
+        use bo4e_schemas::models::json_schema::{AnyOfSchema, StringSchema};
         let mut s_old = StringSchema::default();
         let mut s_new = StringSchema::default();
         s_old.base.description = Some("old".into());
@@ -708,7 +708,7 @@ mod tests {
 
     #[test]
     fn test_field_type_changed_unrelated_types() {
-        use crate::models::json_schema::{NumberSchema, StringSchema};
+        use bo4e_schemas::models::json_schema::{NumberSchema, StringSchema};
         let old = SchemaType::StringSchema(StringSchema::default());
         let new = SchemaType::NumberSchema(NumberSchema::default());
         let mut out = vec![];
@@ -719,7 +719,7 @@ mod tests {
 
     #[test]
     fn test_field_cardinality_changed_object_to_array() {
-        use crate::models::json_schema::{ArraySchema, LiteralTypeArray, StringSchema};
+        use bo4e_schemas::models::json_schema::{ArraySchema, LiteralTypeArray, StringSchema};
         let obj = SchemaType::Object(ObjectSchema {
             base: TypeBase::default(),
             r#type: LiteralTypeObject::Object,
@@ -765,7 +765,7 @@ mod tests {
 
     #[test]
     fn test_object_field_default_changed_recurses() {
-        use crate::models::json_schema::{PrimitiveValue, StringSchema};
+        use bo4e_schemas::models::json_schema::{PrimitiveValue, StringSchema};
         let mut s_old = StringSchema::default();
         let mut s_new = StringSchema::default();
         s_old.base.default = Some(PrimitiveValue::String("a".into()));

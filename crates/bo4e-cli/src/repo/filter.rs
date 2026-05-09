@@ -1,4 +1,4 @@
-use crate::models::version::Version;
+use bo4e_schemas::models::version::Version;
 
 pub struct FilterOptions {
     /// Number of versions to return. `0` means "all since `threshold`".
@@ -57,7 +57,7 @@ pub fn filter_tags(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::version::Version;
+    use bo4e_schemas::models::version::Version;
 
     fn v(s: &str) -> Version {
         s.parse().unwrap()

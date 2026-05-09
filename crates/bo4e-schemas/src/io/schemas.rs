@@ -48,15 +48,25 @@ pub fn write_schemas(
     create_version_file(output_dir, &schemas.version)
 }
 
-pub fn read_schemas(input_dir: &std::path::Path) -> Result<Schemas, String> {
+pub struct ReadSchemasOutput {
+    pub schemas: Schemas,
+    /// Non-fatal warnings encountered during traversal (e.g. unreadable entries).
+    pub warnings: Vec<String>,
+}
+
+pub fn read_schemas(input_dir: &std::path::Path) -> Result<ReadSchemasOutput, String> {
     let version = read_version_file(input_dir)?;
     let mut schemas = Schemas::new(version);
+    let mut warnings: Vec<String> = Vec::new();
 
     for entry in WalkDir::new(input_dir)
         .into_iter()
-        .filter_map(|e| {
-            e.map_err(|err| crate::cwarn!("skipping unreadable entry: {}", err))
-                .ok()
+        .filter_map(|e| match e {
+            Ok(e) => Some(e),
+            Err(err) => {
+                warnings.push(format!("skipping unreadable entry: {}", err));
+                None
+            }
         })
         .filter(|e| {
             e.path().is_file()
@@ -83,7 +93,7 @@ pub fn read_schemas(input_dir: &std::path::Path) -> Result<Schemas, String> {
         schemas.add_schema(Rc::new(RefCell::new(schema)))?;
     }
 
-    Ok(schemas)
+    Ok(ReadSchemasOutput { schemas, warnings })
 }
 
 #[cfg(test)]
@@ -116,27 +126,28 @@ mod tests {
     #[test]
     fn test_read_schemas_finds_all_json_files() {
         let dir = make_test_dir();
-        let schemas = read_schemas(dir.path()).unwrap();
-        assert_eq!(schemas.schemas().len(), 2);
-        assert!(schemas.get_by_name("Angebot").is_some());
-        assert!(schemas.get_by_name("Typ").is_some());
+        let out = read_schemas(dir.path()).unwrap();
+        assert_eq!(out.schemas.schemas().len(), 2);
+        assert!(out.schemas.get_by_name("Angebot").is_some());
+        assert!(out.schemas.get_by_name("Typ").is_some());
+        assert!(out.warnings.is_empty());
     }
 
     #[test]
     fn test_read_schemas_derives_module_path() {
         let dir = make_test_dir();
-        let schemas = read_schemas(dir.path()).unwrap();
-        let angebot = schemas.get_by_name("Angebot").unwrap();
+        let out = read_schemas(dir.path()).unwrap();
+        let angebot = out.schemas.get_by_name("Angebot").unwrap();
         assert_eq!(angebot.borrow().module(), &["bo", "Angebot"]);
     }
 
     #[test]
     fn test_read_schemas_skips_dotfiles() {
         let dir = make_test_dir();
-        let schemas = read_schemas(dir.path()).unwrap();
+        let out = read_schemas(dir.path()).unwrap();
         // .version is not a .json file so it must not appear
-        assert!(schemas.get_by_name(".version").is_none());
+        assert!(out.schemas.get_by_name(".version").is_none());
         // No schema with a dot-prefixed name should exist
-        assert_eq!(schemas.schemas().len(), 2);
+        assert_eq!(out.schemas.schemas().len(), 2);
     }
 }

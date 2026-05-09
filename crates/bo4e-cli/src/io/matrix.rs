@@ -69,7 +69,7 @@ mod tests {
         Compatibility, CompatibilityMatrix, CompatibilityMatrixEntry, CompatibilitySymbol,
         CompatibilityText,
     };
-    use crate::models::version::DirtyVersion;
+    use bo4e_schemas::models::version::DirtyVersion;
     use indexmap::IndexMap;
 
     fn dv(s: &str) -> DirtyVersion {

@@ -1,8 +1,8 @@
 use crate::console::progress_bar::{
     abandon_progress_bar_with_error, finish_progress_bar, new_progress_bar,
 };
-use crate::models::schema_meta::{Schema, Schemas};
-use crate::models::version::Version;
+use bo4e_schemas::models::schema_meta::{Schema, Schemas};
+use bo4e_schemas::models::version::Version;
 use lazy_static::lazy_static;
 use octocrab::repos::RepoHandler;
 use std::pin::Pin;

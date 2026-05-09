@@ -5,7 +5,7 @@ use crate::diff::matrix::{build_chain, create_compatibility_matrix};
 use crate::diff::version::check_version_bump;
 use crate::io::changes::{read_changes_from_diff_files, write_changes};
 use crate::io::matrix::{write_compatibility_matrix_csv, write_compatibility_matrix_json};
-use crate::io::schemas::read_schemas;
+use bo4e_schemas::io::schemas::read_schemas;
 use clap::{Args, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
@@ -75,8 +75,16 @@ impl Executable for Diff {
 }
 
 fn run_schemas(a: &DiffSchemasArgs) -> Result<(), String> {
-    let old = read_schemas(&a.input_dir_base)?;
-    let new = read_schemas(&a.input_dir_comp)?;
+    let out_old = read_schemas(&a.input_dir_base)?;
+    for w in &out_old.warnings {
+        crate::cwarn!("{w}");
+    }
+    let old = out_old.schemas;
+    let out_new = read_schemas(&a.input_dir_comp)?;
+    for w in &out_new.warnings {
+        crate::cwarn!("{w}");
+    }
+    let new = out_new.schemas;
     cprint_normal!("Comparing JSON-schemas...");
     let changes = diff_schemas(&old, &new);
     cprint_normal!("Compared JSON-schemas.");
@@ -111,8 +119,8 @@ mod tests {
     use super::*;
     use crate::console::console::{CONSOLE, Console, Level};
     use crate::models::changes::Changes;
-    use crate::models::schema_meta::Schemas;
-    use crate::models::version::DirtyVersion;
+    use bo4e_schemas::models::schema_meta::Schemas;
+    use bo4e_schemas::models::version::DirtyVersion;
     use std::fs;
 
     fn ensure_console() {

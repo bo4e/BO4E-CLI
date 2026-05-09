@@ -5,8 +5,8 @@ use crate::edit::non_nullable::transform_all_non_nullable_fields;
 use crate::edit::update_refs::update_references_all;
 use crate::io::cleanse::clear_dir_if_needed;
 use crate::io::config::{get_additional_schemas, load_config};
-use crate::io::schemas::{read_schemas, write_schemas};
-use crate::models::json_schema::{PrimitiveValue, SchemaRootType};
+use bo4e_schemas::io::schemas::{read_schemas, write_schemas};
+use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootType};
 use crate::{cprint_normal, cprint_verbose, cwarn};
 use clap::Args;
 use std::cell::RefCell;
@@ -44,7 +44,11 @@ impl Executable for Edit {
         clear_dir_if_needed(&self.output_dir, !self.no_clear_output)
             .map_err(|e| e.to_string())?;
 
-        let mut schemas = read_schemas(&self.input_dir)?;
+        let out = read_schemas(&self.input_dir)?;
+        for w in &out.warnings {
+            crate::cwarn!("{w}");
+        }
+        let mut schemas = out.schemas;
 
         if let Some(config_path) = &self.config_file {
             let config = load_config(config_path)?;
@@ -90,9 +94,9 @@ impl Executable for Edit {
                     && let Some(version_prop) = obj.object.properties.get_mut("_version")
                 {
                     let base = match version_prop {
-                        crate::models::json_schema::SchemaType::StringSchema(s) => &mut s.base,
+                        bo4e_schemas::models::json_schema::SchemaType::StringSchema(s) => &mut s.base,
                         // AnyOf: set default on the wrapper — correct JSON Schema placement for nullable fields.
-                        crate::models::json_schema::SchemaType::AnyOf(s) => &mut s.base,
+                        bo4e_schemas::models::json_schema::SchemaType::AnyOf(s) => &mut s.base,
                         _ => {
                             cprint_verbose!("_version field has unexpected schema type, skipping default assignment");
                             continue;

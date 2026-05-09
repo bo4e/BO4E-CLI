@@ -1,6 +1,6 @@
 use crate::cprint_verbose;
 use crate::models::changes::Changes;
-use crate::models::version::Version;
+use bo4e_schemas::models::version::Version;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VersionBumpKind {
@@ -55,8 +55,8 @@ mod tests {
     use super::*;
     use crate::console::console::{CONSOLE, Console, Level};
     use crate::models::changes::{Change, ChangeType};
-    use crate::models::schema_meta::Schemas;
-    use crate::models::version::DirtyVersion;
+    use bo4e_schemas::models::schema_meta::Schemas;
+    use bo4e_schemas::models::version::DirtyVersion;
 
     fn ensure_console() {
         let _ = CONSOLE.set(Console::new(Level::Normal));

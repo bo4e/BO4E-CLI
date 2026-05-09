@@ -4,7 +4,7 @@ use crate::models::matrix::{
     Compatibility, CompatibilityMatrix, CompatibilityMatrixEntry, CompatibilitySymbol,
     CompatibilityText,
 };
-use crate::models::schema_meta::Schemas;
+use bo4e_schemas::models::schema_meta::Schemas;
 use indexmap::IndexMap;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -239,8 +239,8 @@ fn wrap_symbol(use_emotes: bool, s: Sym) -> Compatibility {
 mod tests {
     use super::*;
     use crate::models::changes::{Change, ChangeType, Changes};
-    use crate::models::schema_meta::{Schema, Schemas};
-    use crate::models::version::DirtyVersion;
+    use bo4e_schemas::models::schema_meta::{Schema, Schemas};
+    use bo4e_schemas::models::version::DirtyVersion;
     use std::cell::RefCell;
     use std::rc::Rc;
 

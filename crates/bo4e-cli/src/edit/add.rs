@@ -1,6 +1,6 @@
 use crate::models::config::{AdditionalEnumItem, AdditionalField};
-use crate::models::json_schema::{SchemaRootType, SchemaType};
-use crate::models::schema_meta::Schemas;
+use bo4e_schemas::models::json_schema::{SchemaRootType, SchemaType};
+use bo4e_schemas::models::schema_meta::Schemas;
 use crate::{cprint_normal, cprint_verbose, cwarn};
 
 /// Insert additional fields into matching `SchemaRootObject` schemas.
@@ -108,9 +108,9 @@ mod tests {
     use super::*;
     use crate::console::console::{Console, Level, CONSOLE};
     use crate::models::config::{AdditionalEnumItem, AdditionalField};
-    use crate::models::json_schema::*;
-    use crate::models::schema_meta::{Schema, Schemas};
-    use crate::models::version::DirtyVersion;
+    use bo4e_schemas::models::json_schema::*;
+    use bo4e_schemas::models::schema_meta::{Schema, Schemas};
+    use bo4e_schemas::models::version::DirtyVersion;
     use regex::Regex;
     use std::cell::RefCell;
     use std::collections::BTreeMap;

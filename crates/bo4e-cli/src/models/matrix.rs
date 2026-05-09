@@ -1,4 +1,4 @@
-use crate::models::version::DirtyVersion;
+use bo4e_schemas::models::version::DirtyVersion;
 use bimap::BiMap;
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
@@ -139,7 +139,7 @@ pub struct CompatibilityMatrix {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::version::DirtyVersion;
+    use bo4e_schemas::models::version::DirtyVersion;
 
     #[test]
     fn test_compatibility_symbol_roundtrip_emoji() {
