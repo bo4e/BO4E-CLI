@@ -250,7 +250,7 @@ bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydant
 
 ### Slim install via Cargo features
 
-By default `cargo install bo4e-cli` includes all three Python output types. To install with only the type you need:
+By default `cargo install bo4e-cli` includes both Python output types. To install with only the type you need:
 
 ```
 cargo install bo4e-cli --no-default-features --features python-pydantic-v2
