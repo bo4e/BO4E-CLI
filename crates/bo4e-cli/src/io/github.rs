@@ -1,6 +1,7 @@
 use crate::console::progress_bar::{
     abandon_progress_bar_with_error, finish_progress_bar, new_progress_bar,
 };
+use crate::console::spinner;
 use bo4e_schemas::models::schema_meta::{Schema, Schemas};
 use bo4e_schemas::models::version::Version;
 use lazy_static::lazy_static;
@@ -162,6 +163,7 @@ async fn get_target_commitish_from_tag(
     repo_handler: &RepoHandler<'_>,
     version_tag: &Version,
 ) -> Result<String, String> {
+    let _spin = spinner::earth("Querying GitHub tree");
     let reference = repo_handler
         .releases()
         .get_by_tag(&version_tag.to_string())
@@ -184,12 +186,15 @@ pub async fn get_schemas_from_github(
         get_target_commitish_from_tag(&get_bo4e_schemas_repo_handler(&octocrab), version_tag)
             .await?;
 
-    let schema_downloads = _get_schemas_from_github_recursive(
-        octocrab,
-        target_commitish,
-        "src/bo4e_schemas".to_string(),
-    )
-    .await?;
+    let schema_downloads = {
+        let _spin = spinner::earth("Querying GitHub tree");
+        _get_schemas_from_github_recursive(
+            octocrab,
+            target_commitish,
+            "src/bo4e_schemas".to_string(),
+        )
+        .await?
+    };
     let local_set = tokio::task::LocalSet::new();
     let schemas_vector = local_set
         .run_until(_execute_futures_with_progress_bar(
@@ -205,6 +210,7 @@ pub async fn get_schemas_from_github(
 }
 
 pub async fn resolve_latest_version(token: Option<&str>) -> Result<Version, String> {
+    let _spin = spinner::earth("Querying GitHub for latest version");
     let octocrab = get_octocrab_instance(token)?;
     let latest_release = get_bo4e_schemas_repo_handler(&octocrab)
         .releases()
