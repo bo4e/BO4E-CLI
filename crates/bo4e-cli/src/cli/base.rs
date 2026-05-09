@@ -3,14 +3,26 @@ use crate::cli::edit::Edit;
 use crate::cli::generate::Generate;
 use crate::cli::pull::Pull;
 use crate::cli::repo::Repo;
+use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{CommandFactory, Parser, Subcommand};
 
 pub trait Executable {
     fn run(&self) -> Result<(), String>;
 }
 
+// Matches palette::MAIN/SUB/ENUM/ERROR by tone; uses 16-colour AnsiColor for
+// const-friendliness — help renders before CONSOLE is initialised.
+const HELP_STYLES: Styles = Styles::styled()
+    .header(     AnsiColor::Cyan.on_default()    .effects(Effects::BOLD))
+    .usage(      AnsiColor::Cyan.on_default()    .effects(Effects::BOLD))
+    .literal(    AnsiColor::Magenta.on_default() .effects(Effects::BOLD))
+    .placeholder(AnsiColor::Yellow.on_default()  .effects(Effects::ITALIC))
+    .error(      AnsiColor::Red.on_default()     .effects(Effects::BOLD))
+    .valid(      AnsiColor::Cyan.on_default())
+    .invalid(    AnsiColor::Red.on_default()     .effects(Effects::BOLD));
+
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, styles = HELP_STYLES)]
 //#[command(propagate_version = true)]
 pub struct Cli {
     /// Enable verbose output for all commands.
@@ -74,5 +86,33 @@ mod tests {
             "-i", "in", "-o", "out"]).unwrap();
         assert!(cli.quiet);
         assert!(!cli.verbose);
+    }
+
+    #[test]
+    fn help_contains_ansi_when_styled() {
+        let mut cmd = Cli::command();
+        let rendered = cmd.render_help().ansi().to_string();
+        assert!(
+            rendered.contains("\x1b["),
+            "expected ANSI escape sequences in --help output, got:\n{}",
+            rendered
+        );
+    }
+
+    #[test]
+    fn each_subcommand_help_contains_ansi() {
+        let mut cmd = Cli::command();
+        for name in ["pull", "edit", "diff", "repo", "generate"] {
+            let sub = cmd
+                .find_subcommand_mut(name)
+                .unwrap_or_else(|| panic!("subcommand {} missing", name));
+            let rendered = sub.clone().render_help().ansi().to_string();
+            assert!(
+                rendered.contains("\x1b["),
+                "subcommand {} help has no ANSI: {}",
+                name,
+                rendered
+            );
+        }
     }
 }
