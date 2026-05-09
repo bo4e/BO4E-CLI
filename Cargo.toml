@@ -1,34 +1,11 @@
-[package]
-name = "bo4e-cli"
-version = "0.1.0"
-description = "CLI for developers. It contains many useful features when working on using BO4E in your own projects."
-authors = ["Leon Haffmans <leon.haffmans@hochfrequenz.de>"]
-license = "MIT"
+[workspace]
+resolver = "2"
+members = ["crates/bo4e-cli"]
+
+[workspace.package]
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/bo4e/BO4E-CLI"
 
-[dependencies]
-clap = { version = "4.5.45", features = ["derive", "env", "unicode", "wrap_help"] }
-color-eyre = "0.6.3"
-crossterm = { version = "0.28.1", features = ["event-stream"] }
-futures = "0.3.31"
-tokio = { version = "1.40.0", features = ["full"] }
-regex = "1.11.1"
-lazy_static = "1.5.0"
-chrono = { version = "0.4.41", features = ["serde"] }
-duplicate = "2.0.0"
-serde = { version = "1.0.219", features = ["derive", "rc"] }
-serde_json = "1.0.143"
-url = { version = "2.5.6", features = ["serde"] }
-itertools = "0.14.0"
-bimap = { version = "0.6.3", features = ["serde"] }
-serde_regex = "1.1.0"
-octocrab = "0.44.1"
-http = "1.3.1"
-indicatif = { version = "0.18.0", features = ["tokio"] }
-console = { version = "0.16.3", features = ["windows-console-colors"] }
-walkdir = "2.5"
-csv = "1"
-indexmap = { version = "2", features = ["serde"] }
-
-[dev-dependencies]
-tempfile = "3"
+[workspace.dependencies]
+# placeholder for shared deps in later tasks
