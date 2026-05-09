@@ -10,13 +10,10 @@ pub(crate) mod plan;
 
 use crate::error::Error;
 use minijinja::{Environment, context};
-use plan::{SqlField, TablePlan};
+use plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
 use serde::Serialize;
 use serde_json::Map as JsonMap;
 use std::collections::{BTreeMap, BTreeSet};
-
-#[allow(unused_imports)]
-pub(crate) use plan::SqlPlan;
 
 /// Per-field row passed to `BaseModel.jinja2`'s `SQL.fields` map.
 #[derive(Debug, Serialize)]
@@ -481,6 +478,56 @@ fn py_bool(b: bool) -> &'static str {
     if b { "True" } else { "False" }
 }
 
+/// Render `<output>/many.py`. Returns an empty string when there are no junctions
+/// (caller should not write the file in that case).
+pub(crate) fn render_many(env: &Environment<'_>, junctions: &[JunctionTable]) -> Result<String, Error> {
+    if junctions.is_empty() {
+        return Ok(String::new());
+    }
+    let links: Vec<minijinja::Value> = junctions.iter().map(|j| {
+        context! {
+            table_name => j.class_name.clone(),
+            cls1 => j.owner_class.clone(),
+            cls2 => j.target_class.clone(),
+            rel_field_name1 => j.source_field.clone(),
+            id_field_name1 => j.owner_id_field.clone(),
+            id_field_name2 => j.target_id_field.clone(),
+        }
+    }).map(minijinja::Value::from_serialize).collect();
+
+    let tpl = env.get_template("python/sql_model/ManyLinks.jinja2")?;
+    let rendered = tpl.render(context! { links => links })?;
+    Ok(rendered)
+}
+
+/// Render `<output>/__init__.py` re-exporting every class and every junction.
+pub(crate) fn render_init(env: &Environment<'_>, plan: &SqlPlan) -> Result<String, Error> {
+    let classes: Vec<minijinja::Value> = plan.tables.values().map(|t| {
+        let module_path: Vec<String> = t.module.iter()
+            .take(t.module.len().saturating_sub(1))
+            .map(|s| s.to_ascii_lowercase())
+            .chain(std::iter::once(crate::naming::module_file_name(&t.module)))
+            .collect();
+        context! {
+            name => t.class_name.clone(),
+            module_path => module_path,
+        }
+    }).map(minijinja::Value::from_serialize).collect();
+
+    let links: Vec<String> = plan.junctions.iter().map(|j| j.class_name.clone()).collect();
+
+    let tpl = env.get_template("python/sql_model/__init__.jinja2")?;
+    let rendered = tpl.render(context! {
+        classes => classes,
+        links => links,
+    })?;
+    Ok(rendered)
+}
+
+pub(crate) fn render_version(version: &str) -> String {
+    format!("__version__: str = \"{version}\"\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,5 +612,32 @@ mod tests {
             body.contains("from ..enum.typ import Typ"),
             "got:\n{body}"
         );
+    }
+
+    #[test]
+    fn render_many_py_emits_one_class_per_junction() {
+        let env = make_environment(None).unwrap();
+        let plan = fixture_plan();
+        let body = render_many(&env, &plan.junctions).expect("render");
+        assert!(body.contains("class AngebotAdressenLink(SQLModel, table=True):"), "got:\n{body}");
+        assert!(body.contains("angebot_id: uuid_pkg.UUID = Field(..., primary_key=True, foreign_key=\"angebot.id\""));
+        assert!(body.contains("adresse_id: uuid_pkg.UUID = Field(..., primary_key=True, foreign_key=\"adresse.id\""));
+    }
+
+    #[test]
+    fn render_init_includes_classes_and_links() {
+        let env = make_environment(None).unwrap();
+        let plan = fixture_plan();
+        let body = render_init(&env, &plan).expect("render");
+        assert!(body.contains("from .bo.angebot import Angebot"));
+        assert!(body.contains("from .com.adresse import Adresse"));
+        assert!(body.contains("from .enum.typ import Typ"));
+        assert!(body.contains("from .many import AngebotAdressenLink"));
+    }
+
+    #[test]
+    fn render_version_emits_constant() {
+        let body = render_version("202401.4.0");
+        assert_eq!(body.trim(), "__version__: str = \"202401.4.0\"");
     }
 }
