@@ -1,0 +1,6 @@
+{% for cls in classes -%}
+from .{{ cls.module_path | join('.') }} import {{ cls.name }}
+{% endfor -%}
+{% for link in links -%}
+from .many import {{ link }}
+{% endfor %}
