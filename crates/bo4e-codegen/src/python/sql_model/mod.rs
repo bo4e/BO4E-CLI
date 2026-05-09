@@ -8,7 +8,6 @@ pub(crate) mod plan;
 
 use bo4e_schemas::Schemas;
 use crate::error::Error;
-use crate::naming::module_file_name;
 use minijinja::{Environment, context};
 use plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
 use serde::Serialize;
@@ -568,17 +567,8 @@ pub(crate) fn generate_sql_model(
 
     // ── Per-class files ────────────────────────────────────────────────────────
     for table in plan.tables.values() {
-        let path_segments: Vec<String> = table.module.iter()
-            .take(table.module.len().saturating_sub(1))
-            .map(|s| s.to_ascii_lowercase())
-            .collect();
-        let mut out_dir = output_dir.to_path_buf();
-        for seg in &path_segments {
-            out_dir.push(seg);
-        }
+        let (out_dir, file_name, depth) = crate::python::module_paths(output_dir, &table.module);
         std::fs::create_dir_all(&out_dir)?;
-        let file_name = format!("{}.py", module_file_name(&table.module));
-        let depth = path_segments.len() + 1;
         let body = render_table(env, table, depth, &class_to_module)?;
         let out_path = out_dir.join(&file_name);
         std::fs::write(&out_path, body)?;
@@ -604,19 +594,8 @@ pub(crate) fn generate_sql_model(
     written.push(version_path);
 
     // ── Empty __init__.py per first-level subdirectory ─────────────────────────
-    let mut subdirs: BTreeSet<String> = BTreeSet::new();
-    for table in plan.tables.values() {
-        if table.module.len() > 1 {
-            subdirs.insert(table.module[0].to_ascii_lowercase());
-        }
-    }
-    for sub in subdirs {
-        let p = output_dir.join(&sub).join("__init__.py");
-        if !p.exists() {
-            std::fs::write(&p, "")?;
-            written.push(p);
-        }
-    }
+    let subdirs = crate::python::first_level_subdirs(plan.tables.values().map(|t| t.module.as_slice()));
+    crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
 
     Ok(written)
 }

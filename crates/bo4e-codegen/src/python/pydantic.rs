@@ -75,23 +75,9 @@ pub(crate) fn generate_pydantic(
         let module = schema.module().to_vec();
         let class_name = schema.name().to_string();
 
-        let path_segments: Vec<String> = module
-            .iter()
-            .take(module.len().saturating_sub(1))
-            .map(|s| s.to_ascii_lowercase())
-            .collect();
-        let file_name = format!("{}.py", module_file_name(&module));
-
-        let mut out_dir = output_dir.to_path_buf();
-        for seg in &path_segments {
-            out_dir.push(seg);
-        }
+        let (out_dir, file_name, depth) = crate::python::module_paths(output_dir, &module);
         std::fs::create_dir_all(&out_dir)?;
         let out_path = out_dir.join(&file_name);
-
-        // depth = number of dots in relative imports; matches ImportBlock semantics
-        // (root-level module is depth 1, one subdir is depth 2, …).
-        let depth = path_segments.len() + 1;
 
         // Resolve the parsed JSON Schema (clone so we drop the borrow before render).
         let parsed = schema.schema().map_err(Error::Schema)?.clone();
@@ -141,21 +127,9 @@ pub(crate) fn generate_pydantic(
     written.push(init_path);
 
     // ── Empty __init__.py per first-level subdirectory ─────────────────────────
-    let mut subdirs: BTreeSet<String> = BTreeSet::new();
-    for schema_rc in schemas {
-        let s = schema_rc.borrow();
-        let module = s.module();
-        if module.len() > 1 {
-            subdirs.insert(module[0].to_ascii_lowercase());
-        }
-    }
-    for sub in subdirs {
-        let p = output_dir.join(&sub).join("__init__.py");
-        if !p.exists() {
-            std::fs::write(&p, "")?;
-            written.push(p);
-        }
-    }
+    let modules: Vec<Vec<String>> = schemas.iter().map(|s| s.borrow().module().to_vec()).collect();
+    let subdirs = crate::python::first_level_subdirs(modules.iter().map(|m| m.as_slice()));
+    crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
 
     Ok(written)
 }
