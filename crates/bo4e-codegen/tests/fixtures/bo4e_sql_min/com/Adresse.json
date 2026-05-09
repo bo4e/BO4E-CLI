@@ -1,0 +1,21 @@
+{
+  "title": "Adresse",
+  "description": "Postal address (trimmed for sql-model fixture).",
+  "additionalProperties": true,
+  "type": "object",
+  "required": [],
+  "properties": {
+    "_id": {
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        { "type": "string" },
+        { "type": "null" }
+      ]
+    },
+    "ort": {
+      "title": "Ort",
+      "type": "string"
+    }
+  }
+}
