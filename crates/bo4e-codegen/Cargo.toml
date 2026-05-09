@@ -5,9 +5,9 @@ edition = "2024"
 
 [features]
 default = ["python"]
-python = ["python-pydantic-v2", "python-sql-model"]
-python-pydantic-v2 = []
-python-sql-model   = []
+python = ["python-pydantic", "python-sql-model"]
+python-pydantic   = []
+python-sql-model  = []
 
 [dependencies]
 bo4e-schemas = { path = "../bo4e-schemas" }
