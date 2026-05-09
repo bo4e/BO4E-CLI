@@ -7,6 +7,27 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::borrow::Cow;
 use std::time::Duration;
 
+/// RAII wrapper: stops the spinner and clears the rendered line on drop.
+/// `indicatif::ProgressBar` does not call `finish_and_clear` on drop by default,
+/// so the last spinner frame would otherwise stay painted on the terminal.
+pub struct Spinner {
+    pb: ProgressBar,
+}
+
+impl Spinner {
+    /// Test-only inspector: was this spinner created in hidden mode?
+    #[cfg(test)]
+    fn is_hidden(&self) -> bool {
+        self.pb.is_hidden()
+    }
+}
+
+impl Drop for Spinner {
+    fn drop(&mut self) {
+        self.pb.finish_and_clear();
+    }
+}
+
 const EARTH_FRAMES: &[&str] = &["🌍 ", "🌎 ", "🌏 "];
 const EARTH_INTERVAL_MS: u64 = 180;
 
@@ -31,16 +52,16 @@ const GRENADE_FRAMES: &[&str] = &[
 ];
 const GRENADE_INTERVAL_MS: u64 = 80;
 
-pub fn earth(msg: impl Into<Cow<'static, str>>) -> ProgressBar {
-    make_spinner(msg, EARTH_FRAMES, EARTH_INTERVAL_MS, would_show())
+pub fn earth(msg: impl Into<Cow<'static, str>>) -> Spinner {
+    Spinner { pb: make_spinner(msg, EARTH_FRAMES, EARTH_INTERVAL_MS, would_show()) }
 }
 
-pub fn squish(msg: impl Into<Cow<'static, str>>) -> ProgressBar {
-    make_spinner(msg, SQUISH_FRAMES, SQUISH_INTERVAL_MS, would_show())
+pub fn squish(msg: impl Into<Cow<'static, str>>) -> Spinner {
+    Spinner { pb: make_spinner(msg, SQUISH_FRAMES, SQUISH_INTERVAL_MS, would_show()) }
 }
 
-pub fn grenade(msg: impl Into<Cow<'static, str>>) -> ProgressBar {
-    make_spinner(msg, GRENADE_FRAMES, GRENADE_INTERVAL_MS, would_show())
+pub fn grenade(msg: impl Into<Cow<'static, str>>) -> Spinner {
+    Spinner { pb: make_spinner(msg, GRENADE_FRAMES, GRENADE_INTERVAL_MS, would_show()) }
 }
 
 fn would_show() -> bool {
@@ -98,7 +119,7 @@ mod tests {
 
     #[test]
     fn invisible_returns_hidden() {
-        let pb = make_spinner("hi", EARTH_FRAMES, EARTH_INTERVAL_MS, false);
-        assert!(pb.is_hidden());
+        let spinner = Spinner { pb: make_spinner("hi", EARTH_FRAMES, EARTH_INTERVAL_MS, false) };
+        assert!(spinner.is_hidden());
     }
 }
