@@ -4,7 +4,6 @@ pub mod naming;
 mod output_type;
 
 #[cfg(any(
-    feature = "python-pydantic-v1",
     feature = "python-pydantic-v2",
     feature = "python-sql-model",
 ))]
@@ -25,7 +24,6 @@ pub struct Options<'a> {
 pub fn generate(
     #[cfg_attr(
         not(any(
-            feature = "python-pydantic-v1",
             feature = "python-pydantic-v2",
             feature = "python-sql-model",
         )),
@@ -52,8 +50,6 @@ pub fn generate(
             python::pydantic_v2::generate_pydantic_v2(schemas, output_dir, &env)?;
             Ok(())
         }
-        #[cfg(feature = "python-pydantic-v1")]
-        OutputType::PythonPydanticV1 => Err(Error::OutputTypeNotCompiledIn(output_type.as_str())),
         #[cfg(feature = "python-sql-model")]
         OutputType::PythonSqlModel => Err(Error::OutputTypeNotCompiledIn(output_type.as_str())),
         // When all python features are compiled out, OutputType has no variants and

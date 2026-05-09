@@ -244,7 +244,7 @@ bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydant
 |---|---|---|
 | `--input` | `-i` | Directory containing input JSON schemas. |
 | `--output` | `-o` | Directory to write generated code to. |
-| `--output-type` | `-t` | One of `python-pydantic-v1`, `python-pydantic-v2`, `python-sql-model` (gated by Cargo feature). |
+| `--output-type` | `-t` | One of `python-pydantic-v2`, `python-sql-model` (gated by Cargo feature). |
 | `--no-clear-output` |  | Skip clearing the output directory before writing (default: clear). |
 | `--templates-dir` |  | Override embedded templates with a directory of Jinja templates. |
 
@@ -256,7 +256,7 @@ By default `cargo install bo4e-cli` includes all three Python output types. To i
 cargo install bo4e-cli --no-default-features --features python-pydantic-v2
 ```
 
-Available features: `python` (umbrella), `python-pydantic-v1`, `python-pydantic-v2`, `python-sql-model`.
+Available features: `python` (umbrella), `python-pydantic-v2`, `python-sql-model`.
 
 ## `bo4e diff schemas`
 

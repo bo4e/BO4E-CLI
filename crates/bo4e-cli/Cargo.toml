@@ -39,7 +39,6 @@ bo4e-codegen = { path = "../bo4e-codegen", default-features = false }
 [features]
 default = ["bo4e-codegen/default"]
 python = ["bo4e-codegen/python"]
-python-pydantic-v1 = ["bo4e-codegen/python-pydantic-v1"]
 python-pydantic-v2 = ["bo4e-codegen/python-pydantic-v2"]
 python-sql-model   = ["bo4e-codegen/python-sql-model"]
 

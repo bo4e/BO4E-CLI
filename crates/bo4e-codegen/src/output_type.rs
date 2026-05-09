@@ -6,9 +6,6 @@ use clap::ValueEnum;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 #[non_exhaustive]
 pub enum OutputType {
-    #[cfg(feature = "python-pydantic-v1")]
-    #[value(name = "python-pydantic-v1")]
-    PythonPydanticV1,
     #[cfg(feature = "python-pydantic-v2")]
     #[value(name = "python-pydantic-v2")]
     PythonPydanticV2,
@@ -21,8 +18,6 @@ impl OutputType {
     pub fn as_str(&self) -> &'static str {
         #[allow(unreachable_patterns)]
         match self {
-            #[cfg(feature = "python-pydantic-v1")]
-            Self::PythonPydanticV1 => "python-pydantic-v1",
             #[cfg(feature = "python-pydantic-v2")]
             Self::PythonPydanticV2 => "python-pydantic-v2",
             #[cfg(feature = "python-sql-model")]

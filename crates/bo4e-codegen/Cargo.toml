@@ -5,8 +5,7 @@ edition = "2024"
 
 [features]
 default = ["python"]
-python = ["python-pydantic-v1", "python-pydantic-v2", "python-sql-model"]
-python-pydantic-v1 = []
+python = ["python-pydantic-v2", "python-sql-model"]
 python-pydantic-v2 = []
 python-sql-model   = []
 
