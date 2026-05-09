@@ -236,6 +236,7 @@ Example:
 
 ```bash
 bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_sql -t python-sql-model
 ```
 
 <a name="supported-languages"></a>Flags:
@@ -254,6 +255,7 @@ By default `cargo install bo4e-cli` includes both Python output types. To instal
 
 ```
 cargo install bo4e-cli --no-default-features --features python-pydantic
+cargo install bo4e-cli --no-default-features --features python-sql-model
 ```
 
 Available features: `python` (umbrella), `python-pydantic`, `python-sql-model`.
