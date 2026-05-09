@@ -194,6 +194,7 @@ dependencies = [
  "bo4e-schemas",
  "clap",
  "minijinja",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror",

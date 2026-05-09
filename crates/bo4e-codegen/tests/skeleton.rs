@@ -1,14 +1,16 @@
-use std::path::PathBuf;
-
+#[cfg(feature = "python-pydantic-v2")]
 #[test]
-fn generate_with_compiled_out_variant_returns_specific_error() {
-    // We intentionally call with no schemas in a temp dir.
+fn generate_pydantic_v2_writes_at_least_one_file() {
     let tmp = tempfile::tempdir().unwrap();
-    let schemas = bo4e_schemas::Schemas::new("v202401.0.0".parse().unwrap());
+    let mut schemas = bo4e_schemas::Schemas::new("v202401.0.0".parse().unwrap());
 
-    // The variant we pass MUST be one that is compiled in (otherwise the cfg-gate
-    // strips it from the enum). pydantic-v2 is compiled in by default.
-    let out = bo4e_codegen::generate(
+    let mut s = bo4e_schemas::Schema::new(vec!["enum".into(), "Typ".into()], None).unwrap();
+    s.load_schema(r#"{"type":"string","title":"Typ","enum":["A","B"]}"#.into());
+    schemas
+        .add_schema(std::rc::Rc::new(std::cell::RefCell::new(s)))
+        .unwrap();
+
+    bo4e_codegen::generate(
         &schemas,
         bo4e_codegen::OutputType::PythonPydanticV2,
         tmp.path(),
@@ -16,8 +18,11 @@ fn generate_with_compiled_out_variant_returns_specific_error() {
             clear_output: false,
             templates_dir: None,
         },
-    );
+    )
+    .expect("generate");
 
-    // Skeleton stage: every variant returns OutputTypeNotCompiledIn until Task 8 wires v2.
-    assert!(matches!(out, Err(bo4e_codegen::Error::OutputTypeNotCompiledIn(_))));
+    let typ_py = tmp.path().join("enum/typ.py");
+    assert!(typ_py.exists(), "expected {:?} to exist", typ_py);
+    let body = std::fs::read_to_string(&typ_py).unwrap();
+    assert!(body.contains("class Typ"));
 }
