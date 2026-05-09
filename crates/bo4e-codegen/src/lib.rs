@@ -1,5 +1,6 @@
 mod env;
 mod error;
+pub mod naming;
 mod output_type;
 
 pub use error::Error;
