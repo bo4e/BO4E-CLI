@@ -198,6 +198,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+ "walkdir",
 ]
 
 [[package]]
