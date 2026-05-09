@@ -93,10 +93,13 @@ fn group_imports(raw: BTreeSet<RawImport>) -> Vec<SqlImport> {
 
 /// Render a table's source as a Python module body.
 /// `depth` is the relative-import depth (1 = root-level module, 2 = one subdir, …).
+/// `class_to_module` maps class names to their parent directory segments (lowercased),
+/// e.g. `"Angebot" → ["bo"]`, `"Adresse" → ["com"]`.
 pub(crate) fn render_table(
     env: &Environment<'_>,
     table: &TablePlan,
     depth: usize,
+    class_to_module: &BTreeMap<String, Vec<String>>,
 ) -> Result<String, Error> {
     if table.is_enum {
         return render_enum(env, table);
@@ -195,7 +198,10 @@ pub(crate) fn render_table(
                     name: "Relationship".into(),
                     alias: None,
                 });
-                raw_imports.extend(target_raw_imports(target_class, depth));
+                let target_module = class_to_module.get(target_class.as_str())
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[]);
+                raw_imports.extend(target_raw_imports(target_class, target_module, depth));
                 fields_map.insert(
                     name.clone(),
                     serde_json::to_value(SqlFieldRow {
@@ -224,7 +230,10 @@ pub(crate) fn render_table(
                     name: "Relationship".into(),
                     alias: None,
                 });
-                raw_imports.extend(target_raw_imports(target_class, depth));
+                let target_module = class_to_module.get(target_class.as_str())
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[]);
+                raw_imports.extend(target_raw_imports(target_class, target_module, depth));
                 raw_imports.insert(RawImport {
                     from_: format!("{}many", ".".repeat(depth)),
                     name: link_class.clone(),
@@ -457,10 +466,15 @@ fn render_enum(env: &Environment<'_>, table: &TablePlan) -> Result<String, Error
     ))
 }
 
-fn target_raw_imports(target_class: &str, depth: usize) -> impl IntoIterator<Item = RawImport> {
+fn target_raw_imports(target_class: &str, target_module: &[String], depth: usize) -> impl IntoIterator<Item = RawImport> {
     let target_table = target_class.to_ascii_lowercase();
+    let module_path = if target_module.is_empty() {
+        target_table.clone()
+    } else {
+        format!("{}.{}", target_module.join("."), target_table)
+    };
     [RawImport {
-        from_: format!("{}com.{}", ".".repeat(depth), target_table),
+        from_: format!("{}{}", ".".repeat(depth), module_path),
         name: target_class.to_string(),
         alias: None,
     }]
@@ -541,6 +555,17 @@ pub(crate) fn generate_sql_model(
     let mut written: Vec<PathBuf> = Vec::new();
     let plan = plan::build_plan(schemas);
 
+    // Build a class_name → parent-directory-segments (lowercased) lookup.
+    let class_to_module: BTreeMap<String, Vec<String>> = plan.tables.values()
+        .map(|t| {
+            let parents: Vec<String> = t.module.iter()
+                .take(t.module.len().saturating_sub(1))
+                .map(|s| s.to_ascii_lowercase())
+                .collect();
+            (t.class_name.clone(), parents)
+        })
+        .collect();
+
     // ── Per-class files ────────────────────────────────────────────────────────
     for table in plan.tables.values() {
         let path_segments: Vec<String> = table.module.iter()
@@ -554,7 +579,7 @@ pub(crate) fn generate_sql_model(
         std::fs::create_dir_all(&out_dir)?;
         let file_name = format!("{}.py", module_file_name(&table.module));
         let depth = path_segments.len() + 1;
-        let body = render_table(env, table, depth)?;
+        let body = render_table(env, table, depth, &class_to_module)?;
         let out_path = out_dir.join(&file_name);
         std::fs::write(&out_path, body)?;
         written.push(out_path);
@@ -610,15 +635,28 @@ mod tests {
         plan::build_plan(&schemas)
     }
 
+    fn fixture_class_to_module(plan: &plan::SqlPlan) -> BTreeMap<String, Vec<String>> {
+        plan.tables.values()
+            .map(|t| {
+                let parents: Vec<String> = t.module.iter()
+                    .take(t.module.len().saturating_sub(1))
+                    .map(|s| s.to_ascii_lowercase())
+                    .collect();
+                (t.class_name.clone(), parents)
+            })
+            .collect()
+    }
+
     #[test]
     fn render_table_object_emits_sqlmodel_class() {
         let env = make_environment(None).unwrap();
         let plan = fixture_plan();
+        let class_to_module = fixture_class_to_module(&plan);
         let angebot = plan
             .tables
             .get(&vec!["bo".to_string(), "Angebot".to_string()])
             .expect("Angebot table");
-        let body = render_table(&env, angebot, 2).expect("render");
+        let body = render_table(&env, angebot, 2, &class_to_module).expect("render");
         assert!(
             body.contains("class Angebot(SQLModel, table=True):"),
             "got:\n{body}"
@@ -679,6 +717,64 @@ mod tests {
         assert!(
             body.contains("from ..enum.typ import Typ"),
             "got:\n{body}"
+        );
+    }
+
+    #[test]
+    fn render_table_bo_to_bo_relationship_uses_bo_module() {
+        use plan::{SqlField, TablePlan};
+        let env = make_environment(None).unwrap();
+
+        // Hypothetical Angebot with a Relationship to Geschaeftspartner (in bo/).
+        let angebot_table = TablePlan {
+            module: vec!["bo".to_string(), "Angebot".to_string()],
+            class_name: "Angebot".to_string(),
+            is_enum: false,
+            description: None,
+            enum_members: vec![],
+            sql_fields: vec![
+                SqlField::Scalar {
+                    name: "id".to_string(),
+                    type_: "uuid_pkg.UUID".to_string(),
+                    nullable: false,
+                    default: Some(
+                        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, alias=\"_id\", title=\"Id\")".to_string(),
+                    ),
+                    title: None,
+                    docstring: Some("Primary key.".to_string()),
+                },
+                SqlField::ForeignKey {
+                    name: "geschaeftspartner_id".to_string(),
+                    target_class: "Geschaeftspartner".to_string(),
+                    target_table: "geschaeftspartner".to_string(),
+                    nullable: true,
+                    ondelete: Some("SET NULL".to_string()),
+                    docstring: None,
+                },
+                SqlField::Relationship {
+                    name: "geschaeftspartner".to_string(),
+                    target_class: "Geschaeftspartner".to_string(),
+                    owner_class: "Angebot".to_string(),
+                    fk_field_name: "geschaeftspartner_id".to_string(),
+                    nullable: true,
+                    docstring: None,
+                },
+            ],
+        };
+
+        // class_to_module: Geschaeftspartner lives in bo/.
+        let mut class_to_module: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        class_to_module.insert("Geschaeftspartner".to_string(), vec!["bo".to_string()]);
+
+        let body = render_table(&env, &angebot_table, 2, &class_to_module).expect("render");
+
+        assert!(
+            body.contains("from ..bo.geschaeftspartner import Geschaeftspartner"),
+            "expected bo import, got:\n{body}"
+        );
+        assert!(
+            !body.contains("from ..com.geschaeftspartner import Geschaeftspartner"),
+            "must NOT contain com import, got:\n{body}"
         );
     }
 
