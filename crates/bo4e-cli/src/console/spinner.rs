@@ -32,26 +32,30 @@ const GRENADE_FRAMES: &[&str] = &[
 const GRENADE_INTERVAL_MS: u64 = 80;
 
 pub fn earth(msg: impl Into<Cow<'static, str>>) -> ProgressBar {
-    spinner(msg, EARTH_FRAMES, EARTH_INTERVAL_MS)
+    make_spinner(msg, EARTH_FRAMES, EARTH_INTERVAL_MS, would_show())
 }
 
 pub fn squish(msg: impl Into<Cow<'static, str>>) -> ProgressBar {
-    spinner(msg, SQUISH_FRAMES, SQUISH_INTERVAL_MS)
+    make_spinner(msg, SQUISH_FRAMES, SQUISH_INTERVAL_MS, would_show())
 }
 
 pub fn grenade(msg: impl Into<Cow<'static, str>>) -> ProgressBar {
-    spinner(msg, GRENADE_FRAMES, GRENADE_INTERVAL_MS)
+    make_spinner(msg, GRENADE_FRAMES, GRENADE_INTERVAL_MS, would_show())
 }
 
-fn spinner(
+fn would_show() -> bool {
+    crate::console::console::CONSOLE
+        .get()
+        .map(|c| c.would_emit(crate::console::console::Level::Normal))
+        .unwrap_or(true)
+}
+
+fn make_spinner(
     msg: impl Into<Cow<'static, str>>,
     frames: &'static [&'static str],
     interval_ms: u64,
+    visible: bool,
 ) -> ProgressBar {
-    let visible = crate::console::console::CONSOLE
-        .get()
-        .map(|c| c.would_emit(crate::console::console::Level::Normal))
-        .unwrap_or(true);
     if !visible {
         return ProgressBar::hidden();
     }
@@ -69,7 +73,6 @@ fn spinner(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::console::{CONSOLE, Console, Level};
 
     #[test]
     fn frames_match_rich_v14_earth() {
@@ -94,16 +97,8 @@ mod tests {
     }
 
     #[test]
-    fn quiet_returns_hidden() {
-        let _ = CONSOLE.set(Console::new(Level::Quiet));
-        // Note: CONSOLE is a OnceLock so this set is best-effort across the whole
-        // test binary. The assertion below uses `would_emit` directly to avoid
-        // ordering brittleness with other tests in the binary.
-        let c = CONSOLE.get().expect("set above or earlier");
-        if !c.would_emit(Level::Normal) {
-            assert!(earth("hi").is_hidden());
-            assert!(squish("hi").is_hidden());
-            assert!(grenade("hi").is_hidden());
-        }
+    fn invisible_returns_hidden() {
+        let pb = make_spinner("hi", EARTH_FRAMES, EARTH_INTERVAL_MS, false);
+        assert!(pb.is_hidden());
     }
 }
