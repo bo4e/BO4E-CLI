@@ -487,7 +487,6 @@ These items are deliberate non-goals for this design. They become candidates for
 
 - **Circular references between BOs.** The Python implementation uses string-based forward references (`"Angebot"`) when SQLAlchemy needs them. We replicate the exact same behaviour, no more. Any new circular-reference graph that breaks today's Python output is *also* broken today; fixing it is a separate, schema-side concern.
 - **`bo4e-schemas` serde-deserialisation gaps.** If the sql-model fixture surfaces a JSON-Schema construct the existing Rust schema parser can't deserialise, the implementation plan flags it; resolving it is filed as a separate task on the schema crate, not this generator.
-- **`ConstantSchema` TODO.** The current pydantic generator has a known TODO around constant-valued schema fragments. The sql-model generator inherits the same gap and does not attempt to close it.
 - **Migration generation, DDL emission, alembic integration.** The output is plain Python ORM classes; downstream tooling consumes them.
 - **Configurable enum table name strategy.** The Python implementation hard-codes `Enum(<Cls>, name="<lower>")`. We match that exactly.
 
