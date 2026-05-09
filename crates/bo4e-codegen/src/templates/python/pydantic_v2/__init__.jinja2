@@ -1,0 +1,3 @@
+{% for cls in classes -%}
+from .{{ cls.module_path | join('.') }} import {{ cls.name }}
+{% endfor %}
