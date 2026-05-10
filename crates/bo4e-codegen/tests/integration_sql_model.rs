@@ -51,14 +51,18 @@ fn generated_angebot_contains_all_field_kinds_and_imports() {
     assert!(body.contains("from ..many import AngebotAdressenLink"), "got:\n{body}");
     assert!(body.contains("from ..enum.typ import Typ"), "got:\n{body}");
 
-    assert!(body.contains("id: uuid_pkg.UUID = Field(default_factory=uuid_pkg.uuid4, primary_key=True"));
+    assert!(body.contains("id_: uuid_pkg.UUID = Field(alias=\"_id\", default_factory=uuid_pkg.uuid4, primary_key=True"));
     assert!(body.contains("adresse_id: uuid_pkg.UUID | None = Field(default=None, foreign_key=\"adresse.id\""));
     assert!(body.contains("adresse: Adresse | None = Relationship("));
     assert!(body.contains("adressen: list[Adresse] = Relationship(link_model=AngebotAdressenLink)"));
-    assert!(body.contains("_typ: Typ | None = Field"));
+    assert!(body.contains("typ: Typ | None = Field(alias=\"_typ\","));
     assert!(body.contains("werte: list[Decimal] = Field(sa_column=Column(ARRAY(Numeric)))"));
-    assert!(body.contains("extras: Any | None = Field(sa_column=Column(PickleType, nullable=True))"));
+    assert!(body.contains("extras: Any = Field(sa_column=Column(PickleType, nullable=True))") && !body.contains("extras: Any | None"));
     assert!(body.contains("anhaenge: list[Any] = Field(sa_column=Column(ARRAY(PickleType), nullable=False))"));
+    assert!(body.contains("model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, use_attribute_docstrings=True)"));
+    assert!(body.contains("from pydantic import ConfigDict"));
+    assert!(body.contains("from pydantic.alias_generators import to_camel"));
+    assert!(body.starts_with("\"\"\"Contains class Angebot.\"\"\""));
     assert!(!body.contains("__future__"));
 }
 

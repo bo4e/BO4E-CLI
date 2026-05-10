@@ -27,6 +27,7 @@ use crate::error::Error;
 use crate::naming::{module_file_name, to_snake_case};
 use crate::python::imports::ImportBlock;
 use crate::python::types::{Import, literal_default, map_pydantic, schema_base};
+use crate::python::{python_attr_name, root_init_module_docstring, sanitize_enum_member_name};
 use bo4e_schemas::Schemas;
 use bo4e_schemas::models::json_schema::SchemaRootType;
 use minijinja::{Environment, context};
@@ -123,7 +124,10 @@ pub(crate) fn generate_pydantic(
         .collect();
     let init_body = init_tpl.render(context! { classes => init_classes })?;
     let init_path = output_dir.join("__init__.py");
-    std::fs::write(&init_path, init_body)?;
+    std::fs::write(
+        &init_path,
+        format!("{}\n{init_body}", root_init_module_docstring(&version_str)),
+    )?;
     written.push(init_path);
 
     // ── Empty __init__.py per first-level subdirectory ─────────────────────────
@@ -166,49 +170,6 @@ fn render_enum(
     })?;
 
     Ok(stitch(class_name, &imports, 1, &rendered))
-}
-
-#[cfg(test)]
-mod sanitize_tests {
-    use super::{python_attr_name, sanitize_enum_member_name};
-
-    #[test]
-    fn keeps_valid_identifiers() {
-        assert_eq!(sanitize_enum_member_name("STROM"), "STROM");
-        assert_eq!(sanitize_enum_member_name("Z85_REALER"), "Z85_REALER");
-    }
-
-    #[test]
-    fn replaces_hyphens_and_prefixes_digit_starts() {
-        assert_eq!(sanitize_enum_member_name("2-01-7-001"), "_2_01_7_001");
-    }
-
-    #[test]
-    fn replaces_parens() {
-        assert_eq!(
-            sanitize_enum_member_name("Z88_VERGLEICHSMESSUNG(GEEICHT)"),
-            "Z88_VERGLEICHSMESSUNG_GEEICHT_"
-        );
-    }
-
-    #[test]
-    fn python_attr_name_strips_underscore_prefix() {
-        assert_eq!(python_attr_name("_typ"), "typ");
-        assert_eq!(python_attr_name("_version"), "version");
-    }
-
-    #[test]
-    fn python_attr_name_appends_underscore_on_builtin_clash() {
-        assert_eq!(python_attr_name("_id"), "id_");
-        assert_eq!(python_attr_name("_type"), "type_");
-        assert_eq!(python_attr_name("_class"), "class_");
-    }
-
-    #[test]
-    fn python_attr_name_unchanged_when_no_underscore_prefix() {
-        assert_eq!(python_attr_name("angebotsdatum"), "angebotsdatum");
-        assert_eq!(python_attr_name("anfragereferenz"), "anfragereferenz");
-    }
 }
 
 fn render_object(
@@ -340,55 +301,6 @@ fn render_object(
     })?;
 
     Ok(stitch(class_name, &imports, depth, &rendered))
-}
-
-/// Python keywords + common builtins whose names a model attribute must not shadow.
-/// Used by [`python_attr_name`] when stripping a leading underscore exposes a clash
-/// (e.g. JSON `_id` → would-be Python `id`, which shadows the `id()` builtin).
-const PYTHON_RESERVED: &[&str] = &[
-    // keywords
-    "False", "None", "True", "and", "as", "assert", "async", "await", "break",
-    "class", "continue", "def", "del", "elif", "else", "except", "finally",
-    "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
-    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield",
-    // builtin shadows we care about
-    "id", "type", "list", "dict", "set", "tuple", "str", "int", "float",
-    "bool", "bytes", "object", "input", "print", "open", "range", "iter",
-    "next", "len", "min", "max", "sum", "any", "all", "map", "filter",
-];
-
-/// Translate a snake-case JSON property name into a valid Pydantic model attribute.
-///
-/// Pydantic v2 forbids leading-underscore field names. BO4E uses `_id`, `_typ`,
-/// `_version` for discriminator/identity slots; we strip the leading `_` and append
-/// a trailing `_` if that exposes a Python keyword/builtin clash.
-///
-/// The caller is responsible for emitting an explicit `Field(alias=...)` whenever
-/// the returned name differs from the original JSON name.
-fn python_attr_name(snake: &str) -> String {
-    let stripped = snake.strip_prefix('_').unwrap_or(snake);
-    if PYTHON_RESERVED.contains(&stripped) {
-        format!("{stripped}_")
-    } else {
-        stripped.to_string()
-    }
-}
-
-/// Make a BO4E enum member name a valid Python identifier.
-///
-/// BO4E enum values include shapes like `"2-01-7-001"` (digit-leading, hyphenated)
-/// and `"Z88_VERGLEICHSMESSUNG(GEEICHT)"` (parens). Replace any non-`[A-Za-z0-9_]`
-/// character with `_`, then prefix `_` if the result starts with a digit.
-fn sanitize_enum_member_name(raw: &str) -> String {
-    let cleaned: String = raw
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
-        .collect();
-    if cleaned.chars().next().is_some_and(|c| c.is_ascii_digit()) {
-        format!("_{cleaned}")
-    } else {
-        cleaned
-    }
 }
 
 /// Prepend module docstring + rendered import block to a template body.

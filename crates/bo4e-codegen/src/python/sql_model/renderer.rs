@@ -1,9 +1,55 @@
 use crate::error::Error;
+use crate::python::{python_attr_name, sanitize_enum_member_name};
 use minijinja::{Environment, context};
 use serde::Serialize;
 use serde_json::Map as JsonMap;
 use std::collections::{BTreeMap, BTreeSet};
 use super::plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
+
+/// `model_config` line shared by every generated SQLModel class.
+const MODEL_CONFIG: &str = "model_config = ConfigDict(alias_generator=to_camel, \
+                            populate_by_name=True, use_attribute_docstrings=True)";
+
+/// Inject `alias="<json_name>"` as the first argument inside an existing
+/// `Field(...)` (or `Field()`) call. Pydantic v2 forbids leading-underscore
+/// attribute names, so the renderer renames `_typ` → `typ` and uses the alias
+/// to keep the JSON wire format identical.
+fn inject_alias(field_def: &str, alias: &str) -> String {
+    let Some(open) = field_def.find('(') else {
+        return field_def.to_string();
+    };
+    let prefix = &field_def[..open + 1];
+    let rest = &field_def[open + 1..];
+    if rest.starts_with(')') {
+        format!("{prefix}alias=\"{alias}\")")
+    } else if let Some(after_ellipsis) = rest.strip_prefix("...") {
+        format!("{prefix}..., alias=\"{alias}\"{after_ellipsis}")
+    } else {
+        format!("{prefix}alias=\"{alias}\", {rest}")
+    }
+}
+
+/// Insert one row into the `SQL.fields` map, applying the leading-underscore
+/// rename + alias injection. Centralised so every `SqlField` variant gets the
+/// same treatment without each match arm having to remember.
+fn insert_field(
+    fields_map: &mut JsonMap<String, serde_json::Value>,
+    name: &str,
+    annotation: String,
+    definition: String,
+    description: Option<String>,
+) {
+    let py_name = python_attr_name(name);
+    let definition = if py_name != name {
+        inject_alias(&definition, name)
+    } else {
+        definition
+    };
+    fields_map.insert(
+        py_name,
+        serde_json::to_value(SqlFieldRow { annotation, definition, description }).unwrap(),
+    );
+}
 
 /// Per-field row passed to `BaseModel.jinja2`'s `SQL.fields` map.
 #[derive(Debug, Serialize)]
@@ -111,6 +157,16 @@ pub(crate) fn render_table(
         name: "SQLModel".into(),
         alias: None,
     });
+    raw_imports.insert(RawImport {
+        from_: "pydantic".into(),
+        name: "ConfigDict".into(),
+        alias: None,
+    });
+    raw_imports.insert(RawImport {
+        from_: "pydantic.alias_generators".into(),
+        name: "to_camel".into(),
+        alias: None,
+    });
 
     // `SQL.fields` must be a dict-like value so the template's `.items()` call works.
     // We use `serde_json::Map` (insertion-ordered) serialized via MiniJinja's JSON bridge.
@@ -119,20 +175,26 @@ pub(crate) fn render_table(
     for sql_field in &table.sql_fields {
         match sql_field {
             SqlField::Scalar { name, type_, default, docstring, .. } => {
-                let definition = match default {
+                // Mirror the pydantic generator: `_version` defaults to the live
+                // module-level `__version__` so generated objects round-trip.
+                let (effective_default, version_field) = if name == "_version" {
+                    (Some("__version__".to_string()), true)
+                } else {
+                    (default.clone(), false)
+                };
+                let definition = match &effective_default {
                     Some(d) if d.starts_with("Field(") => d.clone(),
                     Some(d) => format!("Field(default={d})"),
                     None => "Field(...)".to_string(),
                 };
-                fields_map.insert(
-                    name.clone(),
-                    serde_json::to_value(SqlFieldRow {
-                        annotation: type_.clone(),
-                        definition,
-                        description: docstring.clone(),
-                    })
-                    .unwrap(),
-                );
+                if version_field {
+                    raw_imports.insert(RawImport {
+                        from_: format!("{}__version__", ".".repeat(depth)),
+                        name: "__version__".into(),
+                        alias: None,
+                    });
+                }
+                insert_field(&mut fields_map, name, type_.clone(), definition, docstring.clone());
             }
             SqlField::ForeignKey {
                 name,
@@ -156,15 +218,7 @@ pub(crate) fn render_table(
                 } else {
                     format!("Field(..., foreign_key=\"{target_table}.id\")")
                 };
-                fields_map.insert(
-                    name.clone(),
-                    serde_json::to_value(SqlFieldRow {
-                        annotation,
-                        definition,
-                        description: docstring.clone(),
-                    })
-                    .unwrap(),
-                );
+                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
             }
             SqlField::Relationship {
                 name,
@@ -191,15 +245,7 @@ pub(crate) fn render_table(
                     .map(|v| v.as_slice())
                     .unwrap_or(&[]);
                 raw_imports.extend(target_raw_imports(target_class, target_module, depth));
-                fields_map.insert(
-                    name.clone(),
-                    serde_json::to_value(SqlFieldRow {
-                        annotation,
-                        definition,
-                        description: docstring.clone(),
-                    })
-                    .unwrap(),
-                );
+                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
             }
             SqlField::ManyRelationship {
                 name,
@@ -228,15 +274,7 @@ pub(crate) fn render_table(
                     name: link_class.clone(),
                     alias: None,
                 });
-                fields_map.insert(
-                    name.clone(),
-                    serde_json::to_value(SqlFieldRow {
-                        annotation,
-                        definition,
-                        description: docstring.clone(),
-                    })
-                    .unwrap(),
-                );
+                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
             }
             SqlField::EnumColumn {
                 name,
@@ -285,15 +323,7 @@ pub(crate) fn render_table(
                     });
                 }
                 raw_imports.extend(enum_raw_imports(enum_class, depth));
-                fields_map.insert(
-                    name.clone(),
-                    serde_json::to_value(SqlFieldRow {
-                        annotation,
-                        definition,
-                        description: docstring.clone(),
-                    })
-                    .unwrap(),
-                );
+                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
             }
             SqlField::ScalarArray {
                 name,
@@ -331,15 +361,7 @@ pub(crate) fn render_table(
                         alias: None,
                     });
                 }
-                fields_map.insert(
-                    name.clone(),
-                    serde_json::to_value(SqlFieldRow {
-                        annotation,
-                        definition,
-                        description: docstring.clone(),
-                    })
-                    .unwrap(),
-                );
+                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
             }
             SqlField::AnyColumn {
                 name,
@@ -347,14 +369,13 @@ pub(crate) fn render_table(
                 nullable,
                 docstring,
             } => {
+                // `Any` already covers None; only widen the outer `list[Any]` when nullable.
                 let annotation = if *is_array {
                     if *nullable {
                         "list[Any] | None".to_string()
                     } else {
                         "list[Any]".to_string()
                     }
-                } else if *nullable {
-                    "Any | None".to_string()
                 } else {
                     "Any".to_string()
                 };
@@ -391,15 +412,7 @@ pub(crate) fn render_table(
                         alias: None,
                     });
                 }
-                fields_map.insert(
-                    name.clone(),
-                    serde_json::to_value(SqlFieldRow {
-                        annotation,
-                        definition,
-                        description: docstring.clone(),
-                    })
-                    .unwrap(),
-                );
+                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
             }
         }
     }
@@ -419,13 +432,23 @@ pub(crate) fn render_table(
         description => table.description.clone().unwrap_or_else(|| table.class_name.clone()),
         fields => Vec::<String>::new(),
         methods => Vec::<String>::new(),
+        model_config => MODEL_CONFIG,
         config => None::<String>,
         SQL => context! {
             imports => imports_vec,
             fields => fields_jinja,
         },
     })?;
-    Ok(rendered)
+    Ok(prepend_module_docstring(&table.class_name, &rendered))
+}
+
+/// Prepend `"""Contains class X."""` to a rendered module body, mirroring the
+/// pydantic generator's `stitch()`. The body still contains its own import block,
+/// so we just push the docstring on top with a blank line.
+fn prepend_module_docstring(class_name: &str, body: &str) -> String {
+    let docstring = format!("\"\"\"Contains class {class_name}.\"\"\"\n");
+    let body_trimmed = body.trim_start_matches('\n');
+    format!("{docstring}\n{body_trimmed}")
 }
 
 fn render_enum(env: &Environment<'_>, table: &TablePlan) -> Result<String, Error> {
@@ -434,7 +457,7 @@ fn render_enum(env: &Environment<'_>, table: &TablePlan) -> Result<String, Error
         .iter()
         .map(|v| {
             minijinja::Value::from_serialize(&context! {
-                name => v.clone(),
+                name => sanitize_enum_member_name(v),
                 default => format!("\"{v}\""),
                 docstring => None::<String>,
             })
@@ -449,10 +472,11 @@ fn render_enum(env: &Environment<'_>, table: &TablePlan) -> Result<String, Error
         description => table.description.clone(),
         fields => members,
     })?;
-    Ok(format!(
+    let body = format!(
         "from enum import StrEnum\n\n{}",
         rendered.trim_start_matches('\n')
-    ))
+    );
+    Ok(prepend_module_docstring(&table.class_name, &body))
 }
 
 fn target_raw_imports(target_class: &str, target_module: &[String], depth: usize) -> impl IntoIterator<Item = RawImport> {
@@ -520,10 +544,16 @@ pub(crate) fn render_init(env: &Environment<'_>, plan: &SqlPlan) -> Result<Strin
 
     let links: Vec<String> = plan.junctions.iter().map(|j| j.class_name.clone()).collect();
 
+    let all_names: Vec<String> = plan.tables.values()
+        .map(|t| t.class_name.clone())
+        .chain(links.iter().cloned())
+        .collect();
+
     let tpl = env.get_template("python/sql_model/__init__.jinja2")?;
     let rendered = tpl.render(context! {
         classes => classes,
         links => links,
+        all_names => all_names,
     })?;
     Ok(rendered)
 }
@@ -543,7 +573,7 @@ mod tests {
         let schemas = bo4e_schemas::io::schemas::read_schemas(&path)
             .expect("read bo4e_sql_min")
             .schemas;
-        super::super::plan::build_plan(&schemas)
+        super::super::plan::build_plan(&schemas).expect("plan builds for fixture")
     }
 
     fn fixture_class_to_module(plan: &super::super::plan::SqlPlan) -> BTreeMap<String, Vec<String>> {
@@ -573,9 +603,7 @@ mod tests {
             "got:\n{body}"
         );
         assert!(
-            body.contains(
-                "id: uuid_pkg.UUID = Field(default_factory=uuid_pkg.uuid4, primary_key=True"
-            ),
+            body.contains("id_: uuid_pkg.UUID = Field(alias=\"_id\", default_factory=uuid_pkg.uuid4, primary_key=True"),
             "got:\n{body}"
         );
         assert!(
@@ -594,17 +622,20 @@ mod tests {
             ),
             "got:\n{body}"
         );
-        assert!(body.contains("_typ: Typ | None = Field"), "got:\n{body}");
+        assert!(
+            body.contains("typ: Typ | None = Field(alias=\"_typ\", default=Typ.ANGEBOT, sa_column="),
+            "got:\n{body}"
+        );
         assert!(
             body.contains("werte: list[Decimal] = Field(sa_column=Column(ARRAY(Numeric)))"),
             "got:\n{body}"
         );
+        assert!(body.contains("extras: Any = Field(sa_column=Column(PickleType, nullable=True))") && !body.contains("extras: Any | None"), "got:\n{body}");
         assert!(
-            body.contains(
-                "extras: Any | None = Field(sa_column=Column(PickleType, nullable=True))"
-            ),
+            body.contains("model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, use_attribute_docstrings=True)"),
             "got:\n{body}"
         );
+        assert!(body.starts_with("\"\"\"Contains class Angebot.\"\"\""), "got:\n{body}");
         assert!(
             body.contains(
                 "anhaenge: list[Any] = Field(sa_column=Column(ARRAY(PickleType), nullable=False))"
@@ -645,11 +676,11 @@ mod tests {
             enum_members: vec![],
             sql_fields: vec![
                 SqlField::Scalar {
-                    name: "id".to_string(),
+                    name: "_id".to_string(),
                     type_: "uuid_pkg.UUID".to_string(),
                     nullable: false,
                     default: Some(
-                        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, alias=\"_id\", title=\"Id\")".to_string(),
+                        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, title=\"Id\")".to_string(),
                     ),
                     title: None,
                     docstring: Some("Primary key.".to_string()),
@@ -708,6 +739,11 @@ mod tests {
         assert!(body.contains("from .com.adresse import Adresse"));
         assert!(body.contains("from .enum.typ import Typ"));
         assert!(body.contains("from .many import AngebotAdressenLink"));
+        assert!(body.contains("from .__version__ import __version__"));
+        assert!(body.contains("__all__ = ["));
+        assert!(body.contains("\"__version__\","));
+        assert!(body.contains("\"Angebot\","));
+        assert!(body.contains("\"AngebotAdressenLink\","));
     }
 
     #[test]

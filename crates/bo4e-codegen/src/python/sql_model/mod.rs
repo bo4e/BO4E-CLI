@@ -23,7 +23,7 @@ pub(crate) fn generate_sql_model(
 ) -> Result<Vec<PathBuf>, Error> {
     std::fs::create_dir_all(output_dir)?;
     let mut written: Vec<PathBuf> = Vec::new();
-    let plan = plan::build_plan(schemas);
+    let plan = plan::build_plan(schemas)?;
 
     // Build a class_name → parent-directory-segments (lowercased) lookup.
     let class_to_module: BTreeMap<String, Vec<String>> = plan.tables.values()
@@ -55,13 +55,17 @@ pub(crate) fn generate_sql_model(
     }
 
     // ── __init__.py + __version__.py at the root ───────────────────────────────
+    let version_str = schemas.version.to_string();
     let init_body = renderer::render_init(env, &plan)?;
     let init_path = output_dir.join("__init__.py");
-    std::fs::write(&init_path, init_body)?;
+    std::fs::write(
+        &init_path,
+        format!("{}\n{init_body}", crate::python::root_init_module_docstring(&version_str)),
+    )?;
     written.push(init_path);
 
     let version_path = output_dir.join("__version__.py");
-    std::fs::write(&version_path, renderer::render_version(&schemas.version.to_string()))?;
+    std::fs::write(&version_path, renderer::render_version(&version_str))?;
     written.push(version_path);
 
     // ── Empty __init__.py per first-level subdirectory ─────────────────────────

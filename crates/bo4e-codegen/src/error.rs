@@ -19,4 +19,7 @@ pub enum Error {
 
     #[error("schema model error: {0}")]
     Schema(String),
+
+    #[error("cannot classify property `{class}.{property}`: schema shape is unsupported by the SQL plan")]
+    UnclassifiableProperty { class: String, property: String },
 }

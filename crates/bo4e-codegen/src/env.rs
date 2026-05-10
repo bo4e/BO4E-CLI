@@ -88,7 +88,7 @@ mod tests {
             .render(context! {
                 classes => vec![
                     context!{ name => "Angebot", module_path => vec!["bo", "angebot"] }
-                ]
+                ],
             })
             .unwrap();
         assert!(out.contains("from .bo.angebot import Angebot"));
@@ -135,8 +135,11 @@ mod tests {
         let out = tpl.render(context! {
             classes => vec![context!{ name => "Angebot", module_path => vec!["bo", "angebot"] }],
             links => vec!["AngebotAdressenLink"],
+            all_names => vec!["Angebot", "AngebotAdressenLink"],
         }).unwrap();
         assert!(out.contains("from .bo.angebot import Angebot"));
         assert!(out.contains("from .many import AngebotAdressenLink"));
+        assert!(out.contains("__all__ = ["));
+        assert!(out.contains("\"Angebot\","));
     }
 }
