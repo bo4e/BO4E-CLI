@@ -1,0 +1,69 @@
+# git-cliff configuration.
+#
+# Generates CHANGELOG.md sections from conventional commits. cargo-dist's
+# release pipeline reads CHANGELOG.md and embeds the matching `## <version>`
+# section in the GitHub Release notes for that tag, so the heading shape here
+# matters — keep it as `## X.Y.Z`.
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project are documented here. This file is generated
+from conventional commits by [git-cliff](https://github.com/orhun/git-cliff).
+
+"""
+
+# Per-release section. The version heading is stripped of any leading `v` so
+# cargo-dist matches the tag `v0.1.0` against `## 0.1.0`.
+body = """
+{% if version %}\
+## {{ version | trim_start_matches(pat="v") }}{% if timestamp %} - {{ timestamp | date(format="%Y-%m-%d") }}{% endif %}
+{% else %}\
+## Unreleased
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}\
+### {{ group | upper_first }}
+
+{% for commit in commits %}\
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first }}
+{% endfor %}
+{% endfor %}\
+"""
+
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+# Ignore commits that aren't conventional-commit-shaped — keeps the output noise-free.
+filter_unconventional = true
+split_commits = false
+
+# Strip the Co-Authored-By trailers and the Claude attribution before the message
+# is parsed, so they don't appear as bullet text.
+commit_preprocessors = [
+    { pattern = '\n\nCo-Authored-By:.*', replace = "" },
+    { pattern = '\n\n🤖 Generated with.*', replace = "" },
+]
+
+# Map commit type to the CHANGELOG section it lands in. Types that aren't useful
+# for end users (chore/ci/build/style/test) are skipped entirely. Order here
+# also drives section order in the output.
+commit_parsers = [
+    { message = "^feat",     group = "Added" },
+    { message = "^fix",      group = "Fixed" },
+    { message = "^perf",     group = "Performance" },
+    { message = "^refactor", group = "Changed" },
+    { message = "^docs",     group = "Documentation" },
+    { message = "^chore",    skip = true },
+    { message = "^ci",       skip = true },
+    { message = "^build",    skip = true },
+    { message = "^style",    skip = true },
+    { message = "^test",     skip = true },
+]
+
+filter_commits = true
+tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+"
+topo_order = false
+sort_commits = "newest"

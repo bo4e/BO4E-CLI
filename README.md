@@ -545,3 +545,26 @@ cargo fmt --all
 
 Issues and pull requests are very welcome — please open them against the main
 branch.
+
+Conventional Commits (`feat(...): …`, `fix(...): …`, `docs(...): …`, etc.) are
+required because the `CHANGELOG.md` is auto-generated from them. Commits whose
+type is not user-facing (`chore`, `ci`, `build`, `style`, `test`) are skipped.
+
+### Cutting a release
+
+1. Go to *Actions → Release: prepare → Run workflow* and enter the next semver
+   version (e.g. `0.2.0`).
+2. The workflow bumps `Cargo.toml`, regenerates `CHANGELOG.md` from the commits
+   since the previous tag, and opens a pull request.
+3. Review the CHANGELOG diff, tweak any wording, then merge the PR.
+4. From the merged commit, push the tag:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+   That fires the release pipeline, which cross-compiles for macOS / Linux /
+   Windows and publishes a GitHub Release with all installers and tarballs
+   attached. The CHANGELOG section for that version is embedded in the release
+   notes automatically.
