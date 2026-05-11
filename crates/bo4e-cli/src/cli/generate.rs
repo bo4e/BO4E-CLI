@@ -2,23 +2,25 @@ use crate::cli::base::Executable;
 use clap::Args;
 use std::path::PathBuf;
 
-/// Generate code from BO4E JSON schemas. Same flag set as the Python CLI plus
-/// an optional `--templates-dir` override for the embedded MiniJinja templates.
+/// Generate the BO4E models from the JSON-schemas in the input directory and save them in the
+/// output directory.
+///
+/// Several output types are available, see --output-type.
 #[derive(Args)]
 pub struct Generate {
-    /// Directory containing input JSON schemas.
+    /// The directory to read the JSON-schemas from.
     #[arg(short = 'i', long = "input")]
     pub input: PathBuf,
 
-    /// Directory to write generated code to.
+    /// The directory to save the generated code to.
     #[arg(short = 'o', long = "output")]
     pub output: PathBuf,
 
-    /// Output type. Variants are gated by Cargo features.
+    /// The type of code to generate.
     #[arg(short = 't', long = "output-type", value_enum)]
     pub output_type: bo4e_codegen::OutputType,
 
-    /// Skip clearing the output directory before writing.
+    /// Don't clear the output directory before saving the generated code.
     #[arg(long = "no-clear-output", action = clap::ArgAction::SetFalse, default_value_t = true)]
     pub clear_output: bool,
 
@@ -37,8 +39,8 @@ impl Executable for Generate {
 
         let written = {
             let _spin = crate::console::spinner::squish(format!(
-                "Generating {:?} output",
-                self.output_type
+                "Generating {} output",
+                self.output_type.as_str()
             ));
 
             bo4e_codegen::generate(

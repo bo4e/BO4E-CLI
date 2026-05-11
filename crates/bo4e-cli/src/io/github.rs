@@ -2,7 +2,7 @@ use crate::console::progress_bar::{
     abandon_progress_bar_with_error, finish_progress_bar, new_progress_bar,
 };
 use crate::console::spinner;
-use crate::cprint_verbose;
+use crate::{cprint_normal, cprint_verbose};
 use bo4e_schemas::models::schema_meta::{Schema, Schemas};
 use bo4e_schemas::models::version::Version;
 use lazy_static::lazy_static;
@@ -52,7 +52,7 @@ pub fn get_token_from_github_cli() -> Option<String> {
         );
         return None;
     }
-    cprint_verbose!("Using GitHub token discovered via `gh auth token`");
+    cprint_normal!("Retrieved access token from GitHub CLI command `gh auth token`.");
     Some(token_str.to_string())
 }
 
@@ -252,6 +252,7 @@ pub async fn get_schemas_from_github(
         )
         .await?
     };
+    cprint_normal!("Queried GitHub tree. Found {} schemas.", schema_downloads.len());
     let local_set = tokio::task::LocalSet::new();
     let schemas_vector = local_set
         .run_until(_execute_futures_with_progress_bar(schema_downloads))
@@ -264,14 +265,18 @@ pub async fn get_schemas_from_github(
 }
 
 pub async fn resolve_latest_version(token: Option<&str>) -> Result<Version, String> {
-    let _spin = spinner::earth("Querying GitHub for latest version");
-    let octocrab = get_octocrab_instance(token)?;
-    let latest_release = get_bo4e_schemas_repo_handler(&octocrab)
-        .releases()
-        .get_latest()
-        .await
-        .map_err(|e| format_octocrab_error(e, "latest-release lookup"))?;
-    Version::from_str(&latest_release.tag_name)
+    let version = {
+        let _spin = spinner::earth("Querying GitHub for latest version");
+        let octocrab = get_octocrab_instance(token)?;
+        let latest_release = get_bo4e_schemas_repo_handler(&octocrab)
+            .releases()
+            .get_latest()
+            .await
+            .map_err(|e| format_octocrab_error(e, "latest-release lookup"))?;
+        Version::from_str(&latest_release.tag_name)?
+    };
+    cprint_normal!("Resolved latest release to {}", version);
+    Ok(version)
 }
 
 /// Check if a GitHub *Release* exists in `bo4e/BO4E-Schemas` for the given version.

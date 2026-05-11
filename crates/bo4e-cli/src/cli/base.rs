@@ -22,9 +22,23 @@ const HELP_STYLES: Styles = Styles::styled()
     .invalid(    AnsiColor::Red.on_default()     .effects(Effects::BOLD));
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None, styles = HELP_STYLES)]
-//#[command(propagate_version = true)]
+#[command(
+    author,
+    about = "BO4E - Business Objects for Energy",
+    long_about = "BO4E - Business Objects for Energy\n\n\
+        This CLI is intended for developers working with BO4E. \
+        For more information see '--help' or visit \
+        https://github.com/bo4e/BO4E-CLI?tab=readme-ov-file#bo4e-cli",
+    styles = HELP_STYLES,
+    disable_version_flag = true,
+)]
 pub struct Cli {
+    /// Print programs current version number.
+    ///
+    /// Handled manually in `main` so the output is `v{version}` (matches Python).
+    #[arg(long = "version", action = clap::ArgAction::SetTrue)]
+    pub show_version: bool,
+
     /// Enable verbose output for all commands.
     #[arg(global = true, short = 'v', long, conflicts_with = "quiet")]
     pub verbose: bool,

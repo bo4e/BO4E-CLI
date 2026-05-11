@@ -17,13 +17,28 @@ pub enum PrimitiveValue {
     String(String),
 }
 
+/// Deserialize `Option<PrimitiveValue>` so that an *explicit* JSON `null`
+/// becomes `Some(PrimitiveValue::Null)` rather than `None` — the latter is
+/// serde's default behavior for `Option<T>` and would silently drop a
+/// `"default": null` field on round-trip.
+fn deserialize_present_primitive<'de, D>(deserializer: D) -> Result<Option<PrimitiveValue>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    PrimitiveValue::deserialize(deserializer).map(Some)
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct TypeBase {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_primitive",
+    )]
     pub default: Option<PrimitiveValue>,
 }
 
@@ -235,7 +250,7 @@ pub struct AnySchema {
 pub struct ReferenceSchema {
     #[serde(flatten)]
     pub base: TypeBase,
-    #[serde(rename = "$ref", default)]
+    #[serde(rename = "$ref")]
     pub r#ref: String,
 }
 
@@ -507,6 +522,12 @@ mod tests {
         let base = TypeBase { description: None, title: None, default: Some(PrimitiveValue::Null) };
         let json = serde_json::to_string(&base).unwrap();
         assert!(json.contains("\"default\":null"));
+    }
+
+    #[test]
+    fn test_typebase_default_null_roundtrip() {
+        let parsed: TypeBase = serde_json::from_str(r#"{"default":null,"title":"Wert"}"#).unwrap();
+        assert_eq!(parsed.default, Some(PrimitiveValue::Null), "explicit `default: null` must survive deserialization as Some(Null), not None");
     }
 
     #[test]

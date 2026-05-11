@@ -59,7 +59,7 @@ pub enum Import {
 /// // "https://.../bo4e_schemas/bo/Geschaeftspartner.json" → (["bo"], "Geschaeftspartner")
 /// // "../enum/Typ.json" → (["enum"], "Typ")
 /// ```
-fn parse_ref(ref_str: &str) -> (Vec<String>, String) {
+pub(crate) fn parse_ref(ref_str: &str) -> (Vec<String>, String) {
     // Strip URL scheme + host + path-prefix if this is a full URL.
     let path_part = if let Some(idx) = ref_str.find("bo4e_schemas/") {
         &ref_str[idx + "bo4e_schemas/".len()..]
@@ -122,6 +122,43 @@ pub(crate) fn schema_base(schema: &SchemaType) -> &bo4e_schemas::models::json_sc
         SchemaType::ReferenceSchema(s) => &s.base,
         SchemaType::Object(s) => &s.base,
         SchemaType::StrEnum(s) => &s.base,
+    }
+}
+
+/// If `schema` is (or wraps in `anyOf:[…, null]`) a `$ref` to an `enum/…` schema,
+/// return `(EnumClassName, sibling_module_path)`. Used by the pydantic renderer to
+/// qualify a string default as an enum member instead of emitting a bare string
+/// literal — e.g. `default="DE"` for an enum-typed `landescode` field becomes
+/// `default=Landescode.DE`.
+pub(crate) fn enum_ref_target(schema: &SchemaType) -> Option<(String, Vec<String>)> {
+    let r = match schema {
+        SchemaType::ReferenceSchema(r) if !r.r#ref.is_empty() => r,
+        SchemaType::AnyOf(a) => {
+            let non_null: Vec<&SchemaType> = a
+                .any_of
+                .iter()
+                .filter(|t| !matches!(t, SchemaType::NullSchema(_)))
+                .collect();
+            if non_null.len() == 1 {
+                if let SchemaType::ReferenceSchema(r) = non_null[0] {
+                    if r.r#ref.is_empty() {
+                        return None;
+                    }
+                    r
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+        _ => return None,
+    };
+    let (module, class_name) = parse_ref(&r.r#ref);
+    if module.first().map(|s| s.as_str()) == Some("enum") {
+        Some((class_name, module))
+    } else {
+        None
     }
 }
 

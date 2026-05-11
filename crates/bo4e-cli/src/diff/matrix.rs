@@ -30,6 +30,25 @@ pub fn build_chain(diffs: Vec<Changes>) -> Result<VersionChain, String> {
         return Err("Cannot build a version chain from zero diffs.".to_string());
     }
 
+    // Single-diff case: trivially a length-1 chain with two nodes (the diff's
+    // old and new schemas). Skips the cross-diff integrity check, which would
+    // otherwise reject a same-version diff (e.g. comparing two snapshots of the
+    // same release where one has been edited locally).
+    if diffs.len() == 1 {
+        let d = diffs.into_iter().next().unwrap();
+        let old_key = d.old_version().to_string();
+        let new_key = d.new_version().to_string();
+        let old_schemas = d.old_schemas.clone();
+        let new_schemas = d.new_schemas.clone();
+        return Ok(VersionChain {
+            nodes: vec![
+                ChainNode { version_key: old_key, schemas: old_schemas },
+                ChainNode { version_key: new_key, schemas: new_schemas },
+            ],
+            edges: vec![ChainEdge { changes: d }],
+        });
+    }
+
     let mut nodes: HashMap<String, Schemas> = HashMap::new();
     let mut insert_node = |key: String, s: Schemas| -> Result<(), String> {
         if let Some(existing) = nodes.get(&key) {
@@ -264,6 +283,23 @@ mod tests {
             new_schemas: coll(new_v, &[&["bo", "Angebot"]]),
             changes: items,
         }
+    }
+
+    #[test]
+    fn test_build_chain_accepts_single_diff_with_same_version() {
+        // Comparing two snapshots of the same version (e.g. baseline vs locally
+        // edited) is a valid use of `diff matrix`. Different schemas under the
+        // same version key must not trigger the cross-diff integrity check.
+        let d = Changes {
+            old_schemas: coll("v202501.0.0", &[&["bo", "Angebot"]]),
+            new_schemas: coll("v202501.0.0", &[&["bo", "Angebot"], &["bo", "Dokument"]]),
+            changes: vec![],
+        };
+        let chain = build_chain(vec![d]).unwrap();
+        assert_eq!(chain.nodes.len(), 2);
+        assert_eq!(chain.edges.len(), 1);
+        assert_eq!(chain.nodes[0].version_key, "v202501.0.0");
+        assert_eq!(chain.nodes[1].version_key, "v202501.0.0");
     }
 
     #[test]

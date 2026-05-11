@@ -1,6 +1,8 @@
 use crate::cli::base::Executable;
 use clap::{Args, Subcommand};
 
+/// Command group for interacting with the BO4E-python repository
+/// (https://github.com/bo4e/BO4E-python). See 'repo --help' for more information.
 #[derive(Args)]
 pub struct Repo {
     #[command(subcommand)]
@@ -14,26 +16,44 @@ pub enum RepoSubcommand {
 
 /// Get the last n versions of the BO4E-python repository starting from the given reference.
 ///
-/// This command must be executed from the root of a BO4E-python checkout.
+/// This command must be executed from the root of the BO4E-python repository. Technically, it
+/// should also work on other repositories following the same versioning scheme, but it is
+/// primarily intended for BO4E-python. Note that the command will not explicitly check if the
+/// current directory is the root of the BO4E-python repository.
+///
+/// The output will contain the version tags in chronological descending order, i.e. the newest
+/// version first. If executed without any arguments, it will return all versions on the main
+/// branch since v202401.0.0.
 #[derive(Args)]
 pub struct VersionsArgs {
-    /// Number of last versions to retrieve. 0 = all versions since v202401.0.0.
+    /// Number of last versions to retrieve. If the number is set to 0, all versions will be
+    /// retrieved up until v202401.0.0.
     #[arg(short = 'n', default_value_t = 0)]
     pub n: u32,
 
-    /// Git reference to start from (tag, branch, commit, or "HEAD").
+    /// The git reference object to start from. The reference can be a tag, branch or commit.
+    /// From this point the last n versions will be retrieved. If the reference is a tag, the tag
+    /// itself won't be included in the output. If the reference is neither a tag, branch nor a
+    /// commit, all versions prior to the current checkout commit (i.e. "HEAD") will be retrieved.
     #[arg(short = 'r', long = "ref", default_value = "main")]
     pub reference: String,
 
-    /// Exclude release candidates from the output.
+    /// Exclude release candidates from the output. If set to False, release candidates will be
+    /// included in the output. Excluded elements don't count towards the number of versions to
+    /// retrieve.
     #[arg(short = 'c', long, default_value_t = false)]
     pub exclude_candidates: bool,
 
-    /// Exclude technical bumps; from each functional group, keep only the newest technical.
+    /// Exclude technical version bumps from the output. If set to False, technical bumps will be
+    /// included in the output. Excluded elements don't count towards the number of versions to
+    /// retrieve. From versions differing only in the technical version, the newest technical
+    /// release will be returned.
     #[arg(short = 't', long, default_value_t = false)]
     pub exclude_technical_bumps: bool,
 
-    /// Show the full commit SHA. By default the SHA is truncated to 6 chars.
+    /// If set, the full commit SHA will be shown in the output. Otherwise, only the first 6
+    /// characters of the commit SHA will be shown. This option has no effect if the output is
+    /// quiet (i.e. --quiet is set).
     #[arg(short = 's', long, default_value_t = false)]
     pub show_full_commit_sha: bool,
 
@@ -42,7 +62,7 @@ pub struct VersionsArgs {
     pub validate_releases: bool,
 
     /// GitHub token for the BO4E-Schemas release validation. Falls back to `gh auth token`.
-    #[arg(long, env = "GITHUB_TOKEN")]
+    #[arg(long, env = "GITHUB_ACCESS_TOKEN")]
     pub token: Option<String>,
 }
 

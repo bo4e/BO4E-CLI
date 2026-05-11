@@ -1,5 +1,6 @@
 use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootObject, SchemaRootType, SchemaType, TypeBase};
 use bo4e_schemas::models::schema_meta::Schemas;
+use crate::console::mark::pat;
 use crate::{cprint_normal, cprint_verbose, cwarn};
 
 /// Remove the `null` variant from a nullable `AnyOf` property.
@@ -140,7 +141,7 @@ pub fn transform_all_non_nullable_fields(
                         match_count += 1;
                         cprint_verbose!(
                             "Applied non-nullable pattern '{}' to field {}",
-                            pattern,
+                            pat(pattern),
                             field_path
                         );
                     }
@@ -148,9 +149,9 @@ pub fn transform_all_non_nullable_fields(
             }
         }
         if match_count == 0 {
-            cwarn!("non-nullable pattern '{}' did not match any fields", pattern);
+            cwarn!("non-nullable pattern '{}' did not match any fields", pat(pattern));
         } else {
-            cprint_normal!("Applied non-nullable pattern '{}' to {} field(s)", pattern, match_count);
+            cprint_normal!("Applied non-nullable pattern '{}' to {} field(s)", pat(pattern), match_count);
         }
     }
 

@@ -1,4 +1,5 @@
 use crate::io::github::{get_token_from_github_cli, is_valid_github_token};
+use crate::cprint_normal;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;
@@ -49,10 +50,16 @@ impl Token {
 
 pub fn get_token_as_string(token: &Option<Token>) -> Option<String> {
     if let Some(t) = token {
+        cprint_normal!("Using GitHub Access Token for authentication.");
         Some(t.into())
     } else if let Ok(t) = Token::from_github_cli() {
+        cprint_normal!("Using GitHub Access Token from GitHub CLI for authentication.");
         Some(t.into())
     } else {
+        cprint_normal!(
+            "No GitHub Access Token provided. \
+             This may lead to rate limiting issues if you run this command multiple times."
+        );
         None
     }
 }

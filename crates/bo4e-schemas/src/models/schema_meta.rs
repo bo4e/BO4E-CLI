@@ -78,6 +78,7 @@ impl Schema {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(from = "SchemasOnDisk")]
 pub struct Schemas {
     #[serde(default)]
     schemas: Vec<Rc<RefCell<Schema>>>,
@@ -86,6 +87,30 @@ pub struct Schemas {
     _schemas_by_name: HashMap<String, Rc<RefCell<Schema>>>,
     #[serde(skip, default)]
     _schemas_by_module: HashMap<Vec<String>, Rc<RefCell<Schema>>>,
+}
+
+/// Deserialization shape for `Schemas`. The persisted JSON only carries `schemas` and
+/// `version`; the lookup indexes are derived. Going through this helper guarantees the
+/// indexes are rebuilt via `add_schema`, otherwise `modules()`/`get_by_module()` etc.
+/// return empty results on a freshly deserialized value.
+#[derive(Deserialize)]
+struct SchemasOnDisk {
+    #[serde(default)]
+    schemas: Vec<Rc<RefCell<Schema>>>,
+    version: DirtyVersion,
+}
+
+impl From<SchemasOnDisk> for Schemas {
+    fn from(disk: SchemasOnDisk) -> Self {
+        let mut out = Schemas::with_capacity(disk.schemas.len(), disk.version);
+        for schema in disk.schemas {
+            // Ignore add_schema errors here; serialized data should not contain
+            // duplicates, and silently dropping is preferable to failing deserialization
+            // on a Vec-backed structure that has no other validation gate.
+            let _ = out.add_schema(schema);
+        }
+        out
+    }
 }
 
 impl Schemas {
@@ -278,6 +303,31 @@ mod tests {
             .map(|s| s.borrow().module().to_vec())
             .collect();
         assert_eq!(only_a, vec![vec!["bo".to_string(), "Angebot".to_string()]]);
+    }
+
+    #[test]
+    fn test_deserialize_rebuilds_module_index() {
+        // Regression: a freshly deserialized `Schemas` must repopulate the
+        // `_schemas_by_module`/`_schemas_by_name` indexes; otherwise downstream
+        // consumers (matrix, edit::update_refs::update_references_all) see no
+        // modules and silently produce empty output.
+        let original = collection(&[&["bo", "Angebot"], &["com", "Adresse"]]);
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: Schemas = serde_json::from_str(&json).unwrap();
+        let mut mods: Vec<Vec<String>> =
+            restored.modules().into_iter().map(|m| m.clone()).collect();
+        mods.sort();
+        assert_eq!(
+            mods,
+            vec![
+                vec!["bo".to_string(), "Angebot".to_string()],
+                vec!["com".to_string(), "Adresse".to_string()],
+            ]
+        );
+        // get_by_module must also resolve.
+        assert!(restored
+            .get_by_module(&["bo".to_string(), "Angebot".to_string()])
+            .is_some());
     }
 
     #[test]

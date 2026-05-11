@@ -1,4 +1,5 @@
 use crate::diff::filters::has_critical;
+use crate::edit::update_refs::canonical_ref;
 use crate::models::changes::{Change, ChangeType, ChangeValue, Changes};
 use bo4e_schemas::models::json_schema::{
     AllOfSchema, AnyOfSchema, ArraySchema, ObjectSchema, ReferenceSchema, SchemaRootType,
@@ -73,7 +74,7 @@ fn diff_root_schemas(old: &Schemas, new: &Schemas, out: &mut Vec<Change>) {
             Ok(r) => r.clone(),
             Err(_) => continue,
         };
-        diff_root_pair(&root_old, &root_new, &trace, &trace, out);
+        diff_root_pair(&root_old, &root_new, &trace, &trace, &module, out);
     }
 }
 
@@ -82,11 +83,12 @@ fn diff_root_pair(
     new: &SchemaRootType,
     old_trace: &str,
     new_trace: &str,
+    current_module: &[String],
     out: &mut Vec<Change>,
 ) {
     match (old, new) {
         (SchemaRootType::Object(o), SchemaRootType::Object(n)) => {
-            diff_object_schemas(&o.object, &n.object, old_trace, new_trace, out);
+            diff_object_schemas(&o.object, &n.object, old_trace, new_trace, current_module, out);
         }
         (SchemaRootType::StrEnum(o), SchemaRootType::StrEnum(n)) => {
             diff_enum_schemas(&o.str_enum, &n.str_enum, old_trace, new_trace, out);
@@ -157,10 +159,11 @@ fn diff_ref_schemas(
     new: &ReferenceSchema,
     old_trace: &str,
     new_trace: &str,
+    current_module: &[String],
     out: &mut Vec<Change>,
 ) {
     diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
-    if old.r#ref != new.r#ref {
+    if !refs_point_to_same_target(&old.r#ref, &new.r#ref, current_module) {
         out.push(Change {
             r#type: ChangeType::FieldReferenceChanged,
             old: Some(ChangeValue::String(old.r#ref.clone())),
@@ -171,11 +174,25 @@ fn diff_ref_schemas(
     }
 }
 
+/// Two `$ref` strings point to the same target if their canonical module paths match.
+/// Falls back to literal string comparison when either side cannot be canonicalized
+/// (e.g. `#/$defs/Foo` form, which would require a namespace map).
+fn refs_point_to_same_target(old: &str, new: &str, current_module: &[String]) -> bool {
+    if old == new {
+        return true;
+    }
+    match (canonical_ref(old, current_module), canonical_ref(new, current_module)) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
 fn diff_array_schemas(
     old: &ArraySchema,
     new: &ArraySchema,
     old_trace: &str,
     new_trace: &str,
+    current_module: &[String],
     out: &mut Vec<Change>,
 ) {
     diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
@@ -184,6 +201,7 @@ fn diff_array_schemas(
         &new.items,
         &format!("{}/items", old_trace),
         &format!("{}/items", new_trace),
+        current_module,
         out,
     );
 }
@@ -218,6 +236,7 @@ fn diff_any_of_schemas(
     new: &AnyOfSchema,
     old_trace: &str,
     new_trace: &str,
+    current_module: &[String],
     out: &mut Vec<Change>,
 ) {
     diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
@@ -227,6 +246,7 @@ fn diff_any_of_schemas(
         old_trace,
         new_trace,
         VariantKind::AnyOf,
+        current_module,
         out,
     );
 }
@@ -236,6 +256,7 @@ fn diff_all_of_schemas(
     new: &AllOfSchema,
     old_trace: &str,
     new_trace: &str,
+    current_module: &[String],
     out: &mut Vec<Change>,
 ) {
     diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
@@ -245,6 +266,7 @@ fn diff_all_of_schemas(
         old_trace,
         new_trace,
         VariantKind::AllOf,
+        current_module,
         out,
     );
 }
@@ -255,6 +277,7 @@ fn diff_variant_list(
     old_trace: &str,
     new_trace: &str,
     kind: VariantKind,
+    current_module: &[String],
     out: &mut Vec<Change>,
 ) {
     let key = match kind {
@@ -280,7 +303,7 @@ fn diff_variant_list(
             }
             let nt = format!("{}/{}/{}", new_trace, key, ni);
             let mut sub: Vec<Change> = Vec::new();
-            diff_schema_type(ov, nv, &ot, &nt, &mut sub);
+            diff_schema_type(ov, nv, &ot, &nt, current_module, &mut sub);
             if !has_critical(&sub) {
                 out.extend(sub);
                 new_matched[ni] = true;
@@ -345,20 +368,21 @@ fn diff_schema_type(
     new: &SchemaType,
     old_trace: &str,
     new_trace: &str,
+    current_module: &[String],
     out: &mut Vec<Change>,
 ) {
     use SchemaType::*;
     match (old, new) {
-        (Object(o), Object(n)) => diff_object_schemas(o, n, old_trace, new_trace, out),
+        (Object(o), Object(n)) => diff_object_schemas(o, n, old_trace, new_trace, current_module, out),
         (StrEnum(o), StrEnum(n)) => diff_enum_schemas(o, n, old_trace, new_trace, out),
-        (Array(o), Array(n)) => diff_array_schemas(o, n, old_trace, new_trace, out),
-        (AnyOf(o), AnyOf(n)) => diff_any_of_schemas(o, n, old_trace, new_trace, out),
-        (AllOf(o), AllOf(n)) => diff_all_of_schemas(o, n, old_trace, new_trace, out),
+        (Array(o), Array(n)) => diff_array_schemas(o, n, old_trace, new_trace, current_module, out),
+        (AnyOf(o), AnyOf(n)) => diff_any_of_schemas(o, n, old_trace, new_trace, current_module, out),
+        (AllOf(o), AllOf(n)) => diff_all_of_schemas(o, n, old_trace, new_trace, current_module, out),
         (StringSchema(o), StringSchema(n)) => {
             diff_string_schemas(o, n, old_trace, new_trace, out)
         }
         (ReferenceSchema(o), ReferenceSchema(n)) => {
-            diff_ref_schemas(o, n, old_trace, new_trace, out)
+            diff_ref_schemas(o, n, old_trace, new_trace, current_module, out)
         }
         _ if std::mem::discriminant(old) == std::mem::discriminant(new) => {}
         _ => diff_schema_differing_types(old, new, old_trace, new_trace, out),
@@ -370,6 +394,7 @@ fn diff_object_schemas(
     new: &ObjectSchema,
     old_trace: &str,
     new_trace: &str,
+    current_module: &[String],
     out: &mut Vec<Change>,
 ) {
     diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
@@ -405,6 +430,7 @@ fn diff_object_schemas(
                 schema_new,
                 &format!("{}/{}", old_trace, name),
                 &format!("{}/{}", new_trace, name),
+                current_module,
                 out,
             );
         }
@@ -604,16 +630,36 @@ mod tests {
         use bo4e_schemas::models::json_schema::ReferenceSchema;
         let r1 = ReferenceSchema {
             base: TypeBase::default(),
-            r#ref: "#/A".into(),
+            r#ref: "Geschaeftspartner.json#".into(),
         };
         let r2 = ReferenceSchema {
             base: TypeBase::default(),
-            r#ref: "#/B".into(),
+            r#ref: "Person.json#".into(),
         };
+        let m = vec!["bo".to_string(), "Angebot".to_string()];
         let mut out = vec![];
-        diff_ref_schemas(&r1, &r2, "/x", "/x", &mut out);
+        diff_ref_schemas(&r1, &r2, "/x", "/x", &m, &mut out);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldReferenceChanged);
+    }
+
+    #[test]
+    fn test_ref_form_equivalence_does_not_emit_change() {
+        // Same target, different ref forms (relative vs absolute URL) should be treated as equal.
+        use bo4e_schemas::models::json_schema::ReferenceSchema;
+        let r_relative = ReferenceSchema {
+            base: TypeBase::default(),
+            r#ref: "Geschaeftspartner.json#".into(),
+        };
+        let r_absolute = ReferenceSchema {
+            base: TypeBase::default(),
+            r#ref: "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202501.0.0/\
+                    src/bo4e_schemas/bo/Geschaeftspartner.json".into(),
+        };
+        let m = vec!["bo".to_string(), "Angebot".to_string()];
+        let mut out = vec![];
+        diff_ref_schemas(&r_relative, &r_absolute, "/x", "/x", &m, &mut out);
+        assert!(out.is_empty(), "expected no change, got {:?}", out);
     }
 
     #[test]
@@ -642,6 +688,10 @@ mod tests {
         })
     }
 
+    fn m() -> Vec<String> {
+        vec!["bo".to_string(), "Angebot".to_string()]
+    }
+
     #[test]
     fn test_any_of_variant_added_emits_field_any_of_type_added() {
         use bo4e_schemas::models::json_schema::AnyOfSchema;
@@ -651,10 +701,10 @@ mod tests {
         };
         let new = AnyOfSchema {
             base: TypeBase::default(),
-            any_of: vec![string_schema_t(), ref_t("#/A")],
+            any_of: vec![string_schema_t(), ref_t("Foo.json#")],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &mut out);
+        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
         let added: Vec<_> = out
             .iter()
             .filter(|c| c.r#type == ChangeType::FieldAnyOfTypeAdded)
@@ -667,14 +717,14 @@ mod tests {
         use bo4e_schemas::models::json_schema::AnyOfSchema;
         let old = AnyOfSchema {
             base: TypeBase::default(),
-            any_of: vec![string_schema_t(), ref_t("#/A")],
+            any_of: vec![string_schema_t(), ref_t("Foo.json#")],
         };
         let new = AnyOfSchema {
             base: TypeBase::default(),
             any_of: vec![string_schema_t()],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &mut out);
+        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
         let removed: Vec<_> = out
             .iter()
             .filter(|c| c.r#type == ChangeType::FieldAnyOfTypeRemoved)
@@ -698,7 +748,7 @@ mod tests {
             any_of: vec![SchemaType::StringSchema(s_new)],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &mut out);
+        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
         assert!(out.iter().all(|c| c.r#type != ChangeType::FieldAnyOfTypeAdded));
         assert!(out.iter().all(|c| c.r#type != ChangeType::FieldAnyOfTypeRemoved));
         assert!(out
@@ -707,12 +757,33 @@ mod tests {
     }
 
     #[test]
+    fn test_any_of_pairs_refs_with_equivalent_forms() {
+        // Bug fix: an anyOf branch where the only difference is the ref form
+        // (relative vs absolute URL) should pair, not produce add/remove pair.
+        use bo4e_schemas::models::json_schema::AnyOfSchema;
+        let old = AnyOfSchema {
+            base: TypeBase::default(),
+            any_of: vec![ref_t("Geschaeftspartner.json#")],
+        };
+        let new = AnyOfSchema {
+            base: TypeBase::default(),
+            any_of: vec![ref_t(
+                "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202501.0.0/\
+                 src/bo4e_schemas/bo/Geschaeftspartner.json",
+            )],
+        };
+        let mut out = vec![];
+        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
+        assert!(out.is_empty(), "expected no changes, got {:?}", out);
+    }
+
+    #[test]
     fn test_field_type_changed_unrelated_types() {
         use bo4e_schemas::models::json_schema::{NumberSchema, StringSchema};
         let old = SchemaType::StringSchema(StringSchema::default());
         let new = SchemaType::NumberSchema(NumberSchema::default());
         let mut out = vec![];
-        diff_schema_type(&old, &new, "/x", "/x", &mut out);
+        diff_schema_type(&old, &new, "/x", "/x", &m(), &mut out);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldTypeChanged);
     }
@@ -733,7 +804,7 @@ mod tests {
             items: Box::new(SchemaType::StringSchema(StringSchema::default())),
         });
         let mut out = vec![];
-        diff_schema_type(&obj, &arr, "/x", "/x", &mut out);
+        diff_schema_type(&obj, &arr, "/x", "/x", &m(), &mut out);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldCardinalityChanged);
     }
@@ -757,7 +828,7 @@ mod tests {
         let a = obj(&[("foo", string_schema_t())]);
         let b = obj(&[("bar", string_schema_t())]);
         let mut out = vec![];
-        diff_object_schemas(&a, &b, "/x", "/x", &mut out);
+        diff_object_schemas(&a, &b, "/x", "/x", &m(), &mut out);
         let kinds: Vec<_> = out.iter().map(|c| c.r#type.clone()).collect();
         assert!(kinds.contains(&ChangeType::FieldAdded));
         assert!(kinds.contains(&ChangeType::FieldRemoved));
@@ -773,7 +844,7 @@ mod tests {
         let a = obj(&[("foo", SchemaType::StringSchema(s_old))]);
         let b = obj(&[("foo", SchemaType::StringSchema(s_new))]);
         let mut out = vec![];
-        diff_object_schemas(&a, &b, "/x", "/x", &mut out);
+        diff_object_schemas(&a, &b, "/x", "/x", &m(), &mut out);
         assert!(out
             .iter()
             .any(|c| c.r#type == ChangeType::FieldDefaultChanged));

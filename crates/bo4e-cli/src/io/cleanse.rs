@@ -1,5 +1,5 @@
 use crate::console::spinner;
-use crate::{cprint_verbose};
+use crate::{cprint_normal, cprint_verbose};
 use std::path::Path;
 
 /// Clear (and delete) the directory if `clear_output` is true and the directory exists.
@@ -23,14 +23,12 @@ pub fn clear_dir_if_needed(output_dir: &Path, clear_output: bool) -> std::io::Re
             "Tried to clear a directory, but the path points to a file.",
         ));
     }
-    let entries_removed = std::fs::read_dir(output_dir)?.count();
-    let _spin = spinner::grenade(format!("Clearing directory {}", output_dir.display()));
-    std::fs::remove_dir_all(output_dir)?;
-    cprint_verbose!(
-        "Cleared directory {} ({} entries removed)",
-        output_dir.display(),
-        entries_removed
-    );
+    let _entries_removed = std::fs::read_dir(output_dir)?.count();
+    {
+        let _spin = spinner::grenade(format!("Clearing directory {}", output_dir.display()));
+        std::fs::remove_dir_all(output_dir)?;
+    }
+    cprint_normal!("Cleared directory {}", output_dir.display());
     Ok(())
 }
 

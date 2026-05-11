@@ -100,6 +100,61 @@ pub fn update_references_all(schemas: &mut Schemas) -> Result<(), String> {
     Ok(())
 }
 
+/// Resolve a `$ref` string to a canonical module path (e.g. `["bo", "Geschaeftspartner"]`),
+/// independent of how the reference is expressed. Handles three forms:
+///
+/// - Online URL: `https://raw.githubusercontent.com/.../src/bo4e_schemas/bo/Foo.json`
+/// - Self-reference: `#` (resolves to `current_module`)
+/// - Relative path: `../com/Bar.json#`, `Foo.json#` (resolved against `current_module`'s parent)
+///
+/// Returns `None` for forms we cannot resolve here (e.g. `#/$defs/Foo` requires a namespace
+/// map). Callers should fall back to literal string comparison when this returns `None`.
+pub fn canonical_ref(ref_str: &str, current_module: &[String]) -> Option<Vec<String>> {
+    if let Some(caps) = REF_ONLINE_REGEX.captures(ref_str) {
+        let sub_path = caps.name("sub_path").map_or("", |m| m.as_str());
+        let model = caps.name("model").unwrap().as_str();
+        return Some(
+            sub_path
+                .split('/')
+                .filter(|s| !s.is_empty())
+                .chain(std::iter::once(model))
+                .map(String::from)
+                .collect(),
+        );
+    }
+
+    if ref_str == "#" || ref_str.is_empty() {
+        return Some(current_module.to_vec());
+    }
+
+    // `#/$defs/...` form requires a namespace map — caller falls back to literal compare.
+    if ref_str.starts_with('#') {
+        return None;
+    }
+
+    // Strip JSON pointer fragment, then resolve as a filesystem-style path.
+    let path = ref_str.split('#').next().unwrap_or("");
+    let mut resolved: Vec<String> = current_module
+        .iter()
+        .take(current_module.len().saturating_sub(1))
+        .cloned()
+        .collect();
+    for segment in path.split('/') {
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." {
+            resolved.pop()?;
+        } else {
+            resolved.push(segment.to_string());
+        }
+    }
+    let last = resolved.last_mut()?;
+    let stripped = last.strip_suffix(".json")?;
+    *last = stripped.to_string();
+    Some(resolved)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,6 +222,57 @@ mod tests {
         let ns = HashMap::new();
         update_reference(&mut r, &module, &ns, "v202401.1.0").unwrap();
         assert_eq!(r.r#ref, "../already/relative.json#");
+    }
+
+    #[test]
+    fn test_canonical_ref_online_url() {
+        let m = vec!["bo".to_string(), "Angebot".to_string()];
+        let canon = canonical_ref(
+            "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202501.0.0/\
+             src/bo4e_schemas/bo/Geschaeftspartner.json",
+            &m,
+        );
+        assert_eq!(canon, Some(vec!["bo".to_string(), "Geschaeftspartner".to_string()]));
+    }
+
+    #[test]
+    fn test_canonical_ref_self_ref() {
+        let m = vec!["bo".to_string(), "Angebot".to_string()];
+        assert_eq!(canonical_ref("#", &m), Some(m.clone()));
+        assert_eq!(canonical_ref("", &m), Some(m));
+    }
+
+    #[test]
+    fn test_canonical_ref_relative_same_dir() {
+        let m = vec!["bo".to_string(), "Angebot".to_string()];
+        let canon = canonical_ref("Geschaeftspartner.json#", &m);
+        assert_eq!(canon, Some(vec!["bo".to_string(), "Geschaeftspartner".to_string()]));
+    }
+
+    #[test]
+    fn test_canonical_ref_relative_cross_dir() {
+        let m = vec!["bo".to_string(), "Angebot".to_string()];
+        let canon = canonical_ref("../com/Adresse.json#", &m);
+        assert_eq!(canon, Some(vec!["com".to_string(), "Adresse".to_string()]));
+    }
+
+    #[test]
+    fn test_canonical_ref_defs_form_unresolvable() {
+        let m = vec!["bo".to_string(), "Angebot".to_string()];
+        assert_eq!(canonical_ref("#/$defs/Foo", &m), None);
+    }
+
+    #[test]
+    fn test_canonical_ref_online_and_relative_match() {
+        // The two forms a $ref might take for the same target should canonicalize identically.
+        let m = vec!["bo".to_string(), "Angebot".to_string()];
+        let online = canonical_ref(
+            "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202501.0.0/\
+             src/bo4e_schemas/bo/Geschaeftspartner.json",
+            &m,
+        );
+        let relative = canonical_ref("Geschaeftspartner.json#", &m);
+        assert_eq!(online, relative);
     }
 
     #[test]

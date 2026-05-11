@@ -314,29 +314,22 @@ fn classify_property(
     let snake = to_snake_case(prop_name);
     let docstring = literal_description(schema);
 
-    if let SchemaType::ReferenceSchema(r) = schema {
-        if let Some(target) = ref_target_class(&r.r#ref) {
-            if enum_names.contains(&target) {
-                fields.push(SqlField::EnumColumn {
-                    name: snake,
-                    enum_class: target,
-                    is_list: false,
-                    nullable: false,
-                    default: None,
-                    title: literal_title(schema),
-                    docstring,
-                });
-            } else {
-                push_one_to_one(owner_class, &snake, &target, false, fields);
-            }
-            return Ok(());
+    if let SchemaType::ReferenceSchema(r) = schema
+        && let Some(target) = ref_target_class(&r.r#ref)
+    {
+        if enum_names.contains(&target) {
+            fields.push(SqlField::EnumColumn {
+                name: snake,
+                enum_class: target,
+                is_list: false,
+                nullable: false,
+                default: None,
+                title: literal_title(schema),
+                docstring,
+            });
+        } else {
+            push_one_to_one(owner_class, &snake, &target, false, fields);
         }
-        // Empty/unresolvable `$ref` is how an *untyped* JSON-Schema property
-        // (e.g. ZusatzAttribut.wert: `{default:null,title:"Wert"}`) lands here:
-        // serde-untagged dispatches it to `ReferenceSchema` because `$ref`
-        // defaults to "". Treat as a nullable Any column, mirroring what
-        // `classify_optional` already does for the same shape.
-        fields.push(SqlField::AnyColumn { name: snake, is_array: false, nullable: true, docstring });
         return Ok(());
     }
 
@@ -359,8 +352,7 @@ fn classify_property(
                 }
                 return Ok(());
             }
-            SchemaType::AnySchema(_) | SchemaType::ReferenceSchema(_) => {
-                // AnySchema or unresolvable ReferenceSchema (empty ref) → treat as Any array
+            SchemaType::AnySchema(_) => {
                 fields.push(SqlField::AnyColumn { name: snake, is_array: true, nullable: false, docstring });
                 return Ok(());
             }
@@ -384,7 +376,7 @@ fn classify_property(
     }
 
     if let SchemaType::AnySchema(_) = schema {
-        fields.push(SqlField::AnyColumn { name: snake, is_array: false, nullable: false, docstring });
+        fields.push(SqlField::AnyColumn { name: snake, is_array: false, nullable: true, docstring });
         return Ok(());
     }
 
@@ -417,31 +409,30 @@ fn classify_optional(
 
     match inner {
         SchemaType::ReferenceSchema(r) => {
-            if let Some(target) = ref_target_class(&r.r#ref) {
-                if enum_names.contains(&target) {
-                    let default = literal_default(full_schema).and_then(|d| {
-                        if d == "None" {
-                            None
-                        } else {
-                            let trimmed = d.trim_matches('"').to_string();
-                            Some(format!("{target}.{trimmed}"))
-                        }
-                    });
-                    fields.push(SqlField::EnumColumn {
-                        name: snake.to_string(),
-                        enum_class: target,
-                        is_list: false,
-                        nullable: true,
-                        default,
-                        title,
-                        docstring,
-                    });
-                } else {
-                    push_one_to_one(owner_class, snake, &target, true, fields);
-                }
+            let target = ref_target_class(&r.r#ref).ok_or_else(|| Error::UnclassifiableProperty {
+                class: owner_class.to_string(),
+                property: prop_name.to_string(),
+            })?;
+            if enum_names.contains(&target) {
+                let default = literal_default(full_schema).and_then(|d| {
+                    if d == "None" {
+                        None
+                    } else {
+                        let trimmed = d.trim_matches('"').to_string();
+                        Some(format!("{target}.{trimmed}"))
+                    }
+                });
+                fields.push(SqlField::EnumColumn {
+                    name: snake.to_string(),
+                    enum_class: target,
+                    is_list: false,
+                    nullable: true,
+                    default,
+                    title,
+                    docstring,
+                });
             } else {
-                // Empty or unresolvable $ref — treat as Any (nullable)
-                fields.push(SqlField::AnyColumn { name: snake.to_string(), is_array: false, nullable: true, docstring });
+                push_one_to_one(owner_class, snake, &target, true, fields);
             }
             Ok(())
         }
@@ -463,8 +454,7 @@ fn classify_optional(
                 }
                 Ok(())
             }
-            SchemaType::AnySchema(_) | SchemaType::ReferenceSchema(_) => {
-                // AnySchema or unresolvable ReferenceSchema (empty ref) → treat as Any array
+            SchemaType::AnySchema(_) => {
                 fields.push(SqlField::AnyColumn { name: snake.to_string(), is_array: true, nullable: true, docstring });
                 Ok(())
             }
@@ -811,10 +801,9 @@ mod tests {
 
     #[test]
     fn untyped_property_emits_nullable_any_column() {
-        // ZusatzAttribut.wert: `{default:null, title:"Wert"}` has no type. Serde
-        // matches ReferenceSchema first (its `$ref` field defaults to ""),
-        // so classify_property's empty-ref branch must explicitly emit a
-        // nullable AnyColumn.
+        // ZusatzAttribut.wert: `{default:null, title:"Wert"}` has no type.
+        // Without a `$ref` the property dispatches to `AnySchema`, which we
+        // emit as a nullable AnyColumn.
         let body = r#"{
             "type":"object",
             "properties":{

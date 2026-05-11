@@ -119,6 +119,7 @@ pub fn get_commit_date(commit: &str) -> io::Result<String> {
 /// check runs first because `git branch --contains HEAD` succeeds and would otherwise
 /// classify it as a commit.
 pub fn parse_reference(value: String) -> io::Result<Reference> {
+    crate::cprint_verbose!("Get tags before tag/branch/commit {value}");
     if value == "HEAD" {
         Ok(Reference::Head)
     } else if is_version_tag(&value)? {
@@ -157,8 +158,12 @@ where
     for tag in raw {
         match Version::from_str(&tag) {
             Ok(v) => candidates.push(v),
-            Err(_) => crate::cwarn!("skipping unparseable tag '{tag}'"),
+            // Mirrors Python: silently filter unparseable tags. Surface only at --verbose.
+            Err(_) => crate::cprint_verbose!("Skipping unparseable tag '{tag}'"),
         }
+    }
+    if candidates.is_empty() {
+        crate::cwarn!("No tags found.");
     }
 
     let filter_opts = FilterOptions {

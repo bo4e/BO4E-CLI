@@ -1,3 +1,4 @@
+use crate::console::mark::pat;
 use crate::models::config::{AdditionalEnumItem, AdditionalField};
 use bo4e_schemas::models::json_schema::{SchemaRootType, SchemaType};
 use bo4e_schemas::models::schema_meta::Schemas;
@@ -33,16 +34,16 @@ pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut
                 match_count += 1;
                 cprint_verbose!(
                     "Applied pattern '{}' to schema {}. Added field '{}'",
-                    field.pattern,
+                    pat(&field.pattern),
                     module_path,
                     field.field_name
                 );
             }
         }
         if match_count == 0 {
-            cwarn!("pattern '{}' did not match any schemas", field.pattern);
+            cwarn!("pattern '{}' did not match any schemas", pat(&field.pattern));
         } else {
-            cprint_normal!("Pattern '{}' matched {} schema(s)", field.pattern, match_count);
+            cprint_normal!("Pattern '{}' matched {} schema(s)", pat(&field.pattern), match_count);
         }
     }
 }
@@ -89,16 +90,16 @@ pub fn transform_all_additional_enum_items(items: &[AdditionalEnumItem], schemas
                 match_count += 1;
                 cprint_verbose!(
                     "Applied pattern '{}' to schema {}. Added enum items: {:?}",
-                    item.pattern,
+                    pat(&item.pattern),
                     module_path,
                     item.items
                 );
             }
         }
         if match_count == 0 {
-            cwarn!("pattern '{}' did not match any schemas", item.pattern);
+            cwarn!("pattern '{}' did not match any schemas", pat(&item.pattern));
         } else {
-            cprint_normal!("Pattern '{}' matched {} schema(s)", item.pattern, match_count);
+            cprint_normal!("Pattern '{}' matched {} schema(s)", pat(&item.pattern), match_count);
         }
     }
 }

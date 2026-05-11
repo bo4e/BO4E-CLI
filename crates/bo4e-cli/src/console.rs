@@ -1,5 +1,6 @@
 pub mod console;
 pub mod highlighter;
+pub mod mark;
 pub mod palette;
 pub mod progress_bar;
 pub mod spinner;
