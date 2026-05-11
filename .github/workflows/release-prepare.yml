@@ -49,9 +49,14 @@ jobs:
           # workspace grows.
           sed -i -E "s/^version = \"[^\"]+\"/version = \"$new\"/" crates/bo4e-cli/Cargo.toml
 
-      - name: Regenerate CHANGELOG.md
+      - name: Prepend new CHANGELOG.md section
         run: |
-          git-cliff --tag "v${{ inputs.version }}" --output CHANGELOG.md
+          # `--unreleased --tag VERSION` emits only the section for the new
+          # tag (built from commits since the previous tag). `--prepend FILE`
+          # inserts it at the top of the existing CHANGELOG so the historical
+          # sections stay intact. The cliff.toml has an empty template header,
+          # so there's nothing to deduplicate.
+          git-cliff --unreleased --tag "v${{ inputs.version }}" --prepend CHANGELOG.md
 
       - name: Refresh Cargo.lock
         run: cargo update -p bo4e-cli --precise '${{ inputs.version }}' || cargo generate-lockfile

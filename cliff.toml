@@ -6,13 +6,11 @@
 # matters — keep it as `## X.Y.Z`.
 
 [changelog]
-header = """
-# Changelog
-
-All notable changes to this project are documented here. This file is generated
-from conventional commits by [git-cliff](https://github.com/orhun/git-cliff).
-
-"""
+# No template header — CHANGELOG.md starts straight with the most recent
+# `## X.Y.Z` section. The release-prepare workflow uses `--prepend`, which
+# inserts each new section at the top; an introductory paragraph here would
+# either get duplicated on every prepend or push existing content down.
+header = ""
 
 # Per-release section. The version heading is stripped of any leading `v` so
 # cargo-dist matches the tag `v0.1.0` against `## 0.1.0`.
