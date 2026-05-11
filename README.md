@@ -3,10 +3,7 @@
 A command-line tool for developers who work with [BO4E](https://www.bo4e.de/) models.
 It builds on the [BO4E-Schemas](https://github.com/bo4e/BO4E-Schemas) repository as
 single source of truth and helps you fetch, customise, compare and generate code from
-those schemas.
-
-This is the Rust implementation of the CLI. It ships as a small native binary; no
-Python or other runtime is required to run it.
+those schemas. It ships as a small self-contained binary with no runtime dependencies.
 
 ## Features
 
@@ -15,7 +12,7 @@ Python or other runtime is required to run it.
 - **Edit** schemas via a static JSON config file — add fields, add models, add enum
   values, mark fields as non-nullable — to tailor the BO4E models to your use case.
 - **Generate** code from the (edited) schemas. Currently supports
-  `python-pydantic` and `python-sql-model`; both are pluggable Cargo features.
+  `python-pydantic` and `python-sql-model` outputs; further generators can be added.
 - **Diff** two schema directories and emit a machine-readable JSON diff.
 - **Compatibility matrix** across a chain of diff files for quick visual review.
 - **Classify** a version bump as technical / functional / major based on the diff.
@@ -54,7 +51,7 @@ The CLI then appears under *Apps & Features*.
 Each release also ships raw tarballs (`.tar.xz` / `.zip`) for every supported target —
 useful if you want to drop the binary somewhere yourself.
 
-### From source (Rust toolchain)
+### From source
 
 ```bash
 # compile from source:
@@ -312,20 +309,20 @@ bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_sql -t python-sql-model
 |---------------------|-------|------------------------------------------------------------------------|
 | `--input`           | `-i`  | Directory containing input JSON schemas.                               |
 | `--output`          | `-o`  | Directory to write generated code to.                                  |
-| `--output-type`     | `-t`  | One of `python-pydantic`, `python-sql-model` (gated by Cargo feature). |
+| `--output-type`     | `-t`  | One of `python-pydantic`, `python-sql-model`.                          |
 | `--no-clear-output` |       | Skip clearing the output directory before writing (default: clear).    |
 | `--templates-dir`   |       | Override embedded templates with a directory of Jinja templates.       |
 
-### Slim install via Cargo features
+### Slim install with only the generators you need
 
-By default `cargo install bo4e-cli` includes both Python output types. To install with only the type you need:
+When installing from source you can pick a single generator instead of all of them:
 
 ```
 cargo install bo4e-cli --no-default-features --features python-pydantic
 cargo install bo4e-cli --no-default-features --features python-sql-model
 ```
 
-Available features: `python` (umbrella), `python-pydantic`, `python-sql-model`.
+Available selectors: `python` (umbrella for both), `python-pydantic`, `python-sql-model`.
 
 ## `bo4e diff schemas`
 
