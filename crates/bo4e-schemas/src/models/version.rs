@@ -15,17 +15,20 @@ lazy_static! {
         $",
     )
     .unwrap();
+    // The `+g<commit>` and `.d<YYYYMMDD>` suffixes are independent: `bo4e edit` brands
+    // the output with `.d<date>` even when there is no commit (the input came straight
+    // from a tagged release), so the date suffix must be parseable on its own.
     static ref REGEX_DIRTY_VERSION: Regex = Regex::new(
         "^v(?P<major>\\d{6})\\.\
         (?P<functional>\\d+)\\.\
         (?P<technical>\\d+)\
         (?:-rc(?P<candidate>\\d*))?\
-        (?:\\+g(?P<commit_part>\\w+)\
+        (?:\\+g(?P<commit_part>\\w+))?\
         (?:\\.d\
         (?P<dirty_workdir_date_year>\\d{4})\
         (?P<dirty_workdir_date_month>\\d{2})\
         (?P<dirty_workdir_date_day>\\d{2})\
-        )?)?$",
+        )?$",
     )
     .unwrap();
 }
@@ -400,6 +403,24 @@ mod tests {
         let v_new: Version = "v202401.0.2".parse().unwrap();
         let dv_old: DirtyVersion = "v202401.0.1+gabc".parse().unwrap();
         assert!(v_new > dv_old);
+    }
+
+    #[test]
+    fn test_dirty_version_parses_date_without_commit() {
+        // `bo4e edit` writes `<semver>.d<YYYYMMDD>` when the input had no commit suffix,
+        // so the date-only dirty form must round-trip through DirtyVersion::from_str.
+        let dv: DirtyVersion = "v202501.0.0.d20260511".parse().unwrap();
+        assert!(dv.is_dirty());
+        assert_eq!(dv.dirty_worktree_date().unwrap().to_string(), "2026-05-11");
+        assert_eq!(dv.to_string(), "v202501.0.0.d20260511");
+    }
+
+    #[test]
+    fn test_dirty_version_still_parses_commit_with_date() {
+        // The hatch-style form (commit + date) must continue to parse.
+        let dv: DirtyVersion = "v202401.0.1+gabcdef.d20240101".parse().unwrap();
+        assert!(dv.is_dirty());
+        assert_eq!(dv.dirty_worktree_date().unwrap().to_string(), "2024-01-01");
     }
 
     #[test]
