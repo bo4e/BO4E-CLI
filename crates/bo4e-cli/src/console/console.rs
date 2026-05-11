@@ -49,18 +49,27 @@ impl Console {
     /// Emit a warning to stderr. Never suppressed (warnings are always shown).
     /// Mirrors Python's `Console.print_warn`: text wrapped in the ERROR colour.
     pub fn print_warn(&self, msg: &str) {
-        eprintln!("{}", wrap_with_outer_color(&self.render(msg), &warning_open_code()));
+        eprintln!(
+            "{}",
+            wrap_with_outer_color(&self.render(msg), &warning_open_code())
+        );
     }
 
     /// Emit an error to stderr. Never suppressed. Same styling as `print_warn`.
     #[allow(dead_code)]
     pub fn print_error(&self, msg: &str) {
-        eprintln!("{}", wrap_with_outer_color(&self.render(msg), &warning_open_code()));
+        eprintln!(
+            "{}",
+            wrap_with_outer_color(&self.render(msg), &warning_open_code())
+        );
     }
 
     /// Register schema names with per-module classification (call once after read_schemas).
     pub fn add_schema_names(&self, classified: &[(SchemaModule, String)]) {
-        self.highlighter.write().unwrap().add_schema_names(classified);
+        self.highlighter
+            .write()
+            .unwrap()
+            .add_schema_names(classified);
     }
 
     /// Render a message: split on `Mark` sentinels, run the highlighter on plain
@@ -92,9 +101,7 @@ impl Console {
                     let after_code = code
                         .map(|c| &after_start[c.len_utf8()..])
                         .unwrap_or(after_start);
-                    let after_sep = after_code
-                        .strip_prefix(SENTINEL_SEP)
-                        .unwrap_or(after_code);
+                    let after_sep = after_code.strip_prefix(SENTINEL_SEP).unwrap_or(after_code);
                     let end_off = after_sep.find(SENTINEL_END).unwrap_or(after_sep.len());
                     let (inner, tail) = after_sep.split_at(end_off);
                     let advance = tail.strip_prefix(SENTINEL_END).unwrap_or(tail);
@@ -112,7 +119,9 @@ impl Console {
 }
 
 fn warning_style() -> Style {
-    Style::new().fg(parse_hex_color(palette::ERROR)).force_styling(true)
+    Style::new()
+        .fg(parse_hex_color(palette::ERROR))
+        .force_styling(true)
 }
 
 /// SGR open sequence for the warning style, with the trailing reset stripped —
@@ -174,14 +183,14 @@ mod tests {
     #[test]
     fn test_emission_table() {
         let cases: &[(Level, Level, bool)] = &[
-            (Level::Quiet,   Level::Quiet,   true),
-            (Level::Quiet,   Level::Normal,  false),
-            (Level::Quiet,   Level::Verbose, false),
-            (Level::Normal,  Level::Quiet,   true),
-            (Level::Normal,  Level::Normal,  true),
-            (Level::Normal,  Level::Verbose, false),
-            (Level::Verbose, Level::Quiet,   true),
-            (Level::Verbose, Level::Normal,  true),
+            (Level::Quiet, Level::Quiet, true),
+            (Level::Quiet, Level::Normal, false),
+            (Level::Quiet, Level::Verbose, false),
+            (Level::Normal, Level::Quiet, true),
+            (Level::Normal, Level::Normal, true),
+            (Level::Normal, Level::Verbose, false),
+            (Level::Verbose, Level::Quiet, true),
+            (Level::Verbose, Level::Normal, true),
             (Level::Verbose, Level::Verbose, true),
         ];
         for (cl, ml, expected) in cases {
@@ -190,7 +199,8 @@ mod tests {
                 c.would_emit(*ml),
                 *expected,
                 "console={:?} message={:?}",
-                cl, ml
+                cl,
+                ml
             );
         }
     }

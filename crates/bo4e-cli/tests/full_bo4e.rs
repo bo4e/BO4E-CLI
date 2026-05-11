@@ -49,7 +49,11 @@ fn parse_every_schema() {
     let root = fixture_root();
     require_fixture(&root);
     let files = walk_json_files(&root);
-    assert!(!files.is_empty(), "fixture has no JSON files at {}", root.display());
+    assert!(
+        !files.is_empty(),
+        "fixture has no JSON files at {}",
+        root.display()
+    );
 
     let mut failures: Vec<(PathBuf, String)> = Vec::new();
     for path in &files {
@@ -87,14 +91,18 @@ fn drive_pipeline(generate_target: &str) {
     ensure_console();
 
     let workdir = tempfile::tempdir().unwrap();
-    let edited  = workdir.path().join("edited");
-    let diff_f  = workdir.path().join("diff.json");
+    let edited = workdir.path().join("edited");
+    let diff_f = workdir.path().join("diff.json");
     let gen_out = workdir.path().join("generated");
 
     // edit
     Cli::try_parse_from([
-        "bo4e", "edit", "-i", root.to_str().unwrap(),
-        "-o", edited.to_str().unwrap(),
+        "bo4e",
+        "edit",
+        "-i",
+        root.to_str().unwrap(),
+        "-o",
+        edited.to_str().unwrap(),
     ])
     .unwrap()
     .run()
@@ -102,10 +110,13 @@ fn drive_pipeline(generate_target: &str) {
 
     // diff (compare edited against itself — empty diff, exercises the read+write paths)
     Cli::try_parse_from([
-        "bo4e", "diff", "schemas",
+        "bo4e",
+        "diff",
+        "schemas",
         edited.to_str().unwrap(),
         edited.to_str().unwrap(),
-        "-o", diff_f.to_str().unwrap(),
+        "-o",
+        diff_f.to_str().unwrap(),
     ])
     .unwrap()
     .run()
@@ -113,9 +124,14 @@ fn drive_pipeline(generate_target: &str) {
 
     // generate
     Cli::try_parse_from([
-        "bo4e", "generate", "-i", edited.to_str().unwrap(),
-        "-o", gen_out.to_str().unwrap(),
-        "-t", generate_target,
+        "bo4e",
+        "generate",
+        "-i",
+        edited.to_str().unwrap(),
+        "-o",
+        gen_out.to_str().unwrap(),
+        "-t",
+        generate_target,
     ])
     .unwrap()
     .run()

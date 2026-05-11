@@ -3,10 +3,7 @@ mod error;
 pub mod naming;
 mod output_type;
 
-#[cfg(any(
-    feature = "python-pydantic",
-    feature = "python-sql-model",
-))]
+#[cfg(any(feature = "python-pydantic", feature = "python-sql-model",))]
 mod python;
 
 pub use error::Error;
@@ -23,10 +20,7 @@ pub struct Options<'a> {
 
 pub fn generate(
     #[cfg_attr(
-        not(any(
-            feature = "python-pydantic",
-            feature = "python-sql-model",
-        )),
+        not(any(feature = "python-pydantic", feature = "python-sql-model",)),
         allow(unused_variables)
     )]
     schemas: &Schemas,

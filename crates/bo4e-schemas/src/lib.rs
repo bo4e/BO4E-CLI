@@ -1,5 +1,5 @@
-pub mod models;
 pub mod io;
+pub mod models;
 pub mod visitable;
 
 // re-exports for ergonomic use sites

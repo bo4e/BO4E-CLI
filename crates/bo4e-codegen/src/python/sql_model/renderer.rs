@@ -1,10 +1,10 @@
+use super::plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
 use crate::error::Error;
 use crate::python::{python_attr_name, sanitize_enum_member_name};
 use minijinja::{Environment, context};
 use serde::Serialize;
 use serde_json::Map as JsonMap;
 use std::collections::{BTreeMap, BTreeSet};
-use super::plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
 
 /// `model_config` line shared by every generated SQLModel class.
 const MODEL_CONFIG: &str = "model_config = ConfigDict(alias_generator=to_camel, \
@@ -47,7 +47,12 @@ fn insert_field(
     };
     fields_map.insert(
         py_name,
-        serde_json::to_value(SqlFieldRow { annotation, definition, description }).unwrap(),
+        serde_json::to_value(SqlFieldRow {
+            annotation,
+            definition,
+            description,
+        })
+        .unwrap(),
     );
 }
 
@@ -75,8 +80,16 @@ struct SqlImport {
 
 impl Ord for SqlImport {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.from_.as_str(), self.import_.as_str(), self.alias.as_deref())
-            .cmp(&(other.from_.as_str(), other.import_.as_str(), other.alias.as_deref()))
+        (
+            self.from_.as_str(),
+            self.import_.as_str(),
+            self.alias.as_deref(),
+        )
+            .cmp(&(
+                other.from_.as_str(),
+                other.import_.as_str(),
+                other.alias.as_deref(),
+            ))
     }
 }
 impl PartialOrd for SqlImport {
@@ -119,7 +132,11 @@ fn group_imports(raw: BTreeSet<RawImport>) -> Vec<SqlImport> {
         .into_iter()
         .map(|((from_, alias), names)| {
             let import_ = names.into_iter().collect::<Vec<_>>().join(", ");
-            SqlImport { from_, import_, alias }
+            SqlImport {
+                from_,
+                import_,
+                alias,
+            }
         })
         .collect();
     result.sort_by(|a, b| a.cmp(b));
@@ -174,7 +191,13 @@ pub(crate) fn render_table(
 
     for sql_field in &table.sql_fields {
         match sql_field {
-            SqlField::Scalar { name, type_, default, docstring, .. } => {
+            SqlField::Scalar {
+                name,
+                type_,
+                default,
+                docstring,
+                ..
+            } => {
                 // Mirror the pydantic generator: `_version` defaults to the live
                 // module-level `__version__` so generated objects round-trip.
                 let (effective_default, version_field) = if name == "_version" {
@@ -194,7 +217,13 @@ pub(crate) fn render_table(
                         alias: None,
                     });
                 }
-                insert_field(&mut fields_map, name, type_.clone(), definition, docstring.clone());
+                insert_field(
+                    &mut fields_map,
+                    name,
+                    type_.clone(),
+                    definition,
+                    docstring.clone(),
+                );
             }
             SqlField::ForeignKey {
                 name,
@@ -218,7 +247,13 @@ pub(crate) fn render_table(
                 } else {
                     format!("Field(..., foreign_key=\"{target_table}.id\")")
                 };
-                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
+                insert_field(
+                    &mut fields_map,
+                    name,
+                    annotation,
+                    definition,
+                    docstring.clone(),
+                );
             }
             SqlField::Relationship {
                 name,
@@ -241,11 +276,18 @@ pub(crate) fn render_table(
                     name: "Relationship".into(),
                     alias: None,
                 });
-                let target_module = class_to_module.get(target_class.as_str())
+                let target_module = class_to_module
+                    .get(target_class.as_str())
                     .map(|v| v.as_slice())
                     .unwrap_or(&[]);
                 raw_imports.extend(target_raw_imports(target_class, target_module, depth));
-                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
+                insert_field(
+                    &mut fields_map,
+                    name,
+                    annotation,
+                    definition,
+                    docstring.clone(),
+                );
             }
             SqlField::ManyRelationship {
                 name,
@@ -265,7 +307,8 @@ pub(crate) fn render_table(
                     name: "Relationship".into(),
                     alias: None,
                 });
-                let target_module = class_to_module.get(target_class.as_str())
+                let target_module = class_to_module
+                    .get(target_class.as_str())
                     .map(|v| v.as_slice())
                     .unwrap_or(&[]);
                 raw_imports.extend(target_raw_imports(target_class, target_module, depth));
@@ -274,7 +317,13 @@ pub(crate) fn render_table(
                     name: link_class.clone(),
                     alias: None,
                 });
-                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
+                insert_field(
+                    &mut fields_map,
+                    name,
+                    annotation,
+                    definition,
+                    docstring.clone(),
+                );
             }
             SqlField::EnumColumn {
                 name,
@@ -323,7 +372,13 @@ pub(crate) fn render_table(
                     });
                 }
                 raw_imports.extend(enum_raw_imports(enum_class, depth));
-                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
+                insert_field(
+                    &mut fields_map,
+                    name,
+                    annotation,
+                    definition,
+                    docstring.clone(),
+                );
             }
             SqlField::ScalarArray {
                 name,
@@ -361,7 +416,13 @@ pub(crate) fn render_table(
                         alias: None,
                     });
                 }
-                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
+                insert_field(
+                    &mut fields_map,
+                    name,
+                    annotation,
+                    definition,
+                    docstring.clone(),
+                );
             }
             SqlField::AnyColumn {
                 name,
@@ -412,7 +473,13 @@ pub(crate) fn render_table(
                         alias: None,
                     });
                 }
-                insert_field(&mut fields_map, name, annotation, definition, docstring.clone());
+                insert_field(
+                    &mut fields_map,
+                    name,
+                    annotation,
+                    definition,
+                    docstring.clone(),
+                );
             }
         }
     }
@@ -421,8 +488,7 @@ pub(crate) fn render_table(
 
     // Convert the insertion-ordered JsonMap to a MiniJinja Value so `.items()` works
     // in the template's `for field_name, field in SQL.fields.items()` loop.
-    let fields_jinja: minijinja::Value =
-        minijinja::Value::from_serialize(&fields_map);
+    let fields_jinja: minijinja::Value = minijinja::Value::from_serialize(&fields_map);
 
     let tpl = env.get_template("python/sql_model/BaseModel.jinja2")?;
     let rendered = tpl.render(context! {
@@ -479,7 +545,11 @@ fn render_enum(env: &Environment<'_>, table: &TablePlan) -> Result<String, Error
     Ok(prepend_module_docstring(&table.class_name, &body))
 }
 
-fn target_raw_imports(target_class: &str, target_module: &[String], depth: usize) -> impl IntoIterator<Item = RawImport> {
+fn target_raw_imports(
+    target_class: &str,
+    target_module: &[String],
+    depth: usize,
+) -> impl IntoIterator<Item = RawImport> {
     let target_table = target_class.to_ascii_lowercase();
     let module_path = if target_module.is_empty() {
         target_table.clone()
@@ -508,20 +578,27 @@ fn py_bool(b: bool) -> &'static str {
 
 /// Render `<output>/many.py`. Returns an empty string when there are no junctions
 /// (caller should not write the file in that case).
-pub(crate) fn render_many(env: &Environment<'_>, junctions: &[JunctionTable]) -> Result<String, Error> {
+pub(crate) fn render_many(
+    env: &Environment<'_>,
+    junctions: &[JunctionTable],
+) -> Result<String, Error> {
     if junctions.is_empty() {
         return Ok(String::new());
     }
-    let links: Vec<minijinja::Value> = junctions.iter().map(|j| {
-        context! {
-            table_name => j.class_name.clone(),
-            cls1 => j.owner_class.clone(),
-            cls2 => j.target_class.clone(),
-            rel_field_name1 => j.source_field.clone(),
-            id_field_name1 => j.owner_id_field.clone(),
-            id_field_name2 => j.target_id_field.clone(),
-        }
-    }).map(minijinja::Value::from_serialize).collect();
+    let links: Vec<minijinja::Value> = junctions
+        .iter()
+        .map(|j| {
+            context! {
+                table_name => j.class_name.clone(),
+                cls1 => j.owner_class.clone(),
+                cls2 => j.target_class.clone(),
+                rel_field_name1 => j.source_field.clone(),
+                id_field_name1 => j.owner_id_field.clone(),
+                id_field_name2 => j.target_id_field.clone(),
+            }
+        })
+        .map(minijinja::Value::from_serialize)
+        .collect();
 
     let tpl = env.get_template("python/sql_model/ManyLinks.jinja2")?;
     let rendered = tpl.render(context! { links => links })?;
@@ -530,21 +607,34 @@ pub(crate) fn render_many(env: &Environment<'_>, junctions: &[JunctionTable]) ->
 
 /// Render `<output>/__init__.py` re-exporting every class and every junction.
 pub(crate) fn render_init(env: &Environment<'_>, plan: &SqlPlan) -> Result<String, Error> {
-    let classes: Vec<minijinja::Value> = plan.tables.values().map(|t| {
-        let module_path: Vec<String> = t.module.iter()
-            .take(t.module.len().saturating_sub(1))
-            .map(|s| s.to_ascii_lowercase())
-            .chain(std::iter::once(crate::naming::module_file_name(&t.module)))
-            .collect();
-        context! {
-            name => t.class_name.clone(),
-            module_path => module_path,
-        }
-    }).map(minijinja::Value::from_serialize).collect();
+    let classes: Vec<minijinja::Value> = plan
+        .tables
+        .values()
+        .map(|t| {
+            let module_path: Vec<String> = t
+                .module
+                .iter()
+                .take(t.module.len().saturating_sub(1))
+                .map(|s| s.to_ascii_lowercase())
+                .chain(std::iter::once(crate::naming::module_file_name(&t.module)))
+                .collect();
+            context! {
+                name => t.class_name.clone(),
+                module_path => module_path,
+            }
+        })
+        .map(minijinja::Value::from_serialize)
+        .collect();
 
-    let links: Vec<String> = plan.junctions.iter().map(|j| j.class_name.clone()).collect();
+    let links: Vec<String> = plan
+        .junctions
+        .iter()
+        .map(|j| j.class_name.clone())
+        .collect();
 
-    let all_names: Vec<String> = plan.tables.values()
+    let all_names: Vec<String> = plan
+        .tables
+        .values()
         .map(|t| t.class_name.clone())
         .chain(links.iter().cloned())
         .collect();
@@ -576,10 +666,15 @@ mod tests {
         super::super::plan::build_plan(&schemas).expect("plan builds for fixture")
     }
 
-    fn fixture_class_to_module(plan: &super::super::plan::SqlPlan) -> BTreeMap<String, Vec<String>> {
-        plan.tables.values()
+    fn fixture_class_to_module(
+        plan: &super::super::plan::SqlPlan,
+    ) -> BTreeMap<String, Vec<String>> {
+        plan.tables
+            .values()
             .map(|t| {
-                let parents: Vec<String> = t.module.iter()
+                let parents: Vec<String> = t
+                    .module
+                    .iter()
                     .take(t.module.len().saturating_sub(1))
                     .map(|s| s.to_ascii_lowercase())
                     .collect();
@@ -617,25 +712,32 @@ mod tests {
             "got:\n{body}"
         );
         assert!(
-            body.contains(
-                "adressen: list[Adresse] = Relationship(link_model=AngebotAdressenLink)"
-            ),
+            body.contains("adressen: list[Adresse] = Relationship(link_model=AngebotAdressenLink)"),
             "got:\n{body}"
         );
         assert!(
-            body.contains("typ: Typ | None = Field(alias=\"_typ\", default=Typ.ANGEBOT, sa_column="),
+            body.contains(
+                "typ: Typ | None = Field(alias=\"_typ\", default=Typ.ANGEBOT, sa_column="
+            ),
             "got:\n{body}"
         );
         assert!(
             body.contains("werte: list[Decimal] = Field(sa_column=Column(ARRAY(Numeric)))"),
             "got:\n{body}"
         );
-        assert!(body.contains("extras: Any = Field(sa_column=Column(PickleType, nullable=True))") && !body.contains("extras: Any | None"), "got:\n{body}");
+        assert!(
+            body.contains("extras: Any = Field(sa_column=Column(PickleType, nullable=True))")
+                && !body.contains("extras: Any | None"),
+            "got:\n{body}"
+        );
         assert!(
             body.contains("model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, use_attribute_docstrings=True)"),
             "got:\n{body}"
         );
-        assert!(body.starts_with("\"\"\"Contains class Angebot.\"\"\""), "got:\n{body}");
+        assert!(
+            body.starts_with("\"\"\"Contains class Angebot.\"\"\""),
+            "got:\n{body}"
+        );
         assert!(
             body.contains(
                 "anhaenge: list[Any] = Field(sa_column=Column(ARRAY(PickleType), nullable=False))"
@@ -656,10 +758,7 @@ mod tests {
             body.contains("from ..many import AngebotAdressenLink"),
             "got:\n{body}"
         );
-        assert!(
-            body.contains("from ..enum.typ import Typ"),
-            "got:\n{body}"
-        );
+        assert!(body.contains("from ..enum.typ import Typ"), "got:\n{body}");
     }
 
     #[test]
@@ -680,7 +779,8 @@ mod tests {
                     type_: "uuid_pkg.UUID".to_string(),
                     nullable: false,
                     default: Some(
-                        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, title=\"Id\")".to_string(),
+                        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, title=\"Id\")"
+                            .to_string(),
                     ),
                     title: None,
                     docstring: Some("Primary key.".to_string()),
@@ -725,9 +825,16 @@ mod tests {
         let env = make_environment(None).unwrap();
         let plan = fixture_plan();
         let body = render_many(&env, &plan.junctions).expect("render");
-        assert!(body.contains("class AngebotAdressenLink(SQLModel, table=True):"), "got:\n{body}");
-        assert!(body.contains("angebot_id: uuid_pkg.UUID = Field(..., primary_key=True, foreign_key=\"angebot.id\""));
-        assert!(body.contains("adresse_id: uuid_pkg.UUID = Field(..., primary_key=True, foreign_key=\"adresse.id\""));
+        assert!(
+            body.contains("class AngebotAdressenLink(SQLModel, table=True):"),
+            "got:\n{body}"
+        );
+        assert!(body.contains(
+            "angebot_id: uuid_pkg.UUID = Field(..., primary_key=True, foreign_key=\"angebot.id\""
+        ));
+        assert!(body.contains(
+            "adresse_id: uuid_pkg.UUID = Field(..., primary_key=True, foreign_key=\"adresse.id\""
+        ));
     }
 
     #[test]

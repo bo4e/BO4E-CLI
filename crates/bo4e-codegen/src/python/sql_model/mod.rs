@@ -7,8 +7,8 @@
 pub(crate) mod plan;
 mod renderer;
 
-use bo4e_schemas::Schemas;
 use crate::error::Error;
+use bo4e_schemas::Schemas;
 use minijinja::Environment;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -26,9 +26,13 @@ pub(crate) fn generate_sql_model(
     let plan = plan::build_plan(schemas)?;
 
     // Build a class_name → parent-directory-segments (lowercased) lookup.
-    let class_to_module: BTreeMap<String, Vec<String>> = plan.tables.values()
+    let class_to_module: BTreeMap<String, Vec<String>> = plan
+        .tables
+        .values()
         .map(|t| {
-            let parents: Vec<String> = t.module.iter()
+            let parents: Vec<String> = t
+                .module
+                .iter()
                 .take(t.module.len().saturating_sub(1))
                 .map(|s| s.to_ascii_lowercase())
                 .collect();
@@ -60,7 +64,10 @@ pub(crate) fn generate_sql_model(
     let init_path = output_dir.join("__init__.py");
     std::fs::write(
         &init_path,
-        format!("{}\n{init_body}", crate::python::root_init_module_docstring(&version_str)),
+        format!(
+            "{}\n{init_body}",
+            crate::python::root_init_module_docstring(&version_str)
+        ),
     )?;
     written.push(init_path);
 
@@ -69,7 +76,8 @@ pub(crate) fn generate_sql_model(
     written.push(version_path);
 
     // ── Empty __init__.py per first-level subdirectory ─────────────────────────
-    let subdirs = crate::python::first_level_subdirs(plan.tables.values().map(|t| t.module.as_slice()));
+    let subdirs =
+        crate::python::first_level_subdirs(plan.tables.values().map(|t| t.module.as_slice()));
     crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
 
     Ok(written)

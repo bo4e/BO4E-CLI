@@ -42,8 +42,7 @@ pub fn write_compatibility_matrix_csv(
             .map_err(|e| format!("CSV row write failed: {}", e))?;
     }
 
-    wtr.flush()
-        .map_err(|e| format!("CSV flush failed: {}", e))
+    wtr.flush().map_err(|e| format!("CSV flush failed: {}", e))
 }
 
 pub fn write_compatibility_matrix_json(
@@ -58,8 +57,7 @@ pub fn write_compatibility_matrix_json(
     }
     let text = serde_json::to_string_pretty(matrix)
         .map_err(|e| format!("Failed to serialize matrix: {}", e))?;
-    std::fs::write(output, text)
-        .map_err(|e| format!("Failed to write {}: {}", output.display(), e))
+    std::fs::write(output, text).map_err(|e| format!("Failed to write {}: {}", output.display(), e))
 }
 
 #[cfg(test)]
@@ -93,10 +91,16 @@ mod tests {
         root.insert(
             "bo.Angebot".to_string(),
             vec![
-                entry("v202401.0.1", "v202401.0.2",
-                    Compatibility::Text(CompatibilityText::ChangeNone)),
-                entry("v202401.0.2", "v202401.1.0",
-                    Compatibility::Text(CompatibilityText::ChangeNonCritical)),
+                entry(
+                    "v202401.0.1",
+                    "v202401.0.2",
+                    Compatibility::Text(CompatibilityText::ChangeNone),
+                ),
+                entry(
+                    "v202401.0.2",
+                    "v202401.1.0",
+                    Compatibility::Text(CompatibilityText::ChangeNonCritical),
+                ),
             ],
         );
         let m = CompatibilityMatrix { root };
@@ -125,15 +129,21 @@ mod tests {
         let mut root = IndexMap::new();
         root.insert(
             "bo.Angebot".to_string(),
-            vec![entry("v202401.0.1", "v202401.0.2",
-                Compatibility::Symbol(CompatibilitySymbol::ChangeCritical))],
+            vec![entry(
+                "v202401.0.1",
+                "v202401.0.2",
+                Compatibility::Symbol(CompatibilitySymbol::ChangeCritical),
+            )],
         );
         let m = CompatibilityMatrix { root };
         let versions = vec!["v202401.0.1".to_string(), "v202401.0.2".to_string()];
 
         write_compatibility_matrix_csv(&path, &m, &versions).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(text.contains("\u{1F534}"), "expected red-circle emoji in csv");
+        assert!(
+            text.contains("\u{1F534}"),
+            "expected red-circle emoji in csv"
+        );
     }
 
     #[test]
@@ -143,13 +153,19 @@ mod tests {
         let mut root = IndexMap::new();
         root.insert(
             "bo.Angebot".to_string(),
-            vec![entry("v202401.0.1", "v202401.0.2",
-                Compatibility::Text(CompatibilityText::ChangeNone))],
+            vec![entry(
+                "v202401.0.1",
+                "v202401.0.2",
+                Compatibility::Text(CompatibilityText::ChangeNone),
+            )],
         );
         root.insert(
             "com.Adresse".to_string(),
-            vec![entry("v202401.0.1", "v202401.0.2",
-                Compatibility::Text(CompatibilityText::ChangeNone))],
+            vec![entry(
+                "v202401.0.1",
+                "v202401.0.2",
+                Compatibility::Text(CompatibilityText::ChangeNone),
+            )],
         );
         let m = CompatibilityMatrix { root };
 

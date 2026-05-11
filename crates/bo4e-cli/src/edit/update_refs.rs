@@ -46,7 +46,10 @@ fn update_reference(
             .cloned()
             .ok_or_else(|| format!("Could not find schema '{}' in namespace", model))?;
     } else {
-        cprint_verbose!("Reference unchanged. Could not parse reference: {}", reference.r#ref);
+        cprint_verbose!(
+            "Reference unchanged. Could not parse reference: {}",
+            reference.r#ref
+        );
         return Ok(());
     }
 
@@ -57,8 +60,7 @@ fn update_reference(
         .position(|(a, b)| a != b)
         .unwrap_or_else(|| reference_module_path.len().min(current_module.len()));
 
-    let relative_ref = if diverge == reference_module_path.len()
-        && diverge == current_module.len()
+    let relative_ref = if diverge == reference_module_path.len() && diverge == current_module.len()
     {
         // Identical module paths — self-reference.
         "#".to_string()
@@ -158,7 +160,7 @@ pub fn canonical_ref(ref_str: &str, current_module: &[String]) -> Option<Vec<Str
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::console::{Console, Level, CONSOLE};
+    use crate::console::console::{CONSOLE, Console, Level};
     use bo4e_schemas::models::json_schema::ReferenceSchema;
     use std::collections::HashMap;
 
@@ -167,13 +169,17 @@ mod tests {
     }
 
     fn make_ref(r: &str) -> ReferenceSchema {
-        ReferenceSchema { base: Default::default(), r#ref: r.to_string() }
+        ReferenceSchema {
+            base: Default::default(),
+            r#ref: r.to_string(),
+        }
     }
 
     fn namespace(entries: &[(&str, &[&str])]) -> HashMap<String, Vec<String>> {
-        entries.iter().map(|(k, v)| {
-            (k.to_string(), v.iter().map(|s| s.to_string()).collect())
-        }).collect()
+        entries
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.iter().map(|s| s.to_string()).collect()))
+            .collect()
     }
 
     #[test]
@@ -182,7 +188,7 @@ mod tests {
         // Reference from bo/Angebot to bo/Angebot — same module → "#"
         let mut r = make_ref(
             "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.1.0/\
-             src/bo4e_schemas/bo/Angebot.json"
+             src/bo4e_schemas/bo/Angebot.json",
         );
         let module = vec!["bo".to_string(), "Angebot".to_string()];
         let ns = namespace(&[("Angebot", &["bo", "Angebot"])]);
@@ -196,7 +202,7 @@ mod tests {
         // Reference from com/Adresse to bo/Angebot — one level up, one level down
         let mut r = make_ref(
             "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.1.0/\
-             src/bo4e_schemas/bo/Angebot.json"
+             src/bo4e_schemas/bo/Angebot.json",
         );
         let module = vec!["com".to_string(), "Adresse".to_string()];
         let ns = namespace(&[("Angebot", &["bo", "Angebot"])]);
@@ -232,7 +238,10 @@ mod tests {
              src/bo4e_schemas/bo/Geschaeftspartner.json",
             &m,
         );
-        assert_eq!(canon, Some(vec!["bo".to_string(), "Geschaeftspartner".to_string()]));
+        assert_eq!(
+            canon,
+            Some(vec!["bo".to_string(), "Geschaeftspartner".to_string()])
+        );
     }
 
     #[test]
@@ -246,7 +255,10 @@ mod tests {
     fn test_canonical_ref_relative_same_dir() {
         let m = vec!["bo".to_string(), "Angebot".to_string()];
         let canon = canonical_ref("Geschaeftspartner.json#", &m);
-        assert_eq!(canon, Some(vec!["bo".to_string(), "Geschaeftspartner".to_string()]));
+        assert_eq!(
+            canon,
+            Some(vec!["bo".to_string(), "Geschaeftspartner".to_string()])
+        );
     }
 
     #[test]
@@ -280,7 +292,7 @@ mod tests {
         init_console();
         let mut r = make_ref(
             "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202401.0.0/\
-             src/bo4e_schemas/bo/Angebot.json"
+             src/bo4e_schemas/bo/Angebot.json",
         );
         let module = vec!["bo".to_string(), "Foo".to_string()];
         let ns = HashMap::new();

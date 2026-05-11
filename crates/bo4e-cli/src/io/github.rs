@@ -71,7 +71,10 @@ fn format_octocrab_error(e: octocrab::Error, context: &str) -> String {
             );
         }
         if source.status_code == http::StatusCode::NOT_FOUND {
-            return format!("GitHub returned 404 for the {context} request: {}", source.message);
+            return format!(
+                "GitHub returned 404 for the {context} request: {}",
+                source.message
+            );
         }
         return format!(
             "GitHub returned {} for the {context} request: {}",
@@ -252,7 +255,10 @@ pub async fn get_schemas_from_github(
         )
         .await?
     };
-    cprint_normal!("Queried GitHub tree. Found {} schemas.", schema_downloads.len());
+    cprint_normal!(
+        "Queried GitHub tree. Found {} schemas.",
+        schema_downloads.len()
+    );
     let local_set = tokio::task::LocalSet::new();
     let schemas_vector = local_set
         .run_until(_execute_futures_with_progress_bar(schema_downloads))
@@ -308,7 +314,9 @@ mod tests {
     /// We can't make a live network call in unit tests.
     #[test]
     fn test_release_exists_signature() {
-        fn _assert_signature(v: &Version) -> impl std::future::Future<Output = Result<bool, String>> + '_ {
+        fn _assert_signature(
+            v: &Version,
+        ) -> impl std::future::Future<Output = Result<bool, String>> + '_ {
             release_exists(v, None)
         }
         let _ = _assert_signature; // silence unused

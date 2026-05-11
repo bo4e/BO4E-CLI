@@ -29,14 +29,13 @@ pub(crate) fn root_init_module_docstring(version: &str) -> String {
 /// (e.g. JSON `_id` → would-be Python `id`, which shadows the `id()` builtin).
 pub(crate) const PYTHON_RESERVED: &[&str] = &[
     // keywords
-    "False", "None", "True", "and", "as", "assert", "async", "await", "break",
-    "class", "continue", "def", "del", "elif", "else", "except", "finally",
-    "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
-    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield",
-    // builtin shadows we care about
-    "id", "type", "list", "dict", "set", "tuple", "str", "int", "float",
-    "bool", "bytes", "object", "input", "print", "open", "range", "iter",
-    "next", "len", "min", "max", "sum", "any", "all", "map", "filter",
+    "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue",
+    "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import",
+    "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while",
+    "with", "yield", // builtin shadows we care about
+    "id", "type", "list", "dict", "set", "tuple", "str", "int", "float", "bool", "bytes", "object",
+    "input", "print", "open", "range", "iter", "next", "len", "min", "max", "sum", "any", "all",
+    "map", "filter",
 ];
 
 /// Translate a snake-case JSON property name into a valid Pydantic model attribute.
@@ -64,7 +63,13 @@ pub(crate) fn python_attr_name(snake: &str) -> String {
 pub(crate) fn sanitize_enum_member_name(raw: &str) -> String {
     let cleaned: String = raw
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if cleaned.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         format!("_{cleaned}")

@@ -32,12 +32,24 @@ fn current_level() -> Level {
 #[test]
 fn pull_command_parses_quiet_and_verbose_flags() {
     let cli_q = Cli::try_parse_from([
-        "bo4e", "--quiet", "pull", "-o", "/tmp/x", "-t", "v202501.0.0",
+        "bo4e",
+        "--quiet",
+        "pull",
+        "-o",
+        "/tmp/x",
+        "-t",
+        "v202501.0.0",
     ])
     .unwrap();
     assert!(cli_q.quiet);
     let cli_v = Cli::try_parse_from([
-        "bo4e", "--verbose", "pull", "-o", "/tmp/x", "-t", "v202501.0.0",
+        "bo4e",
+        "--verbose",
+        "pull",
+        "-o",
+        "/tmp/x",
+        "-t",
+        "v202501.0.0",
     ])
     .unwrap();
     assert!(cli_v.verbose);
@@ -51,7 +63,12 @@ fn edit_quiet_does_not_panic() {
     }
     let outdir = tempfile::tempdir().unwrap();
     let cli = Cli::try_parse_from([
-        "bo4e", "--quiet", "edit", "-i", FIXTURE, "-o",
+        "bo4e",
+        "--quiet",
+        "edit",
+        "-i",
+        FIXTURE,
+        "-o",
         outdir.path().to_str().unwrap(),
     ])
     .unwrap();
@@ -66,7 +83,12 @@ fn edit_verbose_does_not_panic() {
     }
     let outdir = tempfile::tempdir().unwrap();
     let cli = Cli::try_parse_from([
-        "bo4e", "--verbose", "edit", "-i", FIXTURE, "-o",
+        "bo4e",
+        "--verbose",
+        "edit",
+        "-i",
+        FIXTURE,
+        "-o",
         outdir.path().to_str().unwrap(),
     ])
     .unwrap();
@@ -81,8 +103,15 @@ fn generate_quiet_does_not_panic() {
     }
     let outdir = tempfile::tempdir().unwrap();
     let cli = Cli::try_parse_from([
-        "bo4e", "--quiet", "generate", "-i", FIXTURE, "-o",
-        outdir.path().to_str().unwrap(), "-t", "python-pydantic",
+        "bo4e",
+        "--quiet",
+        "generate",
+        "-i",
+        FIXTURE,
+        "-o",
+        outdir.path().to_str().unwrap(),
+        "-t",
+        "python-pydantic",
     ])
     .unwrap();
     cli.run().expect("generate --quiet");
@@ -96,8 +125,15 @@ fn generate_verbose_does_not_panic() {
     }
     let outdir = tempfile::tempdir().unwrap();
     let cli = Cli::try_parse_from([
-        "bo4e", "--verbose", "generate", "-i", FIXTURE, "-o",
-        outdir.path().to_str().unwrap(), "-t", "python-pydantic",
+        "bo4e",
+        "--verbose",
+        "generate",
+        "-i",
+        FIXTURE,
+        "-o",
+        outdir.path().to_str().unwrap(),
+        "-t",
+        "python-pydantic",
     ])
     .unwrap();
     cli.run().expect("generate --verbose");

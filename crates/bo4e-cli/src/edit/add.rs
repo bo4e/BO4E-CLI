@@ -1,8 +1,8 @@
 use crate::console::mark::pat;
 use crate::models::config::{AdditionalEnumItem, AdditionalField};
+use crate::{cprint_normal, cprint_verbose, cwarn};
 use bo4e_schemas::models::json_schema::{SchemaRootType, SchemaType};
 use bo4e_schemas::models::schema_meta::Schemas;
-use crate::{cprint_normal, cprint_verbose, cwarn};
 
 /// Insert additional fields into matching `SchemaRootObject` schemas.
 pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut Schemas) {
@@ -41,9 +41,16 @@ pub fn transform_all_additional_fields(fields: &[AdditionalField], schemas: &mut
             }
         }
         if match_count == 0 {
-            cwarn!("pattern '{}' did not match any schemas", pat(&field.pattern));
+            cwarn!(
+                "pattern '{}' did not match any schemas",
+                pat(&field.pattern)
+            );
         } else {
-            cprint_normal!("Pattern '{}' matched {} schema(s)", pat(&field.pattern), match_count);
+            cprint_normal!(
+                "Pattern '{}' matched {} schema(s)",
+                pat(&field.pattern),
+                match_count
+            );
         }
     }
 }
@@ -99,7 +106,11 @@ pub fn transform_all_additional_enum_items(items: &[AdditionalEnumItem], schemas
         if match_count == 0 {
             cwarn!("pattern '{}' did not match any schemas", pat(&item.pattern));
         } else {
-            cprint_normal!("Pattern '{}' matched {} schema(s)", pat(&item.pattern), match_count);
+            cprint_normal!(
+                "Pattern '{}' matched {} schema(s)",
+                pat(&item.pattern),
+                match_count
+            );
         }
     }
 }
@@ -107,7 +118,7 @@ pub fn transform_all_additional_enum_items(items: &[AdditionalEnumItem], schemas
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::console::{Console, Level, CONSOLE};
+    use crate::console::console::{CONSOLE, Console, Level};
     use crate::models::config::{AdditionalEnumItem, AdditionalField};
     use bo4e_schemas::models::json_schema::*;
     use bo4e_schemas::models::schema_meta::{Schema, Schemas};
@@ -129,7 +140,10 @@ mod tests {
         let obj = SchemaRootType::Object(SchemaRootObject {
             base: Default::default(),
             object: ObjectSchema {
-                base: TypeBase { title: Some("Foo".into()), ..Default::default() },
+                base: TypeBase {
+                    title: Some("Foo".into()),
+                    ..Default::default()
+                },
                 r#type: LiteralTypeObject::Object,
                 additional_properties: false,
                 properties: BTreeMap::new(),
@@ -144,7 +158,10 @@ mod tests {
         let str_enum = SchemaRootType::StrEnum(SchemaRootStrEnum {
             base: Default::default(),
             str_enum: StrEnumSchema {
-                base: TypeBase { title: Some("Bar".into()), ..Default::default() },
+                base: TypeBase {
+                    title: Some("Bar".into()),
+                    ..Default::default()
+                },
                 r#type: LiteralTypeString::String,
                 enum_values: vec!["X".into()],
             },

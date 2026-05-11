@@ -1,12 +1,12 @@
 use crate::cli::base::Executable;
-use crate::io::cleanse::clear_dir_if_needed;
-use crate::io::github::{get_schemas_from_github, resolve_latest_version};
-use bo4e_schemas::io::schemas::write_schemas;
-use crate::models::cli::{Token, get_token_as_string};
-use bo4e_schemas::models::version::Version;
-use crate::utils::tokio::get_runtime;
 use crate::cprint_normal;
 use crate::edit::update_refs::update_references_all;
+use crate::io::cleanse::clear_dir_if_needed;
+use crate::io::github::{get_schemas_from_github, resolve_latest_version};
+use crate::models::cli::{Token, get_token_as_string};
+use crate::utils::tokio::get_runtime;
+use bo4e_schemas::io::schemas::write_schemas;
+use bo4e_schemas::models::version::Version;
 use clap::{Args, value_parser};
 use std::path::PathBuf;
 use std::str::FromStr;

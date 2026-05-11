@@ -1,5 +1,5 @@
-use crate::io::github::{get_token_from_github_cli, is_valid_github_token};
 use crate::cprint_normal;
+use crate::io::github::{get_token_from_github_cli, is_valid_github_token};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;

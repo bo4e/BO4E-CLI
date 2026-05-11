@@ -42,8 +42,14 @@ pub fn build_chain(diffs: Vec<Changes>) -> Result<VersionChain, String> {
         let new_schemas = d.new_schemas.clone();
         return Ok(VersionChain {
             nodes: vec![
-                ChainNode { version_key: old_key, schemas: old_schemas },
-                ChainNode { version_key: new_key, schemas: new_schemas },
+                ChainNode {
+                    version_key: old_key,
+                    schemas: old_schemas,
+                },
+                ChainNode {
+                    version_key: new_key,
+                    schemas: new_schemas,
+                },
             ],
             edges: vec![ChainEdge { changes: d }],
         });
@@ -89,9 +95,15 @@ pub fn build_chain(diffs: Vec<Changes>) -> Result<VersionChain, String> {
     }
     let start = starts[0].clone();
 
-    let ends: Vec<&String> = nodes.keys().filter(|k| !out_edge.contains_key(*k)).collect();
+    let ends: Vec<&String> = nodes
+        .keys()
+        .filter(|k| !out_edge.contains_key(*k))
+        .collect();
     if ends.len() != 1 {
-        return Err(format!("Expected exactly one end node, found {}.", ends.len()));
+        return Err(format!(
+            "Expected exactly one end node, found {}.",
+            ends.len()
+        ));
     }
     let end = ends[0].clone();
 
@@ -120,9 +132,7 @@ pub fn build_chain(diffs: Vec<Changes>) -> Result<VersionChain, String> {
     }
 
     if edges_ordered.len() != diffs.len() {
-        return Err(
-            "Disconnected chain: not all diffs are reachable from the start.".to_string(),
-        );
+        return Err("Disconnected chain: not all diffs are reachable from the start.".to_string());
     }
 
     Ok(VersionChain {
@@ -131,10 +141,7 @@ pub fn build_chain(diffs: Vec<Changes>) -> Result<VersionChain, String> {
     })
 }
 
-pub fn create_compatibility_matrix(
-    chain: &VersionChain,
-    use_emotes: bool,
-) -> CompatibilityMatrix {
+pub fn create_compatibility_matrix(chain: &VersionChain, use_emotes: bool) -> CompatibilityMatrix {
     let mut modules: BTreeSet<Vec<String>> = BTreeSet::new();
     for node in &chain.nodes {
         for m in node.schemas.modules() {
@@ -154,7 +161,8 @@ pub fn create_compatibility_matrix(
         // so that `enum.Typ` does not accidentally match `enum.TypX`.
         let class_path_str = format!("/{}", module.join("/"));
         let descendant_prefix = format!("{}/", class_path_str);
-        let belongs = |trace: &str| trace == class_path_str || trace.starts_with(&descendant_prefix);
+        let belongs =
+            |trace: &str| trace == class_path_str || trace.starts_with(&descendant_prefix);
         let mut entries: Vec<CompatibilityMatrixEntry> = Vec::with_capacity(chain.edges.len());
 
         for (i, edge) in chain.edges.iter().enumerate() {
@@ -326,7 +334,9 @@ mod tests {
         let d1 = changes_between("v202401.0.1", "v202401.0.2", vec![]);
         let d2 = changes_between("v202401.1.0", "v202402.0.0", vec![]);
         let err = build_chain(vec![d1, d2]).unwrap_err();
-        assert!(err.to_lowercase().contains("start") || err.to_lowercase().contains("disconnected"));
+        assert!(
+            err.to_lowercase().contains("start") || err.to_lowercase().contains("disconnected")
+        );
     }
 
     #[test]
@@ -334,7 +344,9 @@ mod tests {
         let d1 = changes_between("v202401.0.1", "v202401.0.2", vec![]);
         let d2 = changes_between("v202401.0.1", "v202401.1.0", vec![]);
         let err = build_chain(vec![d1, d2]).unwrap_err();
-        assert!(err.to_lowercase().contains("outgoing") || err.to_lowercase().contains("duplicate"));
+        assert!(
+            err.to_lowercase().contains("outgoing") || err.to_lowercase().contains("duplicate")
+        );
     }
 
     #[test]

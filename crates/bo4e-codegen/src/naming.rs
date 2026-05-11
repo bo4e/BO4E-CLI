@@ -3,7 +3,10 @@
 /// Lower-case the schema's last module segment to form its Python module file name.
 /// `module_file_name(&["bo", "Angebot"])` → `"angebot"`.
 pub fn module_file_name(module: &[String]) -> String {
-    module.last().map(|s| s.to_ascii_lowercase()).unwrap_or_default()
+    module
+        .last()
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default()
 }
 
 /// Convert a JSON property name (typically camelCase) into snake_case for use as a
@@ -16,8 +19,8 @@ pub fn to_snake_case(name: &str) -> String {
     let chars: Vec<char> = name.chars().collect();
     for (i, &c) in chars.iter().enumerate() {
         if c.is_ascii_uppercase() {
-            let prev_is_lower_or_digit = i > 0
-                && (chars[i - 1].is_ascii_lowercase() || chars[i - 1].is_ascii_digit());
+            let prev_is_lower_or_digit =
+                i > 0 && (chars[i - 1].is_ascii_lowercase() || chars[i - 1].is_ascii_digit());
             let next_is_lower = i + 1 < chars.len() && chars[i + 1].is_ascii_lowercase();
             let prev_is_upper = i > 0 && chars[i - 1].is_ascii_uppercase();
             // Insert underscore before an uppercase that begins a new word:

@@ -85,9 +85,21 @@ fn render_table(title: &str, rows: &[(String, String, String)]) {
 
     let headers = ("Version", "Commit SHA", "Commit date");
     let widths = (
-        rows.iter().map(|r| r.0.len()).max().unwrap_or(0).max(headers.0.len()),
-        rows.iter().map(|r| r.1.len()).max().unwrap_or(0).max(headers.1.len()),
-        rows.iter().map(|r| r.2.len()).max().unwrap_or(0).max(headers.2.len()),
+        rows.iter()
+            .map(|r| r.0.len())
+            .max()
+            .unwrap_or(0)
+            .max(headers.0.len()),
+        rows.iter()
+            .map(|r| r.1.len())
+            .max()
+            .unwrap_or(0)
+            .max(headers.1.len()),
+        rows.iter()
+            .map(|r| r.2.len())
+            .max()
+            .unwrap_or(0)
+            .max(headers.2.len()),
     );
 
     let bold = ::console::Style::new().bold();
@@ -101,7 +113,11 @@ fn render_table(title: &str, rows: &[(String, String, String)]) {
     );
 
     for (i, (a, b, c)) in rows.iter().enumerate() {
-        let s = if i % 2 == 1 { dim.clone() } else { ::console::Style::new() };
+        let s = if i % 2 == 1 {
+            dim.clone()
+        } else {
+            ::console::Style::new()
+        };
         println!(
             "{}  {}  {}",
             s.apply_to(format!("{:<w$}", a, w = widths.0)),
@@ -112,7 +128,9 @@ fn render_table(title: &str, rows: &[(String, String, String)]) {
 }
 
 pub(crate) fn run_versions(args: &VersionsArgs) -> Result<(), String> {
-    use crate::io::git::{GetLastNTagsOpts, get_commit_date, get_commit_sha, get_last_n_tags, parse_reference};
+    use crate::io::git::{
+        GetLastNTagsOpts, get_commit_date, get_commit_sha, get_last_n_tags, parse_reference,
+    };
     use crate::io::github::{get_token_from_github_cli, release_exists};
     use crate::models::git::Reference;
     use crate::utils::tokio::get_runtime;

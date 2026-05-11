@@ -84,6 +84,9 @@ mod tests {
         write_changes(&c, &path).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         // serde_json::to_string_pretty uses two-space indent: lines must contain "  \"".
-        assert!(text.contains("  \""), "expected two-space indent in pretty output");
+        assert!(
+            text.contains("  \""),
+            "expected two-space indent in pretty output"
+        );
     }
 }

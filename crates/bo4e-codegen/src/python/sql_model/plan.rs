@@ -141,7 +141,8 @@ pub(crate) struct JunctionTable {
 /// the generated tables.
 pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
     // Precompute enum class names to avoid O(n²) classification
-    let enum_names: BTreeSet<String> = schemas.iter()
+    let enum_names: BTreeSet<String> = schemas
+        .iter()
         .filter_map(|schema_rc| {
             let mut s = schema_rc.borrow_mut();
             let name = s.name().to_string();
@@ -164,14 +165,17 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
 
         match &parsed {
             SchemaRootType::StrEnum(e) => {
-                tables.insert(module.clone(), TablePlan {
-                    module: module.clone(),
-                    class_name: class_name.clone(),
-                    is_enum: true,
-                    description: e.str_enum.base.description.clone(),
-                    enum_members: e.str_enum.enum_values.clone(),
-                    sql_fields: Vec::new(),
-                });
+                tables.insert(
+                    module.clone(),
+                    TablePlan {
+                        module: module.clone(),
+                        class_name: class_name.clone(),
+                        is_enum: true,
+                        description: e.str_enum.base.description.clone(),
+                        enum_members: e.str_enum.enum_values.clone(),
+                        sql_fields: Vec::new(),
+                    },
+                );
             }
             SchemaRootType::Object(o) => {
                 let id_field = synth_id_field(&o.object);
@@ -196,20 +200,26 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
                         &mut local_junctions,
                     )?;
                 }
-                tables.insert(module.clone(), TablePlan {
-                    module: module.clone(),
-                    class_name: class_name.clone(),
-                    is_enum: false,
-                    description: o.object.base.description.clone(),
-                    enum_members: Vec::new(),
-                    sql_fields: fields,
-                });
+                tables.insert(
+                    module.clone(),
+                    TablePlan {
+                        module: module.clone(),
+                        class_name: class_name.clone(),
+                        is_enum: false,
+                        description: o.object.base.description.clone(),
+                        enum_members: Vec::new(),
+                        sql_fields: fields,
+                    },
+                );
                 junction_buf.extend(local_junctions);
             }
         }
     }
 
-    Ok(SqlPlan { tables, junctions: junction_buf })
+    Ok(SqlPlan {
+        tables,
+        junctions: junction_buf,
+    })
 }
 
 fn synth_id_field(obj: &ObjectSchema) -> SqlField {
@@ -348,18 +358,37 @@ fn classify_property(
                         docstring,
                     });
                 } else {
-                    push_many_to_many(owner_class, &snake, &target, false, prop_name, fields, junctions);
+                    push_many_to_many(
+                        owner_class,
+                        &snake,
+                        &target,
+                        false,
+                        prop_name,
+                        fields,
+                        junctions,
+                    );
                 }
                 return Ok(());
             }
             SchemaType::AnySchema(_) => {
-                fields.push(SqlField::AnyColumn { name: snake, is_array: true, nullable: false, docstring });
+                fields.push(SqlField::AnyColumn {
+                    name: snake,
+                    is_array: true,
+                    nullable: false,
+                    docstring,
+                });
                 return Ok(());
             }
-            inner if matches!(inner,
-                SchemaType::StringSchema(_) | SchemaType::IntegerSchema(_) | SchemaType::NumberSchema(_)
-                | SchemaType::BooleanSchema(_) | SchemaType::DecimalSchema(_)
-            ) => {
+            inner
+                if matches!(
+                    inner,
+                    SchemaType::StringSchema(_)
+                        | SchemaType::IntegerSchema(_)
+                        | SchemaType::NumberSchema(_)
+                        | SchemaType::BooleanSchema(_)
+                        | SchemaType::DecimalSchema(_)
+                ) =>
+            {
                 let (py_inner, sa_inner) = scalar_array_inners(inner);
                 fields.push(SqlField::ScalarArray {
                     name: snake,
@@ -376,15 +405,37 @@ fn classify_property(
     }
 
     if let SchemaType::AnySchema(_) = schema {
-        fields.push(SqlField::AnyColumn { name: snake, is_array: false, nullable: true, docstring });
+        fields.push(SqlField::AnyColumn {
+            name: snake,
+            is_array: false,
+            nullable: true,
+            docstring,
+        });
         return Ok(());
     }
 
     if let SchemaType::AnyOf(a) = schema {
-        let nulls = a.any_of.iter().filter(|t| matches!(t, SchemaType::NullSchema(_))).count();
+        let nulls = a
+            .any_of
+            .iter()
+            .filter(|t| matches!(t, SchemaType::NullSchema(_)))
+            .count();
         if nulls == 1 && a.any_of.len() == 2 {
-            let inner = a.any_of.iter().find(|t| !matches!(t, SchemaType::NullSchema(_))).unwrap();
-            return classify_optional(owner_class, prop_name, &snake, inner, schema, enum_names, fields, junctions);
+            let inner = a
+                .any_of
+                .iter()
+                .find(|t| !matches!(t, SchemaType::NullSchema(_)))
+                .unwrap();
+            return classify_optional(
+                owner_class,
+                prop_name,
+                &snake,
+                inner,
+                schema,
+                enum_names,
+                fields,
+                junctions,
+            );
         }
     }
 
@@ -409,10 +460,11 @@ fn classify_optional(
 
     match inner {
         SchemaType::ReferenceSchema(r) => {
-            let target = ref_target_class(&r.r#ref).ok_or_else(|| Error::UnclassifiableProperty {
-                class: owner_class.to_string(),
-                property: prop_name.to_string(),
-            })?;
+            let target =
+                ref_target_class(&r.r#ref).ok_or_else(|| Error::UnclassifiableProperty {
+                    class: owner_class.to_string(),
+                    property: prop_name.to_string(),
+                })?;
             if enum_names.contains(&target) {
                 let default = literal_default(full_schema).and_then(|d| {
                     if d == "None" {
@@ -450,18 +502,37 @@ fn classify_optional(
                         docstring,
                     });
                 } else {
-                    push_many_to_many(owner_class, snake, &target, true, prop_name, fields, junctions);
+                    push_many_to_many(
+                        owner_class,
+                        snake,
+                        &target,
+                        true,
+                        prop_name,
+                        fields,
+                        junctions,
+                    );
                 }
                 Ok(())
             }
             SchemaType::AnySchema(_) => {
-                fields.push(SqlField::AnyColumn { name: snake.to_string(), is_array: true, nullable: true, docstring });
+                fields.push(SqlField::AnyColumn {
+                    name: snake.to_string(),
+                    is_array: true,
+                    nullable: true,
+                    docstring,
+                });
                 Ok(())
             }
-            other if matches!(other,
-                SchemaType::StringSchema(_) | SchemaType::IntegerSchema(_) | SchemaType::NumberSchema(_)
-                | SchemaType::BooleanSchema(_) | SchemaType::DecimalSchema(_)
-            ) => {
+            other
+                if matches!(
+                    other,
+                    SchemaType::StringSchema(_)
+                        | SchemaType::IntegerSchema(_)
+                        | SchemaType::NumberSchema(_)
+                        | SchemaType::BooleanSchema(_)
+                        | SchemaType::DecimalSchema(_)
+                ) =>
+            {
                 let (py_inner, sa_inner) = scalar_array_inners(other);
                 fields.push(SqlField::ScalarArray {
                     name: snake.to_string(),
@@ -479,7 +550,12 @@ fn classify_optional(
             }),
         },
         SchemaType::AnySchema(_) => {
-            fields.push(SqlField::AnyColumn { name: snake.to_string(), is_array: false, nullable: true, docstring });
+            fields.push(SqlField::AnyColumn {
+                name: snake.to_string(),
+                is_array: false,
+                nullable: true,
+                docstring,
+            });
             Ok(())
         }
         _ => Err(Error::UnclassifiableProperty {
@@ -503,7 +579,11 @@ fn push_one_to_one(
         target_class: target_class.to_string(),
         target_table,
         nullable,
-        ondelete: if nullable { Some("SET NULL".to_string()) } else { None },
+        ondelete: if nullable {
+            Some("SET NULL".to_string())
+        } else {
+            None
+        },
         docstring: Some(format!(
             "The id to implement the relationship (field {snake} references {target_class})."
         )),
@@ -600,7 +680,11 @@ mod tests {
         let mut s = Schemas::new("v202401.0.0".parse().unwrap());
         let body = format!(
             r#"{{"title":"{name}","type":"string","enum":[{}]}}"#,
-            members.iter().map(|m| format!("\"{m}\"")).collect::<Vec<_>>().join(",")
+            members
+                .iter()
+                .map(|m| format!("\"{m}\""))
+                .collect::<Vec<_>>()
+                .join(",")
         );
         let mut sch = Schema::new(vec!["enum".into(), name.into()], None).unwrap();
         sch.load_schema(body);
@@ -616,20 +700,33 @@ mod tests {
         let table = plan.tables.get(&key).expect("enum table present");
         assert!(table.is_enum);
         assert_eq!(table.class_name, "Typ");
-        assert_eq!(table.enum_members, vec!["ANGEBOT".to_string(), "VERTRAG".to_string()]);
+        assert_eq!(
+            table.enum_members,
+            vec!["ANGEBOT".to_string(), "VERTRAG".to_string()]
+        );
         assert!(table.sql_fields.is_empty());
     }
 
     #[test]
     fn object_table_synthesises_primary_key_id() {
         let plan = build_plan(&fixture_schemas()).expect("build_plan");
-        let angebot = plan.tables.get(&vec!["bo".to_string(), "Angebot".to_string()])
+        let angebot = plan
+            .tables
+            .get(&vec!["bo".to_string(), "Angebot".to_string()])
             .expect("Angebot table present");
         match &angebot.sql_fields[0] {
-            SqlField::Scalar { name, type_, default, .. } => {
+            SqlField::Scalar {
+                name,
+                type_,
+                default,
+                ..
+            } => {
                 assert_eq!(name, "_id");
                 assert_eq!(type_, "uuid_pkg.UUID");
-                assert_eq!(default.as_deref(), Some("Field(default_factory=uuid_pkg.uuid4, primary_key=True, title=\" Id\")"));
+                assert_eq!(
+                    default.as_deref(),
+                    Some("Field(default_factory=uuid_pkg.uuid4, primary_key=True, title=\" Id\")")
+                );
             }
             other => panic!("expected Scalar id field, got {:?}", other),
         }
@@ -638,20 +735,32 @@ mod tests {
     #[test]
     fn nullable_scalar_field_emits_none_default() {
         let plan = build_plan(&fixture_schemas()).expect("build_plan");
-        let angebot = plan.tables.get(&vec!["bo".to_string(), "Angebot".to_string()]).unwrap();
-        let nummer = angebot.sql_fields.iter().find_map(|f| match f {
-            SqlField::Scalar { name, type_, nullable, default, .. } if name == "angebotsnummer" => {
-                Some((type_.clone(), *nullable, default.clone()))
-            }
-            _ => None,
-        }).expect("angebotsnummer field present");
+        let angebot = plan
+            .tables
+            .get(&vec!["bo".to_string(), "Angebot".to_string()])
+            .unwrap();
+        let nummer = angebot
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::Scalar {
+                    name,
+                    type_,
+                    nullable,
+                    default,
+                    ..
+                } if name == "angebotsnummer" => Some((type_.clone(), *nullable, default.clone())),
+                _ => None,
+            })
+            .expect("angebotsnummer field present");
         assert_eq!(nummer.0, "str | None");
         assert!(nummer.1);
         assert_eq!(nummer.2.as_deref(), Some("None"));
     }
 
     fn angebot_table(plan: &SqlPlan) -> &TablePlan {
-        plan.tables.get(&vec!["bo".to_string(), "Angebot".to_string()])
+        plan.tables
+            .get(&vec!["bo".to_string(), "Angebot".to_string()])
             .expect("Angebot table present")
     }
 
@@ -660,17 +769,35 @@ mod tests {
         let plan = build_plan(&fixture_schemas()).expect("build_plan");
         let angebot = angebot_table(&plan);
 
-        let fk_idx = angebot.sql_fields.iter().position(|f| matches!(f,
-            SqlField::ForeignKey { name, .. } if name == "adresse_id"
-        )).expect("adresse_id FK present");
-        let rel_idx = angebot.sql_fields.iter().position(|f| matches!(f,
-            SqlField::Relationship { name, .. } if name == "adresse"
-        )).expect("adresse Relationship present");
+        let fk_idx = angebot
+            .sql_fields
+            .iter()
+            .position(|f| {
+                matches!(f,
+                    SqlField::ForeignKey { name, .. } if name == "adresse_id"
+                )
+            })
+            .expect("adresse_id FK present");
+        let rel_idx = angebot
+            .sql_fields
+            .iter()
+            .position(|f| {
+                matches!(f,
+                    SqlField::Relationship { name, .. } if name == "adresse"
+                )
+            })
+            .expect("adresse Relationship present");
 
         assert_eq!(rel_idx, fk_idx + 1, "Relationship must follow FK directly");
 
         match &angebot.sql_fields[fk_idx] {
-            SqlField::ForeignKey { target_class, target_table, nullable, ondelete, .. } => {
+            SqlField::ForeignKey {
+                target_class,
+                target_table,
+                nullable,
+                ondelete,
+                ..
+            } => {
                 assert_eq!(target_class, "Adresse");
                 assert_eq!(target_table, "adresse");
                 assert!(*nullable);
@@ -679,7 +806,13 @@ mod tests {
             _ => unreachable!(),
         }
         match &angebot.sql_fields[rel_idx] {
-            SqlField::Relationship { target_class, owner_class, fk_field_name, nullable, .. } => {
+            SqlField::Relationship {
+                target_class,
+                owner_class,
+                fk_field_name,
+                nullable,
+                ..
+            } => {
                 assert_eq!(target_class, "Adresse");
                 assert_eq!(owner_class, "Angebot");
                 assert_eq!(fk_field_name, "adresse_id");
@@ -694,16 +827,33 @@ mod tests {
         let plan = build_plan(&fixture_schemas()).expect("build_plan");
         let angebot = angebot_table(&plan);
 
-        let many = angebot.sql_fields.iter().find_map(|f| match f {
-            SqlField::ManyRelationship { name, target_class, link_class, nullable, .. }
-                if name == "adressen" => Some((target_class.clone(), link_class.clone(), *nullable)),
-            _ => None,
-        }).expect("adressen ManyRelationship present");
+        let many = angebot
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::ManyRelationship {
+                    name,
+                    target_class,
+                    link_class,
+                    nullable,
+                    ..
+                } if name == "adressen" => {
+                    Some((target_class.clone(), link_class.clone(), *nullable))
+                }
+                _ => None,
+            })
+            .expect("adressen ManyRelationship present");
         assert_eq!(many.0, "Adresse");
         assert_eq!(many.1, "AngebotAdressenLink");
-        assert!(!many.2, "list[Reference] without Optional should not be nullable");
+        assert!(
+            !many.2,
+            "list[Reference] without Optional should not be nullable"
+        );
 
-        let junction = plan.junctions.iter().find(|j| j.class_name == "AngebotAdressenLink")
+        let junction = plan
+            .junctions
+            .iter()
+            .find(|j| j.class_name == "AngebotAdressenLink")
             .expect("AngebotAdressenLink junction present");
         assert_eq!(junction.owner_class, "Angebot");
         assert_eq!(junction.owner_table, "angebot");
@@ -718,11 +868,23 @@ mod tests {
     fn enum_reference_with_default_emits_enum_column() {
         let plan = build_plan(&fixture_schemas()).expect("build_plan");
         let angebot = angebot_table(&plan);
-        let typ = angebot.sql_fields.iter().find_map(|f| match f {
-            SqlField::EnumColumn { name, enum_class, is_list, nullable, default, .. }
-                if name == "_typ" => Some((enum_class.clone(), *is_list, *nullable, default.clone())),
-            _ => None,
-        }).expect("_typ EnumColumn present");
+        let typ = angebot
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::EnumColumn {
+                    name,
+                    enum_class,
+                    is_list,
+                    nullable,
+                    default,
+                    ..
+                } if name == "_typ" => {
+                    Some((enum_class.clone(), *is_list, *nullable, default.clone()))
+                }
+                _ => None,
+            })
+            .expect("_typ EnumColumn present");
         assert_eq!(typ.0, "Typ");
         assert!(!typ.1);
         assert!(typ.2);
@@ -733,12 +895,20 @@ mod tests {
     fn scalar_array_of_decimal_emits_scalar_array() {
         let plan = build_plan(&fixture_schemas()).expect("build_plan");
         let angebot = angebot_table(&plan);
-        let werte = angebot.sql_fields.iter().find_map(|f| match f {
-            SqlField::ScalarArray { name, py_inner, sa_inner, nullable, .. } if name == "werte" => {
-                Some((py_inner.clone(), *sa_inner, *nullable))
-            }
-            _ => None,
-        }).expect("werte ScalarArray present");
+        let werte = angebot
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::ScalarArray {
+                    name,
+                    py_inner,
+                    sa_inner,
+                    nullable,
+                    ..
+                } if name == "werte" => Some((py_inner.clone(), *sa_inner, *nullable)),
+                _ => None,
+            })
+            .expect("werte ScalarArray present");
         assert_eq!(werte.0, "Decimal");
         assert_eq!(werte.1, "Numeric");
         assert!(!werte.2);
@@ -748,21 +918,35 @@ mod tests {
     fn any_field_emits_any_column() {
         let plan = build_plan(&fixture_schemas()).expect("build_plan");
         let angebot = angebot_table(&plan);
-        let extras = angebot.sql_fields.iter().find_map(|f| match f {
-            SqlField::AnyColumn { name, is_array, nullable, .. } if name == "extras" => {
-                Some((*is_array, *nullable))
-            }
-            _ => None,
-        }).expect("extras AnyColumn present");
+        let extras = angebot
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::AnyColumn {
+                    name,
+                    is_array,
+                    nullable,
+                    ..
+                } if name == "extras" => Some((*is_array, *nullable)),
+                _ => None,
+            })
+            .expect("extras AnyColumn present");
         assert!(!extras.0);
         assert!(extras.1);
 
-        let anhaenge = angebot.sql_fields.iter().find_map(|f| match f {
-            SqlField::AnyColumn { name, is_array, nullable, .. } if name == "anhaenge" => {
-                Some((*is_array, *nullable))
-            }
-            _ => None,
-        }).expect("anhaenge AnyColumn present");
+        let anhaenge = angebot
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::AnyColumn {
+                    name,
+                    is_array,
+                    nullable,
+                    ..
+                } if name == "anhaenge" => Some((*is_array, *nullable)),
+                _ => None,
+            })
+            .expect("anhaenge AnyColumn present");
         assert!(anhaenge.0);
         assert!(!anhaenge.1);
     }
@@ -788,13 +972,23 @@ mod tests {
             }
         }"#;
         let plan = build_plan(&schemas_with_object("Angebot", body)).expect("build_plan");
-        let table = plan.tables.get(&vec!["bo".to_string(), "Angebot".to_string()]).unwrap();
-        let typ = table.sql_fields.iter().find_map(|f| match f {
-            SqlField::Scalar { name, type_, default, .. } if name == "_typ" => {
-                Some((type_.clone(), default.clone()))
-            }
-            _ => None,
-        }).expect("_typ Scalar present");
+        let table = plan
+            .tables
+            .get(&vec!["bo".to_string(), "Angebot".to_string()])
+            .unwrap();
+        let typ = table
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::Scalar {
+                    name,
+                    type_,
+                    default,
+                    ..
+                } if name == "_typ" => Some((type_.clone(), default.clone())),
+                _ => None,
+            })
+            .expect("_typ Scalar present");
         assert_eq!(typ.0, "str");
         assert_eq!(typ.1.as_deref(), Some("\"ANGEBOT\""));
     }
@@ -811,13 +1005,23 @@ mod tests {
             }
         }"#;
         let plan = build_plan(&schemas_with_object("ZusatzAttribut", body)).expect("build_plan");
-        let table = plan.tables.get(&vec!["bo".to_string(), "ZusatzAttribut".to_string()]).unwrap();
-        let wert = table.sql_fields.iter().find_map(|f| match f {
-            SqlField::AnyColumn { name, is_array, nullable, .. } if name == "wert" => {
-                Some((*is_array, *nullable))
-            }
-            _ => None,
-        }).expect("wert AnyColumn present");
+        let table = plan
+            .tables
+            .get(&vec!["bo".to_string(), "ZusatzAttribut".to_string()])
+            .unwrap();
+        let wert = table
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::AnyColumn {
+                    name,
+                    is_array,
+                    nullable,
+                    ..
+                } if name == "wert" => Some((*is_array, *nullable)),
+                _ => None,
+            })
+            .expect("wert AnyColumn present");
         assert!(!wert.0, "wert is not an array");
         assert!(wert.1, "wert is nullable (default null)");
     }

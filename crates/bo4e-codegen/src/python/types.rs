@@ -83,7 +83,10 @@ pub(crate) fn parse_ref(ref_str: &str) -> (Vec<String>, String) {
 
     // The last segment is the file name; strip `.json`.
     let file_name = segments.pop().unwrap_or_default();
-    let class_name = file_name.strip_suffix(".json").unwrap_or(&file_name).to_string();
+    let class_name = file_name
+        .strip_suffix(".json")
+        .unwrap_or(&file_name)
+        .to_string();
 
     // Combine remaining path segments with the class name as the final module segment.
     // Convention: module = [...path_segs, class_name] so the renderer can form
@@ -94,13 +97,22 @@ pub(crate) fn parse_ref(ref_str: &str) -> (Vec<String>, String) {
 }
 
 fn simple(rendered: impl Into<String>) -> MappedType {
-    MappedType { rendered: rendered.into(), imports: BTreeSet::new() }
+    MappedType {
+        rendered: rendered.into(),
+        imports: BTreeSet::new(),
+    }
 }
 
 fn with_import(rendered: impl Into<String>, module: &str, name: &str) -> MappedType {
     let mut imports = BTreeSet::new();
-    imports.insert(Import::Named { module: module.to_string(), name: name.to_string() });
-    MappedType { rendered: rendered.into(), imports }
+    imports.insert(Import::Named {
+        module: module.to_string(),
+        name: name.to_string(),
+    });
+    MappedType {
+        rendered: rendered.into(),
+        imports,
+    }
 }
 
 // ── Public helper functions ───────────────────────────────────────────────────
@@ -210,19 +222,25 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
         SchemaType::Array(a) => {
             let inner = map_pydantic(&a.items);
             let rendered = format!("list[{}]", inner.rendered);
-            MappedType { rendered, imports: inner.imports }
+            MappedType {
+                rendered,
+                imports: inner.imports,
+            }
         }
 
         // ── AnyOf — optional or real union ───────────────────────────────────
         SchemaType::AnyOf(a) => {
             // Partition branches into null and non-null.
-            let (null_branches, non_null_branches): (Vec<_>, Vec<_>) =
-                a.any_of.iter().partition(|t| matches!(t, SchemaType::NullSchema(_)));
+            let (null_branches, non_null_branches): (Vec<_>, Vec<_>) = a
+                .any_of
+                .iter()
+                .partition(|t| matches!(t, SchemaType::NullSchema(_)));
 
             let is_optional = !null_branches.is_empty();
 
             // Map each non-null branch.
-            let mapped: Vec<MappedType> = non_null_branches.iter().map(|t| map_pydantic(t)).collect();
+            let mapped: Vec<MappedType> =
+                non_null_branches.iter().map(|t| map_pydantic(t)).collect();
 
             let mut all_imports: BTreeSet<Import> = BTreeSet::new();
             for m in &mapped {
@@ -232,7 +250,10 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
             // `Any` subsumes every other type (including None), so a union containing
             // `Any` collapses to just `Any`.
             if mapped.iter().any(|m| m.rendered == "Any") {
-                return MappedType { rendered: "Any".into(), imports: all_imports };
+                return MappedType {
+                    rendered: "Any".into(),
+                    imports: all_imports,
+                };
             }
 
             let inner_rendered: Vec<&str> = mapped.iter().map(|m| m.rendered.as_str()).collect();
@@ -248,7 +269,10 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
                 type_str
             };
 
-            MappedType { rendered, imports: all_imports }
+            MappedType {
+                rendered,
+                imports: all_imports,
+            }
         }
 
         // ── AllOf — treated as a single-item wrapper (pydantic inheritance) ──
@@ -262,8 +286,15 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
                 for m in &mapped {
                     all_imports.extend(m.imports.iter().cloned());
                 }
-                let rendered = mapped.iter().map(|m| m.rendered.as_str()).collect::<Vec<_>>().join(" & ");
-                MappedType { rendered, imports: all_imports }
+                let rendered = mapped
+                    .iter()
+                    .map(|m| m.rendered.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" & ");
+                MappedType {
+                    rendered,
+                    imports: all_imports,
+                }
             }
         }
 
@@ -275,8 +306,14 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
             } else {
                 let (module, class_name) = parse_ref(&r.r#ref);
                 let mut imports = BTreeSet::new();
-                imports.insert(Import::Sibling { module, name: class_name.clone() });
-                MappedType { rendered: class_name, imports }
+                imports.insert(Import::Sibling {
+                    module,
+                    name: class_name.clone(),
+                });
+                MappedType {
+                    rendered: class_name,
+                    imports,
+                }
             }
         }
 
@@ -301,9 +338,9 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
 mod tests {
     use super::*;
     use bo4e_schemas::models::json_schema::{
-        AnyOfSchema, AnySchema, ArraySchema, BooleanSchema, DecimalSchema, IntegerSchema, LiteralFormatDecimal,
-        LiteralTypeArray, LiteralTypeDecimal, LiteralTypeString, NullSchema, NumberSchema, ReferenceSchema,
-        StringSchema, StringSchemaFormat, TypeBase,
+        AnyOfSchema, AnySchema, ArraySchema, BooleanSchema, DecimalSchema, IntegerSchema,
+        LiteralFormatDecimal, LiteralTypeArray, LiteralTypeDecimal, LiteralTypeString, NullSchema,
+        NumberSchema, ReferenceSchema, StringSchema, StringSchemaFormat, TypeBase,
     };
 
     // ── Case 1: plain string ──────────────────────────────────────────────────

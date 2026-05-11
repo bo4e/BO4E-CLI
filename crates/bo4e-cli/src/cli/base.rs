@@ -13,13 +13,13 @@ pub trait Executable {
 // Matches palette::MAIN/SUB/ENUM/ERROR by tone; uses 16-colour AnsiColor for
 // const-friendliness — help renders before CONSOLE is initialised.
 const HELP_STYLES: Styles = Styles::styled()
-    .header(     AnsiColor::Cyan.on_default()    .effects(Effects::BOLD))
-    .usage(      AnsiColor::Cyan.on_default()    .effects(Effects::BOLD))
-    .literal(    AnsiColor::Magenta.on_default() .effects(Effects::BOLD))
-    .placeholder(AnsiColor::Yellow.on_default()  .effects(Effects::ITALIC))
-    .error(      AnsiColor::Red.on_default()     .effects(Effects::BOLD))
-    .valid(      AnsiColor::Cyan.on_default())
-    .invalid(    AnsiColor::Red.on_default()     .effects(Effects::BOLD));
+    .header(AnsiColor::Cyan.on_default().effects(Effects::BOLD))
+    .usage(AnsiColor::Cyan.on_default().effects(Effects::BOLD))
+    .literal(AnsiColor::Magenta.on_default().effects(Effects::BOLD))
+    .placeholder(AnsiColor::Yellow.on_default().effects(Effects::ITALIC))
+    .error(AnsiColor::Red.on_default().effects(Effects::BOLD))
+    .valid(AnsiColor::Cyan.on_default())
+    .invalid(AnsiColor::Red.on_default().effects(Effects::BOLD));
 
 #[derive(Parser)]
 #[command(
@@ -89,15 +89,23 @@ mod tests {
 
     #[test]
     fn test_quiet_and_verbose_are_mutually_exclusive() {
-        let result = Cli::try_parse_from(["bo4e", "--quiet", "--verbose", "edit",
-            "-i", "in", "-o", "out"]);
+        let result = Cli::try_parse_from([
+            "bo4e",
+            "--quiet",
+            "--verbose",
+            "edit",
+            "-i",
+            "in",
+            "-o",
+            "out",
+        ]);
         assert!(result.is_err(), "--quiet and --verbose must conflict");
     }
 
     #[test]
     fn test_quiet_flag_parses() {
-        let cli = Cli::try_parse_from(["bo4e", "--quiet", "edit",
-            "-i", "in", "-o", "out"]).unwrap();
+        let cli =
+            Cli::try_parse_from(["bo4e", "--quiet", "edit", "-i", "in", "-o", "out"]).unwrap();
         assert!(cli.quiet);
         assert!(!cli.verbose);
     }

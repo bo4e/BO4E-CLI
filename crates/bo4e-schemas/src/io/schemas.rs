@@ -118,7 +118,8 @@ mod tests {
         fs::write(
             enum_dir.join("Typ.json"),
             r#"{"type":"string","title":"Typ","enum":["A","B"]}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         dir
     }

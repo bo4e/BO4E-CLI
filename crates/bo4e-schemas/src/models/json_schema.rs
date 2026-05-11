@@ -21,7 +21,9 @@ pub enum PrimitiveValue {
 /// becomes `Some(PrimitiveValue::Null)` rather than `None` — the latter is
 /// serde's default behavior for `Option<T>` and would silently drop a
 /// `"default": null` field on round-trip.
-fn deserialize_present_primitive<'de, D>(deserializer: D) -> Result<Option<PrimitiveValue>, D::Error>
+fn deserialize_present_primitive<'de, D>(
+    deserializer: D,
+) -> Result<Option<PrimitiveValue>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -37,7 +39,7 @@ pub struct TypeBase {
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_present_primitive",
+        deserialize_with = "deserialize_present_primitive"
     )]
     pub default: Option<PrimitiveValue>,
 }
@@ -512,14 +514,25 @@ mod tests {
 
     #[test]
     fn test_typebase_default_absent_not_emitted() {
-        let base = TypeBase { description: None, title: None, default: None };
+        let base = TypeBase {
+            description: None,
+            title: None,
+            default: None,
+        };
         let json = serde_json::to_string(&base).unwrap();
-        assert!(!json.contains("default"), "absent default must not appear in JSON");
+        assert!(
+            !json.contains("default"),
+            "absent default must not appear in JSON"
+        );
     }
 
     #[test]
     fn test_typebase_default_null_emitted() {
-        let base = TypeBase { description: None, title: None, default: Some(PrimitiveValue::Null) };
+        let base = TypeBase {
+            description: None,
+            title: None,
+            default: Some(PrimitiveValue::Null),
+        };
         let json = serde_json::to_string(&base).unwrap();
         assert!(json.contains("\"default\":null"));
     }
@@ -527,7 +540,11 @@ mod tests {
     #[test]
     fn test_typebase_default_null_roundtrip() {
         let parsed: TypeBase = serde_json::from_str(r#"{"default":null,"title":"Wert"}"#).unwrap();
-        assert_eq!(parsed.default, Some(PrimitiveValue::Null), "explicit `default: null` must survive deserialization as Some(Null), not None");
+        assert_eq!(
+            parsed.default,
+            Some(PrimitiveValue::Null),
+            "explicit `default: null` must survive deserialization as Some(Null), not None"
+        );
     }
 
     #[test]

@@ -214,9 +214,11 @@ impl Schemas {
         other: &'a Self,
     ) -> impl Iterator<Item = &'a Rc<RefCell<Schema>>> {
         let other_modules = other.modules();
-        self.schemas
-            .iter()
-            .filter(move |s| !other_modules.iter().any(|m| m.as_slice() == s.borrow().module()))
+        self.schemas.iter().filter(move |s| {
+            !other_modules
+                .iter()
+                .any(|m| m.as_slice() == s.borrow().module())
+        })
     }
 
     /// Schemas whose module is present in both `self` and `other` (returns self's value).
@@ -225,9 +227,11 @@ impl Schemas {
         other: &'a Self,
     ) -> impl Iterator<Item = &'a Rc<RefCell<Schema>>> {
         let other_modules = other.modules();
-        self.schemas
-            .iter()
-            .filter(move |s| other_modules.iter().any(|m| m.as_slice() == s.borrow().module()))
+        self.schemas.iter().filter(move |s| {
+            other_modules
+                .iter()
+                .any(|m| m.as_slice() == s.borrow().module())
+        })
     }
 }
 
@@ -325,9 +329,11 @@ mod tests {
             ]
         );
         // get_by_module must also resolve.
-        assert!(restored
-            .get_by_module(&["bo".to_string(), "Angebot".to_string()])
-            .is_some());
+        assert!(
+            restored
+                .get_by_module(&["bo".to_string(), "Angebot".to_string()])
+                .is_some()
+        );
     }
 
     #[test]

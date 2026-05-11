@@ -81,14 +81,24 @@ mod tests {
 
     #[test]
     fn test_n_positive_stops_after_n_yields() {
-        let cands = vec![v("v202401.5.0"), v("v202401.4.0"), v("v202401.3.0"), v("v202401.2.0")];
+        let cands = vec![
+            v("v202401.5.0"),
+            v("v202401.4.0"),
+            v("v202401.3.0"),
+            v("v202401.2.0"),
+        ];
         let out = filter_tags(&cands, &opts(2), |_| Ok(true)).unwrap();
         assert_eq!(out, vec![v("v202401.5.0"), v("v202401.4.0")]);
     }
 
     #[test]
     fn test_n_zero_stops_at_threshold() {
-        let cands = vec![v("v202401.2.0"), v("v202401.1.0"), v("v202401.0.0"), v("v202400.9.0")];
+        let cands = vec![
+            v("v202401.2.0"),
+            v("v202401.1.0"),
+            v("v202401.0.0"),
+            v("v202400.9.0"),
+        ];
         let out = filter_tags(&cands, &opts(0), |_| Ok(true)).unwrap();
         assert_eq!(out, vec![v("v202401.2.0"), v("v202401.1.0")]);
     }

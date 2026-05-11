@@ -66,7 +66,7 @@ macro_rules! cerror {
 
 #[cfg(test)]
 mod tests {
-    use crate::console::console::{Console, Level, CONSOLE};
+    use crate::console::console::{CONSOLE, Console, Level};
 
     fn ensure_console_initialized() {
         let _ = CONSOLE.set(Console::new(Level::Verbose));

@@ -1,6 +1,6 @@
 use crate::models::git::Reference;
-use bo4e_schemas::models::version::Version;
 use crate::repo::filter::{FilterOptions, filter_tags};
+use bo4e_schemas::models::version::Version;
 use std::io;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -273,7 +273,7 @@ mod tests {
     fn test_get_last_n_tags_returns_valid_versions_in_order() {
         let (_dir, _guard) = make_git_repo();
 
-        use crate::console::console::{Console, Level, CONSOLE};
+        use crate::console::console::{CONSOLE, Console, Level};
         let _ = CONSOLE.set(Console::new(Level::Quiet));
 
         let opts = GetLastNTagsOpts {

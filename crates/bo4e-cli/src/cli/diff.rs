@@ -166,11 +166,16 @@ fn run_matrix(a: &DiffMatrixArgs) -> Result<(), String> {
             a.output_file.display()
         ));
         match a.output_type {
-            MatrixOutputType::Csv => write_compatibility_matrix_csv(&a.output_file, &matrix, &path)?,
+            MatrixOutputType::Csv => {
+                write_compatibility_matrix_csv(&a.output_file, &matrix, &path)?
+            }
             MatrixOutputType::Json => write_compatibility_matrix_json(&a.output_file, &matrix)?,
         }
     }
-    cprint_normal!("Saved compatibility matrix to file {}.", a.output_file.display());
+    cprint_normal!(
+        "Saved compatibility matrix to file {}.",
+        a.output_file.display()
+    );
     Ok(())
 }
 

@@ -1,10 +1,10 @@
 use bo4e_cli::cli;
 use bo4e_cli::cli::base::Executable;
-use bo4e_cli::console::console::{Console, Level, CONSOLE};
+use bo4e_cli::console::console::{CONSOLE, Console, Level};
 use bo4e_cli::console::highlighter::Highlighter;
 
-use clap::error::ErrorKind;
 use clap::Parser;
+use clap::error::ErrorKind;
 
 fn main() -> Result<(), String> {
     match cli::base::Cli::try_parse() {
@@ -23,10 +23,12 @@ fn main() -> Result<(), String> {
                 .map_err(|_| "CONSOLE already initialized".to_string())?;
             args.run()
         }
-        Err(e) if matches!(
-            e.kind(),
-            ErrorKind::DisplayHelp | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
-        ) => {
+        Err(e)
+            if matches!(
+                e.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            ) =>
+        {
             // Run clap's rendered help text through the BO4E highlighter so
             // schema names, BO4E, versions, etc. get the same colouring as
             // every other line of CLI output. `StyledStr::to_string()` is the

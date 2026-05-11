@@ -112,7 +112,10 @@ mod tests {
             ]
         }"#;
         let config: Config = serde_json::from_str(json).unwrap();
-        assert!(matches!(&config.additional_fields[0], AdditionalFieldOrRef::Field(_)));
+        assert!(matches!(
+            &config.additional_fields[0],
+            AdditionalFieldOrRef::Field(_)
+        ));
     }
 
     #[test]

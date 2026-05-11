@@ -49,9 +49,27 @@ impl Highlighter {
             r"(?i)(?:^|[^.\w])(?P<bo>bo)\b|(?:^|[^.\w])(?P<com>com)\b|(?:^|[^.\w])(?P<enum>enum)\b",
             PRIORITY_WEAK,
             &[
-                ("bo", Style::new().fg(parse_hex_color(palette::BO)).bold().force_styling(true)),
-                ("com", Style::new().fg(parse_hex_color(palette::COM)).bold().force_styling(true)),
-                ("enum", Style::new().fg(parse_hex_color(palette::ENUM)).bold().force_styling(true)),
+                (
+                    "bo",
+                    Style::new()
+                        .fg(parse_hex_color(palette::BO))
+                        .bold()
+                        .force_styling(true),
+                ),
+                (
+                    "com",
+                    Style::new()
+                        .fg(parse_hex_color(palette::COM))
+                        .bold()
+                        .force_styling(true),
+                ),
+                (
+                    "enum",
+                    Style::new()
+                        .fg(parse_hex_color(palette::ENUM))
+                        .bold()
+                        .force_styling(true),
+                ),
             ],
         );
 
@@ -59,7 +77,12 @@ impl Highlighter {
         self.push_rule(
             r"(?i)(?:^|[^.\w])(?P<json>JSON)\b",
             PRIORITY_WEAK,
-            &[("json", Style::new().fg(parse_hex_color(palette::COM)).force_styling(true))],
+            &[(
+                "json",
+                Style::new()
+                    .fg(parse_hex_color(palette::COM))
+                    .force_styling(true),
+            )],
         );
 
         // Strong: BO4E brand split into two halves — matches Python's
@@ -68,8 +91,20 @@ impl Highlighter {
             r"(?i)\b(?P<bo4e_bo>BO)(?P<bo4e_4e>4E)\b",
             PRIORITY_STRONG,
             &[
-                ("bo4e_bo", Style::new().fg(parse_hex_color(palette::MAIN)).bold().force_styling(true)),
-                ("bo4e_4e", Style::new().fg(parse_hex_color(palette::SUB)).bold().force_styling(true)),
+                (
+                    "bo4e_bo",
+                    Style::new()
+                        .fg(parse_hex_color(palette::MAIN))
+                        .bold()
+                        .force_styling(true),
+                ),
+                (
+                    "bo4e_4e",
+                    Style::new()
+                        .fg(parse_hex_color(palette::SUB))
+                        .bold()
+                        .force_styling(true),
+                ),
             ],
         );
 
@@ -82,7 +117,13 @@ impl Highlighter {
         self.push_rule(
             r"(?P<version>v?\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+g\w+)?(?:\.d\d{8})?)",
             PRIORITY_STRONG,
-            &[("version", Style::new().fg(parse_hex_color(palette::MAIN)).bold().force_styling(true))],
+            &[(
+                "version",
+                Style::new()
+                    .fg(parse_hex_color(palette::MAIN))
+                    .bold()
+                    .force_styling(true),
+            )],
         );
 
         // Strong: Windows-style paths — drive-letter absolute (`C:\foo\bar`, `C:/foo/bar`)
@@ -95,7 +136,10 @@ impl Highlighter {
             PRIORITY_STRONG,
             &[(
                 "win_path",
-                Style::new().fg(parse_hex_color(palette::MAIN)).bold().force_styling(true),
+                Style::new()
+                    .fg(parse_hex_color(palette::MAIN))
+                    .bold()
+                    .force_styling(true),
             )],
         );
 
@@ -108,7 +152,10 @@ impl Highlighter {
             PRIORITY_STRONG,
             &[(
                 "unix_path",
-                Style::new().fg(parse_hex_color(palette::MAIN)).bold().force_styling(true),
+                Style::new()
+                    .fg(parse_hex_color(palette::MAIN))
+                    .bold()
+                    .force_styling(true),
             )],
         );
     }
@@ -121,7 +168,13 @@ impl Highlighter {
         self.push_rule(
             r"(?m)^(?P<header>(?:Usage|Options|Commands|Arguments|Subcommands)):",
             PRIORITY_STRUCTURAL,
-            &[("header", Style::new().fg(parse_hex_color(palette::SUB_ACCENT)).bold().force_styling(true))],
+            &[(
+                "header",
+                Style::new()
+                    .fg(parse_hex_color(palette::SUB_ACCENT))
+                    .bold()
+                    .force_styling(true),
+            )],
         );
 
         // Flags: `-x` or `--long-name`. Prefix `[^\w/]` (consumed but not styled) prevents
@@ -129,7 +182,13 @@ impl Highlighter {
         self.push_rule(
             r"(?:^|[^\w/])(?P<flag>-{1,2}[a-zA-Z][\w\-]*)",
             PRIORITY_STRUCTURAL,
-            &[("flag", Style::new().fg(parse_hex_color(palette::MAIN_ACCENT)).bold().force_styling(true))],
+            &[(
+                "flag",
+                Style::new()
+                    .fg(parse_hex_color(palette::MAIN_ACCENT))
+                    .bold()
+                    .force_styling(true),
+            )],
         );
 
         // Placeholders: `<NAME>`, `[OPTIONAL]`, `[COMMAND]`. Restrict bracket form to
@@ -137,7 +196,13 @@ impl Highlighter {
         self.push_rule(
             r"(?P<placeholder><[^>]+>|\[[A-Z][^\]]*\])",
             PRIORITY_STRUCTURAL,
-            &[("placeholder", Style::new().fg(parse_hex_color(palette::MAIN_ACCENT)).italic().force_styling(true))],
+            &[(
+                "placeholder",
+                Style::new()
+                    .fg(parse_hex_color(palette::MAIN_ACCENT))
+                    .italic()
+                    .force_styling(true),
+            )],
         );
 
         // URLs at structural priority so a `--xxx` substring inside a URL's query
@@ -147,7 +212,13 @@ impl Highlighter {
         self.push_rule(
             r#"(?P<url>https?://[^\s)\],;'"<>]+)"#,
             PRIORITY_STRUCTURAL,
-            &[("url", Style::new().fg(parse_hex_color(palette::SUB_ACCENT)).underlined().force_styling(true))],
+            &[(
+                "url",
+                Style::new()
+                    .fg(parse_hex_color(palette::SUB_ACCENT))
+                    .underlined()
+                    .force_styling(true),
+            )],
         );
     }
 
@@ -157,7 +228,11 @@ impl Highlighter {
             .iter()
             .map(|(name, style)| (*name, style.clone()))
             .collect();
-        self.rules.push(Rule { regex, priority, group_styles });
+        self.rules.push(Rule {
+            regex,
+            priority,
+            group_styles,
+        });
     }
 
     /// Apply all highlight rules to `text`, returning an ANSI-styled string.
@@ -183,16 +258,14 @@ impl Highlighter {
         }
 
         candidates.sort_by(|a, b| {
-            b.2.cmp(&a.2)                    // priority DESC
+            b.2.cmp(&a.2) // priority DESC
                 .then_with(|| a.0.cmp(&b.0)) // start ASC
                 .then_with(|| b.1.cmp(&a.1)) // end DESC (longer wins on tie)
         });
 
         let mut accepted: Vec<(usize, usize, Style)> = Vec::new();
         for (start, end, _prio, style) in candidates {
-            let overlaps = accepted
-                .iter()
-                .any(|(s, e, _)| !(end <= *s || start >= *e));
+            let overlaps = accepted.iter().any(|(s, e, _)| !(end <= *s || start >= *e));
             if !overlaps {
                 accepted.push((start, end, style));
             }
@@ -237,24 +310,59 @@ impl Highlighter {
             if names.is_empty() {
                 return;
             }
-            let pattern = names.iter().map(|n| regex::escape(n)).collect::<Vec<_>>().join("|");
+            let pattern = names
+                .iter()
+                .map(|n| regex::escape(n))
+                .collect::<Vec<_>>()
+                .join("|");
             // `(?:mod\.)?Name` mirrors Python's regex_mod_path branch (no field matching).
             let full = format!(r"\b(?P<{group}>(?:{group}\.)?(?:{pattern}))\b");
             this.push_rule(&full, PRIORITY_SCHEMA, &[(group, style)]);
         };
-        push_module(self, &bo, "bo", Style::new().fg(parse_hex_color(palette::BO)).bold().force_styling(true));
-        push_module(self, &com, "com", Style::new().fg(parse_hex_color(palette::COM)).bold().force_styling(true));
-        push_module(self, &r#enum, "enum", Style::new().fg(parse_hex_color(palette::ENUM)).bold().force_styling(true));
+        push_module(
+            self,
+            &bo,
+            "bo",
+            Style::new()
+                .fg(parse_hex_color(palette::BO))
+                .bold()
+                .force_styling(true),
+        );
+        push_module(
+            self,
+            &com,
+            "com",
+            Style::new()
+                .fg(parse_hex_color(palette::COM))
+                .bold()
+                .force_styling(true),
+        );
+        push_module(
+            self,
+            &r#enum,
+            "enum",
+            Style::new()
+                .fg(parse_hex_color(palette::ENUM))
+                .bold()
+                .force_styling(true),
+        );
         // Unmatched schemas re-use the bo4e_4e style (SUB bold).
         if !other.is_empty() {
-            let pattern = other.iter().map(|n| regex::escape(n)).collect::<Vec<_>>().join("|");
+            let pattern = other
+                .iter()
+                .map(|n| regex::escape(n))
+                .collect::<Vec<_>>()
+                .join("|");
             let full = format!(r"\b(?P<bo4e_4e_schema>(?:{pattern}))\b");
             self.push_rule(
                 &full,
                 PRIORITY_SCHEMA,
                 &[(
                     "bo4e_4e_schema",
-                    Style::new().fg(parse_hex_color(palette::SUB)).bold().force_styling(true),
+                    Style::new()
+                        .fg(parse_hex_color(palette::SUB))
+                        .bold()
+                        .force_styling(true),
                 )],
             );
         }
@@ -302,7 +410,10 @@ mod tests {
     /// open/reset codes to verify the entire string is inside a single styled span.
     fn assert_single_span_covers(rendered: &str, needle: &str) {
         let plain_text = plain(rendered);
-        assert!(plain_text.contains(needle), "needle {needle:?} missing from {plain_text:?}");
+        assert!(
+            plain_text.contains(needle),
+            "needle {needle:?} missing from {plain_text:?}"
+        );
         // Exactly one reset, and the substring just before it must end with the needle.
         let resets: Vec<_> = rendered.match_indices("\x1b[0m").collect();
         assert_eq!(
@@ -373,19 +484,28 @@ mod tests {
         let result = h.apply("Angebot Adresse Sparte WeirdThing");
         // All four should be styled — count distinct ANSI escape sequences.
         let esc_count = result.matches('\x1b').count();
-        assert!(esc_count >= 8, "expected at least 4 styled spans, got {esc_count} escapes");
+        assert!(
+            esc_count >= 8,
+            "expected at least 4 styled spans, got {esc_count} escapes"
+        );
     }
 
     #[test]
     fn test_plain_text_no_ansi() {
         let h = Highlighter::default();
         let result = h.apply("no special content");
-        assert!(!result.contains('\x1b'), "plain text must not gain ANSI codes");
+        assert!(
+            !result.contains('\x1b'),
+            "plain text must not gain ANSI codes"
+        );
     }
 
     /// Strip every SGR escape from `s` so we can check the styled text content.
     fn plain(s: &str) -> String {
-        Regex::new(r"\x1b\[[0-9;]*m").unwrap().replace_all(s, "").to_string()
+        Regex::new(r"\x1b\[[0-9;]*m")
+            .unwrap()
+            .replace_all(s, "")
+            .to_string()
     }
 
     #[test]
@@ -399,7 +519,10 @@ mod tests {
         let result = h.apply("Use --some-bo4e-flag here");
         assert_eq!(plain(&result), "Use --some-bo4e-flag here");
         let resets = result.matches("\x1b[0m").count();
-        assert_eq!(resets, 1, "expected exactly one styled span for the flag, got: {result:?}");
+        assert_eq!(
+            resets, 1,
+            "expected exactly one styled span for the flag, got: {result:?}"
+        );
     }
 
     #[test]
@@ -449,7 +572,10 @@ mod tests {
         let h = Highlighter::default();
         let result = h.apply("Loading config from /tmp/config.json done");
         let resets = result.matches("\x1b[0m").count();
-        assert_eq!(resets, 1, "expected exactly one styled span (the path), got: {result:?}");
+        assert_eq!(
+            resets, 1,
+            "expected exactly one styled span (the path), got: {result:?}"
+        );
     }
 
     #[test]
@@ -465,7 +591,10 @@ mod tests {
         let h = Highlighter::default();
         let result = h.apply("Loading from /tmp/config.json done");
         assert_eq!(plain(&result), "Loading from /tmp/config.json done");
-        assert!(result.contains("\x1b["), "expected path styling, got: {result:?}");
+        assert!(
+            result.contains("\x1b["),
+            "expected path styling, got: {result:?}"
+        );
     }
 
     #[test]
@@ -474,7 +603,10 @@ mod tests {
         let result = h.apply("see ./relative/path/file for info");
         assert_eq!(plain(&result), "see ./relative/path/file for info");
         let resets = result.matches("\x1b[0m").count();
-        assert_eq!(resets, 1, "expected single span for the path, got: {result:?}");
+        assert_eq!(
+            resets, 1,
+            "expected single span for the path, got: {result:?}"
+        );
     }
 
     #[test]
@@ -504,9 +636,15 @@ mod tests {
     fn test_windows_drive_letter_path_is_highlighted() {
         let h = Highlighter::default();
         let result = h.apply(r"Loading from C:\Users\leon\config.json done");
-        assert_eq!(plain(&result), r"Loading from C:\Users\leon\config.json done");
+        assert_eq!(
+            plain(&result),
+            r"Loading from C:\Users\leon\config.json done"
+        );
         let resets = result.matches("\x1b[0m").count();
-        assert_eq!(resets, 1, "expected one styled span for the path, got: {result:?}");
+        assert_eq!(
+            resets, 1,
+            "expected one styled span for the path, got: {result:?}"
+        );
     }
 
     #[test]
@@ -514,9 +652,15 @@ mod tests {
         // Windows accepts forward slashes after the drive letter too.
         let h = Highlighter::default();
         let result = h.apply("Loading from C:/Users/leon/config.json done");
-        assert_eq!(plain(&result), "Loading from C:/Users/leon/config.json done");
+        assert_eq!(
+            plain(&result),
+            "Loading from C:/Users/leon/config.json done"
+        );
         let resets = result.matches("\x1b[0m").count();
-        assert_eq!(resets, 1, "expected one styled span for the path, got: {result:?}");
+        assert_eq!(
+            resets, 1,
+            "expected one styled span for the path, got: {result:?}"
+        );
     }
 
     #[test]
@@ -527,7 +671,10 @@ mod tests {
         let result = h.apply(r"Loading from .\.tmp\bo4e_edited\ done");
         assert_eq!(plain(&result), r"Loading from .\.tmp\bo4e_edited\ done");
         let resets = result.matches("\x1b[0m").count();
-        assert_eq!(resets, 1, "expected one styled span for the path, got: {result:?}");
+        assert_eq!(
+            resets, 1,
+            "expected one styled span for the path, got: {result:?}"
+        );
     }
 
     #[test]

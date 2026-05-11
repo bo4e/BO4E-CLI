@@ -55,11 +55,7 @@ impl Executable for Generate {
             .map_err(|e| e.to_string())?
         };
 
-        crate::cprint_normal!(
-            "Wrote {} files to {}",
-            written.len(),
-            self.output.display()
-        );
+        crate::cprint_normal!("Wrote {} files to {}", written.len(), self.output.display());
         Ok(())
     }
 }

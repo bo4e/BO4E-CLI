@@ -131,7 +131,10 @@ pub(crate) fn generate_pydantic(
     written.push(init_path);
 
     // ── Empty __init__.py per first-level subdirectory ─────────────────────────
-    let modules: Vec<Vec<String>> = schemas.iter().map(|s| s.borrow().module().to_vec()).collect();
+    let modules: Vec<Vec<String>> = schemas
+        .iter()
+        .map(|s| s.borrow().module().to_vec())
+        .collect();
     let subdirs = crate::python::first_level_subdirs(modules.iter().map(|m| m.as_slice()));
     crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
 
@@ -243,11 +246,12 @@ fn render_object(
         // pydantic dialect: optional fields render as `T | None` only when the
         // mapper hasn't already produced that union (e.g. via anyOf with null).
         // `Any` already covers None, so don't widen it.
-        let type_str = if is_required || mapped.rendered == "Any" || mapped.rendered.contains("| None") {
-            mapped.rendered.clone()
-        } else {
-            format!("{} | None", mapped.rendered)
-        };
+        let type_str =
+            if is_required || mapped.rendered == "Any" || mapped.rendered.contains("| None") {
+                mapped.rendered.clone()
+            } else {
+                format!("{} | None", mapped.rendered)
+            };
 
         let name_snake = to_snake_case(prop_name);
         let python_name = python_attr_name(&name_snake);
@@ -385,7 +389,10 @@ fn qualify_enum_default(
         }
     })?;
 
-    imports.extend([Import::Sibling { module: enum_module, name: enum_name.clone() }]);
+    imports.extend([Import::Sibling {
+        module: enum_module,
+        name: enum_name.clone(),
+    }]);
     let member = sanitize_enum_member_name(value);
     Some(format!("{enum_name}.{member}"))
 }

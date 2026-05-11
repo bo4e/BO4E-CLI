@@ -39,19 +39,18 @@ pub fn load_config(path: &Path) -> Result<ResolvedConfig, String> {
                 })?;
                 // Detect array vs object by the first non-whitespace character.
                 if ref_text.trim_start().starts_with('[') {
-                    let list: Vec<AdditionalField> = serde_json::from_str(&ref_text)
-                        .map_err(|e| format!(
-                            "Failed to parse field ref list '{}': {}",
-                            ref_path.display(), e
-                        ))?;
+                    let list: Vec<AdditionalField> =
+                        serde_json::from_str(&ref_text).map_err(|e| {
+                            format!(
+                                "Failed to parse field ref list '{}': {}",
+                                ref_path.display(),
+                                e
+                            )
+                        })?;
                     additional_fields.extend(list);
                 } else {
                     let single: AdditionalField = serde_json::from_str(&ref_text).map_err(|e| {
-                        format!(
-                            "Failed to parse field ref '{}': {}",
-                            ref_path.display(),
-                            e
-                        )
+                        format!("Failed to parse field ref '{}': {}", ref_path.display(), e)
                     })?;
                     additional_fields.push(single);
                 }
@@ -100,9 +99,7 @@ pub fn get_additional_schemas(
         .ok_or_else(|| "Config error: title is required for additional models".to_string())?;
 
         if title.is_empty() {
-            return Err(
-                "Config error: title must be non-empty for additional models".to_string(),
-            );
+            return Err("Config error: title must be non-empty for additional models".to_string());
         }
 
         let module = vec![model.module.clone(), title];

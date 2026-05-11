@@ -1,13 +1,15 @@
 #![cfg(feature = "python-pydantic")]
 
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 #[test]
 fn bo4e_generate_writes_output_directory() {
     let fixture: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()                // crates/
-        .parent().unwrap()                // repo root
+        .parent()
+        .unwrap() // crates/
+        .parent()
+        .unwrap() // repo root
         .join("crates/bo4e-codegen/tests/fixtures/bo4e_min");
     assert!(fixture.exists(), "fixture dir not vendored");
 

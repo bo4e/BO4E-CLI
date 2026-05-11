@@ -10,8 +10,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 lazy_static! {
-    static ref REGEX_VERSION_IN_DESC: Regex =
-        Regex::new(r"v\d{6}\.\d+\.\d+(?:-rc\d*)?").unwrap();
+    static ref REGEX_VERSION_IN_DESC: Regex = Regex::new(r"v\d{6}\.\d+\.\d+(?:-rc\d*)?").unwrap();
 }
 
 const VERSION_DESC_PLACEHOLDER: &str = "{__gh_version__}";
@@ -88,7 +87,14 @@ fn diff_root_pair(
 ) {
     match (old, new) {
         (SchemaRootType::Object(o), SchemaRootType::Object(n)) => {
-            diff_object_schemas(&o.object, &n.object, old_trace, new_trace, current_module, out);
+            diff_object_schemas(
+                &o.object,
+                &n.object,
+                old_trace,
+                new_trace,
+                current_module,
+                out,
+            );
         }
         (SchemaRootType::StrEnum(o), SchemaRootType::StrEnum(n)) => {
             diff_enum_schemas(&o.str_enum, &n.str_enum, old_trace, new_trace, out);
@@ -181,7 +187,10 @@ fn refs_point_to_same_target(old: &str, new: &str, current_module: &[String]) ->
     if old == new {
         return true;
     }
-    match (canonical_ref(old, current_module), canonical_ref(new, current_module)) {
+    match (
+        canonical_ref(old, current_module),
+        canonical_ref(new, current_module),
+    ) {
         (Some(a), Some(b)) => a == b,
         _ => false,
     }
@@ -373,14 +382,18 @@ fn diff_schema_type(
 ) {
     use SchemaType::*;
     match (old, new) {
-        (Object(o), Object(n)) => diff_object_schemas(o, n, old_trace, new_trace, current_module, out),
+        (Object(o), Object(n)) => {
+            diff_object_schemas(o, n, old_trace, new_trace, current_module, out)
+        }
         (StrEnum(o), StrEnum(n)) => diff_enum_schemas(o, n, old_trace, new_trace, out),
         (Array(o), Array(n)) => diff_array_schemas(o, n, old_trace, new_trace, current_module, out),
-        (AnyOf(o), AnyOf(n)) => diff_any_of_schemas(o, n, old_trace, new_trace, current_module, out),
-        (AllOf(o), AllOf(n)) => diff_all_of_schemas(o, n, old_trace, new_trace, current_module, out),
-        (StringSchema(o), StringSchema(n)) => {
-            diff_string_schemas(o, n, old_trace, new_trace, out)
+        (AnyOf(o), AnyOf(n)) => {
+            diff_any_of_schemas(o, n, old_trace, new_trace, current_module, out)
         }
+        (AllOf(o), AllOf(n)) => {
+            diff_all_of_schemas(o, n, old_trace, new_trace, current_module, out)
+        }
+        (StringSchema(o), StringSchema(n)) => diff_string_schemas(o, n, old_trace, new_trace, out),
         (ReferenceSchema(o), ReferenceSchema(n)) => {
             diff_ref_schemas(o, n, old_trace, new_trace, current_module, out)
         }
@@ -519,7 +532,10 @@ mod tests {
         let old = collection("v202401.0.1", vec![]);
         let new = collection(
             "v202401.0.2",
-            vec![schema_with(&["bo", "Angebot"], empty_object_root("Angebot"))],
+            vec![schema_with(
+                &["bo", "Angebot"],
+                empty_object_root("Angebot"),
+            )],
         );
         let changes = diff_schemas(&old, &new);
         assert_eq!(changes.changes.len(), 1);
@@ -531,7 +547,10 @@ mod tests {
     fn test_class_removed_when_module_only_in_old() {
         let old = collection(
             "v202401.0.1",
-            vec![schema_with(&["bo", "Angebot"], empty_object_root("Angebot"))],
+            vec![schema_with(
+                &["bo", "Angebot"],
+                empty_object_root("Angebot"),
+            )],
         );
         let new = collection("v202401.0.2", vec![]);
         let changes = diff_schemas(&old, &new);
@@ -654,7 +673,8 @@ mod tests {
         let r_absolute = ReferenceSchema {
             base: TypeBase::default(),
             r#ref: "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202501.0.0/\
-                    src/bo4e_schemas/bo/Geschaeftspartner.json".into(),
+                    src/bo4e_schemas/bo/Geschaeftspartner.json"
+                .into(),
         };
         let m = vec!["bo".to_string(), "Angebot".to_string()];
         let mut out = vec![];
@@ -749,11 +769,18 @@ mod tests {
         };
         let mut out = vec![];
         diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
-        assert!(out.iter().all(|c| c.r#type != ChangeType::FieldAnyOfTypeAdded));
-        assert!(out.iter().all(|c| c.r#type != ChangeType::FieldAnyOfTypeRemoved));
-        assert!(out
-            .iter()
-            .any(|c| c.r#type == ChangeType::FieldDescriptionChanged));
+        assert!(
+            out.iter()
+                .all(|c| c.r#type != ChangeType::FieldAnyOfTypeAdded)
+        );
+        assert!(
+            out.iter()
+                .all(|c| c.r#type != ChangeType::FieldAnyOfTypeRemoved)
+        );
+        assert!(
+            out.iter()
+                .any(|c| c.r#type == ChangeType::FieldDescriptionChanged)
+        );
     }
 
     #[test]
@@ -845,8 +872,9 @@ mod tests {
         let b = obj(&[("foo", SchemaType::StringSchema(s_new))]);
         let mut out = vec![];
         diff_object_schemas(&a, &b, "/x", "/x", &m(), &mut out);
-        assert!(out
-            .iter()
-            .any(|c| c.r#type == ChangeType::FieldDefaultChanged));
+        assert!(
+            out.iter()
+                .any(|c| c.r#type == ChangeType::FieldDefaultChanged)
+        );
     }
 }

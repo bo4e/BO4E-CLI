@@ -35,33 +35,27 @@ const SQUISH_FRAMES: &[&str] = &["╫", "╪"];
 const SQUISH_INTERVAL_MS: u64 = 100;
 
 const GRENADE_FRAMES: &[&str] = &[
-    "،   ",
-    "′   ",
-    " ´ ",
-    " ‾ ",
-    "  ⸌",
-    "  ⸊",
-    "  |",
-    "  ⁎",
-    "  ⁕",
-    " ෴ ",
-    "  ⁓",
-    "   ",
-    "   ",
+    "،   ", "′   ", " ´ ", " ‾ ", "  ⸌", "  ⸊", "  |", "  ⁎", "  ⁕", " ෴ ", "  ⁓", "   ", "   ",
     "   ",
 ];
 const GRENADE_INTERVAL_MS: u64 = 80;
 
 pub fn earth(msg: impl Into<Cow<'static, str>>) -> Spinner {
-    Spinner { pb: make_spinner(msg, EARTH_FRAMES, EARTH_INTERVAL_MS, would_show()) }
+    Spinner {
+        pb: make_spinner(msg, EARTH_FRAMES, EARTH_INTERVAL_MS, would_show()),
+    }
 }
 
 pub fn squish(msg: impl Into<Cow<'static, str>>) -> Spinner {
-    Spinner { pb: make_spinner(msg, SQUISH_FRAMES, SQUISH_INTERVAL_MS, would_show()) }
+    Spinner {
+        pb: make_spinner(msg, SQUISH_FRAMES, SQUISH_INTERVAL_MS, would_show()),
+    }
 }
 
 pub fn grenade(msg: impl Into<Cow<'static, str>>) -> Spinner {
-    Spinner { pb: make_spinner(msg, GRENADE_FRAMES, GRENADE_INTERVAL_MS, would_show()) }
+    Spinner {
+        pb: make_spinner(msg, GRENADE_FRAMES, GRENADE_INTERVAL_MS, would_show()),
+    }
 }
 
 fn would_show() -> bool {
@@ -119,7 +113,9 @@ mod tests {
 
     #[test]
     fn invisible_returns_hidden() {
-        let spinner = Spinner { pb: make_spinner("hi", EARTH_FRAMES, EARTH_INTERVAL_MS, false) };
+        let spinner = Spinner {
+            pb: make_spinner("hi", EARTH_FRAMES, EARTH_INTERVAL_MS, false),
+        };
         assert!(spinner.is_hidden());
     }
 }

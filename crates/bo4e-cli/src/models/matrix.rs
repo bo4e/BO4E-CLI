@@ -1,5 +1,5 @@
-use bo4e_schemas::models::version::DirtyVersion;
 use bimap::BiMap;
+use bo4e_schemas::models::version::DirtyVersion;
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -41,7 +41,9 @@ impl Display for CompatibilitySymbol {
         write!(
             f,
             "{}",
-            COMPATIBILITY_SYMBOLS.get_by_left(self).ok_or(std::fmt::Error)?
+            COMPATIBILITY_SYMBOLS
+                .get_by_left(self)
+                .ok_or(std::fmt::Error)?
         )
     }
 }
@@ -80,7 +82,9 @@ impl Display for CompatibilityText {
         write!(
             f,
             "{}",
-            COMPATIBILITY_TEXTS.get_by_left(self).ok_or(std::fmt::Error)?
+            COMPATIBILITY_TEXTS
+                .get_by_left(self)
+                .ok_or(std::fmt::Error)?
         )
     }
 }
@@ -115,7 +119,7 @@ impl Display for Compatibility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Compatibility::Symbol(s) => Display::fmt(s, f),
-            Compatibility::Text(t)   => Display::fmt(t, f),
+            Compatibility::Text(t) => Display::fmt(t, f),
         }
     }
 }
@@ -185,10 +189,16 @@ mod tests {
     #[test]
     fn test_compatibility_deserialize_tries_emoji_first() {
         let parsed: Compatibility = serde_json::from_str("\"\u{2795}\"").unwrap();
-        assert!(matches!(parsed, Compatibility::Symbol(CompatibilitySymbol::Added)));
+        assert!(matches!(
+            parsed,
+            Compatibility::Symbol(CompatibilitySymbol::Added)
+        ));
 
         let parsed_text: Compatibility = serde_json::from_str("\"added\"").unwrap();
-        assert!(matches!(parsed_text, Compatibility::Text(CompatibilityText::Added)));
+        assert!(matches!(
+            parsed_text,
+            Compatibility::Text(CompatibilityText::Added)
+        ));
     }
 
     #[test]
@@ -199,13 +209,18 @@ mod tests {
             next_version: v.clone(),
             compatibility: Compatibility::Symbol(CompatibilitySymbol::ChangeNone),
         };
-        let mut m = CompatibilityMatrix { root: IndexMap::new() };
+        let mut m = CompatibilityMatrix {
+            root: IndexMap::new(),
+        };
         m.root.insert("bo.Angebot".to_string(), vec![entry.clone()]);
         m.root.insert("com.Adresse".to_string(), vec![entry]);
 
         let json = serde_json::to_string(&m).unwrap();
         let pos_bo = json.find("bo.Angebot").unwrap();
         let pos_com = json.find("com.Adresse").unwrap();
-        assert!(pos_bo < pos_com, "module insertion order must survive serialization");
+        assert!(
+            pos_bo < pos_com,
+            "module insertion order must survive serialization"
+        );
     }
 }

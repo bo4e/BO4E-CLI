@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/bo4e_min")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bo4e_min")
 }
 
 fn python3_available() -> bool {
@@ -26,11 +25,16 @@ fn generated_angebot_parses_as_python_and_has_expected_class() {
         &out.schemas,
         bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
-        &bo4e_codegen::Options { clear_output: true, templates_dir: None },
-    ).unwrap();
+        &bo4e_codegen::Options {
+            clear_output: true,
+            templates_dir: None,
+        },
+    )
+    .unwrap();
 
     let angebot = tmp.path().join("bo/angebot.py");
-    let script = format!(r#"
+    let script = format!(
+        r#"
 import ast, sys
 src = open({path:?}).read()
 tree = ast.parse(src)
@@ -40,9 +44,15 @@ assert classes[0].name == "Angebot", classes[0].name
 bases = [b.id if isinstance(b, ast.Name) else getattr(b, "attr", "?") for b in classes[0].bases]
 assert "BaseModel" in bases, f"expected BaseModel in bases, got {{bases}}"
 print("ok")
-"#, path = angebot.to_string_lossy().to_string());
+"#,
+        path = angebot.to_string_lossy().to_string()
+    );
 
-    let output = Command::new("python3").arg("-c").arg(&script).output().unwrap();
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(&script)
+        .output()
+        .unwrap();
     assert!(
         output.status.success(),
         "python3 failed:\nstdout: {}\nstderr: {}",

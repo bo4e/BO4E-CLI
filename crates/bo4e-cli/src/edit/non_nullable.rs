@@ -1,7 +1,9 @@
-use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootObject, SchemaRootType, SchemaType, TypeBase};
-use bo4e_schemas::models::schema_meta::Schemas;
 use crate::console::mark::pat;
 use crate::{cprint_normal, cprint_verbose, cwarn};
+use bo4e_schemas::models::json_schema::{
+    PrimitiveValue, SchemaRootObject, SchemaRootType, SchemaType, TypeBase,
+};
+use bo4e_schemas::models::schema_meta::Schemas;
 
 /// Remove the `null` variant from a nullable `AnyOf` property.
 ///
@@ -25,7 +27,7 @@ pub fn field_to_non_nullable(
             return Err(format!(
                 "Expected AnyOf for field '{}', got {:?}",
                 field_name, other
-            ))
+            ));
         }
     };
 
@@ -50,7 +52,11 @@ pub fn field_to_non_nullable(
     if any_of_schema.any_of.len() == 1 {
         let inherited_base = any_of_schema.base.clone();
         // We need to get the inner SchemaType out — re-borrow the property
-        let prop_mut = schema.object.properties.get_mut(field_name).expect("field was proven to exist above");
+        let prop_mut = schema
+            .object
+            .properties
+            .get_mut(field_name)
+            .expect("field was proven to exist above");
         if let SchemaType::AnyOf(a) = prop_mut {
             let inner = a.any_of.remove(0);
             let new_prop = apply_base_to_schema_type(inner, inherited_base);
@@ -127,11 +133,8 @@ pub fn transform_all_non_nullable_fields(
                 let mut schema = schema_rc.borrow_mut();
                 let root = schema.schema_mut()?;
                 if let SchemaRootType::Object(obj) = root {
-                    let is_anyof_with_null = obj
-                        .object
-                        .properties
-                        .get(field_name)
-                        .is_some_and(|p| {
+                    let is_anyof_with_null =
+                        obj.object.properties.get(field_name).is_some_and(|p| {
                             matches!(p, SchemaType::AnyOf(a) if
                                 a.any_of.iter().any(|v| matches!(v, SchemaType::NullSchema(_)))
                             )
@@ -149,9 +152,16 @@ pub fn transform_all_non_nullable_fields(
             }
         }
         if match_count == 0 {
-            cwarn!("non-nullable pattern '{}' did not match any fields", pat(pattern));
+            cwarn!(
+                "non-nullable pattern '{}' did not match any fields",
+                pat(pattern)
+            );
         } else {
-            cprint_normal!("Applied non-nullable pattern '{}' to {} field(s)", pat(pattern), match_count);
+            cprint_normal!(
+                "Applied non-nullable pattern '{}' to {} field(s)",
+                pat(pattern),
+                match_count
+            );
         }
     }
 
@@ -161,7 +171,7 @@ pub fn transform_all_non_nullable_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::console::console::{Console, Level, CONSOLE};
+    use crate::console::console::{CONSOLE, Console, Level};
     use bo4e_schemas::models::json_schema::*;
     use std::collections::BTreeMap;
 

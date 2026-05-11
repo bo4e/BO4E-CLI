@@ -9,8 +9,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/bo4e_sql_min")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bo4e_sql_min")
 }
 
 fn python3_available() -> bool {
@@ -29,11 +28,16 @@ fn generated_angebot_parses_as_python_and_has_sqlmodel_class() {
         &out.schemas,
         bo4e_codegen::OutputType::PythonSqlModel,
         tmp.path(),
-        &bo4e_codegen::Options { clear_output: true, templates_dir: None },
-    ).unwrap();
+        &bo4e_codegen::Options {
+            clear_output: true,
+            templates_dir: None,
+        },
+    )
+    .unwrap();
 
     let angebot = tmp.path().join("bo/angebot.py");
-    let script = format!(r#"
+    let script = format!(
+        r#"
 import ast
 src = open({path:?}).read()
 tree = ast.parse(src)
@@ -45,9 +49,15 @@ assert "SQLModel" in bases, f"expected SQLModel in bases, got {{bases}}"
 keywords = {{kw.arg: kw.value for kw in classes[0].keywords}}
 assert "table" in keywords, f"expected table=True keyword, got {{list(keywords)}}"
 print("ok")
-"#, path = angebot.to_string_lossy());
+"#,
+        path = angebot.to_string_lossy()
+    );
 
-    let output = Command::new("python3").arg("-c").arg(&script).output().unwrap();
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(&script)
+        .output()
+        .unwrap();
     assert!(
         output.status.success(),
         "python3 failed:\nstdout: {}\nstderr: {}",

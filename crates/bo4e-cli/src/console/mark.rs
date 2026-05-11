@@ -80,7 +80,10 @@ impl<T: fmt::Display + ?Sized> fmt::Display for Mark<'_, T> {
 /// uniform span instead of being split into separately-coloured `bo` and
 /// `Angebot` halves.
 pub fn pat<T: fmt::Display + ?Sized>(t: &T) -> Mark<'_, T> {
-    Mark { inner: t, style: MarkStyle::Pattern }
+    Mark {
+        inner: t,
+        style: MarkStyle::Pattern,
+    }
 }
 
 fn parse_hex_color(hex: &str) -> console::Color {
