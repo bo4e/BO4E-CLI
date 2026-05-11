@@ -1,3 +1,10 @@
+
+## 1.0.0 - 2026-05-11
+
+### Documentation
+
+- **readme**: 📄Create documentation for CLI (#124)
+
 ## 0.0.3 - 2025-07-12
 
 ### What's Changed
