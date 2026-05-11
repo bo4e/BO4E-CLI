@@ -39,3 +39,7 @@ targets = [
 ]
 pr-run-mode = "plan"
 install-path = "CARGO_HOME"
+# release.yml carries a hand-edited CHANGELOG pre-flight check (see the
+# `HAND-EDITED` markers in that file). `allow-dirty = ["ci"]` tells dist to
+# accept the modification instead of refusing every `plan` / `host` run.
+allow-dirty = ["ci"]
