@@ -73,9 +73,14 @@ impl Highlighter {
             ],
         );
 
-        // Strong: version strings like v202401.1.0-rc1 or v202401.1.0+devABC.
+        // Strong: version strings — clean, release-candidate, dirty-with-commit, and
+        // dirty-with-workdir-date forms all match as one span. The shape mirrors
+        // `bo4e_schemas::models::version::REGEX_DIRTY_VERSION`:
+        //   v<major>.<functional>.<technical>[-rc<n>][+g<commit>][.d<YYYYMMDD>]
+        // so e.g. `v202501.0.0.d20260511` (date-only) and `v202501.0.0+gabc.d20260511`
+        // (hatch-style) are both styled in full.
         self.push_rule(
-            r"(?P<version>v?\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+dev\w+)?)",
+            r"(?P<version>v?\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+g\w+)?(?:\.d\d{8})?)",
             PRIORITY_STRONG,
             &[("version", Style::new().fg(parse_hex_color(palette::MAIN)).bold().force_styling(true))],
         );
@@ -291,6 +296,60 @@ mod tests {
         let result = h.apply("Version v202401.1.0-rc1 found");
         assert!(result.contains("v202401.1.0-rc1"));
         assert!(result.contains('\x1b'));
+    }
+
+    /// Locate the matched substring, then walk back/forward over the surrounding ANSI
+    /// open/reset codes to verify the entire string is inside a single styled span.
+    fn assert_single_span_covers(rendered: &str, needle: &str) {
+        let plain_text = plain(rendered);
+        assert!(plain_text.contains(needle), "needle {needle:?} missing from {plain_text:?}");
+        // Exactly one reset, and the substring just before it must end with the needle.
+        let resets: Vec<_> = rendered.match_indices("\x1b[0m").collect();
+        assert_eq!(
+            resets.len(),
+            1,
+            "expected exactly one styled span containing {needle:?}, got: {rendered:?}"
+        );
+        let (reset_at, _) = resets[0];
+        let before_reset = &rendered[..reset_at];
+        assert!(
+            before_reset.ends_with(needle),
+            "styled span does not end with {needle:?}; before-reset was {before_reset:?}"
+        );
+    }
+
+    #[test]
+    fn test_version_dirty_with_workdir_date_is_highlighted_in_full() {
+        // `bo4e edit` writes this shape when the input had no commit suffix.
+        let h = Highlighter::default();
+        let needle = "v202501.0.0.d20260511";
+        let result = h.apply(&format!("Set default versions to {needle}"));
+        assert_single_span_covers(&result, needle);
+    }
+
+    #[test]
+    fn test_version_dirty_with_commit_and_date_is_highlighted_in_full() {
+        // hatch-style: commit + workdir date.
+        let h = Highlighter::default();
+        let needle = "v202401.0.1+gabcdef.d20240101";
+        let result = h.apply(&format!("from {needle} to today"));
+        assert_single_span_covers(&result, needle);
+    }
+
+    #[test]
+    fn test_version_dirty_with_commit_only_is_highlighted_in_full() {
+        let h = Highlighter::default();
+        let needle = "v202401.0.1+gabcdef";
+        let result = h.apply(&format!("at {needle} now"));
+        assert_single_span_covers(&result, needle);
+    }
+
+    #[test]
+    fn test_version_rc_with_commit_is_highlighted_in_full() {
+        let h = Highlighter::default();
+        let needle = "v202401.1.0-rc1+gabc";
+        let result = h.apply(&format!("release {needle} cut"));
+        assert_single_span_covers(&result, needle);
     }
 
     #[test]
