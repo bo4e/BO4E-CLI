@@ -60,6 +60,27 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+      # ---- HAND-EDITED (re-add after any `dist generate`) ----
+      # Refuse to publish a release whose CHANGELOG entry is missing — guards
+      # against tagging without first running the "Release: prepare" workflow.
+      # Skipped on pull_request runs (plan-only) so opening a PR isn't blocked.
+      - name: Verify CHANGELOG.md has a section for this tag
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ github.ref_name }}'
+          version="${tag#v}"
+          # Escape the dots so the regex matches the literal version. Other
+          # punctuation that may appear in semver (`-`, `+`) is literal already.
+          esc="${version//./\\.}"
+          if ! grep -qE "^## (\[)?${esc}(\])?([[:space:]]|$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## ${version}' section."
+            echo "::error::Run the 'Release: prepare' workflow with version='${version}', merge the resulting PR, then re-tag."
+            exit 1
+          fi
+          echo "Found CHANGELOG section for ${version}."
+      # ---- END HAND-EDIT ----
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
