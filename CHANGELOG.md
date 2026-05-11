@@ -1,9 +1,20 @@
+## 1.0.0 - 2026-05-11
+
+### Documentation
+
+- **readme**: 📄Create documentation for CLI (#124)
+
+### Features
+
+- Rust port of BO4E-CLI (#123)
+
 ## 0.0.3 - 2025-07-12
 
 ### What's Changed
 
 - fix: 🩹Fix version bump detection by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/96
-- chore: 🔊Add some debugging details for parsing errors of JSON schemas by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/97
+- chore: 🔊Add some debugging details for parsing errors of JSON schemas by @lord-haffi
+  in https://github.com/bo4e/BO4E-CLI/pull/97
 
 **Full Changelog**: https://github.com/bo4e/BO4E-CLI/compare/v0.0.2...v0.0.3
 
@@ -14,9 +25,12 @@
 - fix(readme): Fix status badges in README by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/90
 - fix(diff): Fix diff-detection for "dirty" versions by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/91
 - chore: 🔊Output if token is retrieved from GH CLI by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/93
-- feat: Adapt `Version` model to match the versions created by hatch in `BO4E-python` by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/95
-- test: Add unittest if typer command can be executed as python function by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/94
-- feat: Check for `BO4E-Schemas` releases in `bo4e repo versions` by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/92
+- feat: Adapt `Version` model to match the versions created by hatch in `BO4E-python` by @lord-haffi
+  in https://github.com/bo4e/BO4E-CLI/pull/95
+- test: Add unittest if typer command can be executed as python function by @lord-haffi
+  in https://github.com/bo4e/BO4E-CLI/pull/94
+- feat: Check for `BO4E-Schemas` releases in `bo4e repo versions` by @lord-haffi
+  in https://github.com/bo4e/BO4E-CLI/pull/92
 
 **Full Changelog**: https://github.com/bo4e/BO4E-CLI/compare/v0.0.1...v0.0.2
 
@@ -63,8 +77,10 @@
 - build(deps): bump argcomplete from 3.5.1 to 3.5.2 by @dependabot in https://github.com/bo4e/BO4E-CLI/pull/56
 - build(deps): bump all dependencies by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/72
 - build(deps): bump argcomplete from 3.5.3 to 3.6.0 by @dependabot in https://github.com/bo4e/BO4E-CLI/pull/73
-- fix(generator-python): 🩹Fix python code generator for newer BO4E versions by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/80
-- refactor(diff): Preparation - Copied diff-matrix code from BO4E-python + Implement `diff schemas` command by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/33
+- fix(generator-python): 🩹Fix python code generator for newer BO4E versions by @lord-haffi
+  in https://github.com/bo4e/BO4E-CLI/pull/80
+- refactor(diff): Preparation - Copied diff-matrix code from BO4E-python + Implement `diff schemas` command by
+  @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/33
 - chore(deps): ⬆️Bump dependencies by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/83
 - feat(diff): ✨Implement `bo4e diff matrix` command by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/84
 - fix(docs): 🩹Fix links of test badges in readme by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/85
@@ -130,8 +146,10 @@
 - build(deps): bump argcomplete from 3.5.1 to 3.5.2 by @dependabot in https://github.com/bo4e/BO4E-CLI/pull/56
 - build(deps): bump all dependencies by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/72
 - build(deps): bump argcomplete from 3.5.3 to 3.6.0 by @dependabot in https://github.com/bo4e/BO4E-CLI/pull/73
-- fix(generator-python): 🩹Fix python code generator for newer BO4E versions by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/80
-- refactor(diff): Preparation - Copied diff-matrix code from BO4E-python + Implement `diff schemas` command by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/33
+- fix(generator-python): 🩹Fix python code generator for newer BO4E versions by @lord-haffi
+  in https://github.com/bo4e/BO4E-CLI/pull/80
+- refactor(diff): Preparation - Copied diff-matrix code from BO4E-python + Implement `diff schemas` command by
+  @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/33
 - chore(deps): ⬆️Bump dependencies by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/83
 - feat(diff): ✨Implement `bo4e diff matrix` command by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/84
 - fix(docs): 🩹Fix links of test badges in readme by @lord-haffi in https://github.com/bo4e/BO4E-CLI/pull/85

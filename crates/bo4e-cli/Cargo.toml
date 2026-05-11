@@ -1,6 +1,6 @@
 [package]
 name = "bo4e-cli"
-version = "0.1.0"
+version = "1.0.0"
 description = "CLI for developers. It contains many useful features when working on using BO4E in your own projects."
 authors = ["Leon Haffmans <leon.haffmans@hochfrequenz.de>"]
 license = "MIT"
