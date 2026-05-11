@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = ["crates/bo4e-cli", "crates/bo4e-schemas", "crates/bo4e-codegen"]
+
+[workspace.package]
+edition = "2024"
+repository = "https://github.com/bo4e/BO4E-CLI"
+
+[workspace.dependencies]
+# placeholder for shared deps in later tasks
+
+# Build profile used by cargo-dist when assembling release artifacts.
+# Inherits from release and turns on LTO + single codegen unit for smaller binaries.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# cargo-dist release pipeline.
+#   * `installers` lists the user-facing install methods generated as release artifacts.
+#     We're starting with the no-PAT shape: shell installer (curl-pipe-sh),
+#     PowerShell installer (irm-pipe-iex), and a Windows MSI. Tarballs/zips for
+#     every target are emitted automatically. Homebrew tap + Scoop bucket can be
+#     added later once those repos exist.
+#   * `targets` defines the cross-compile matrix. We cover the major desktop
+#     platforms; add aarch64-unknown-linux-gnu later if ARM Linux users show up.
+#   * `pr-run-mode = "plan"` makes release.yml only *plan* on PRs (no upload),
+#     so opening a PR doesn't burn artifact storage. Uploads happen on tag push.
+#   * `install-path` chooses the binary install location for the shell/PS scripts
+#     (CARGO_HOME falls back to ~/.local/bin if CARGO_HOME isn't set).
+[workspace.metadata.dist]
+cargo-dist-version = "0.31.0"
+ci = "github"
+installers = ["shell", "powershell", "msi"]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]
+pr-run-mode = "plan"
+install-path = "CARGO_HOME"
+# release.yml carries a hand-edited CHANGELOG pre-flight check (see the
+# `HAND-EDITED` markers in that file). `allow-dirty = ["ci"]` tells dist to
+# accept the modification instead of refusing every `plan` / `host` run.
+allow-dirty = ["ci"]

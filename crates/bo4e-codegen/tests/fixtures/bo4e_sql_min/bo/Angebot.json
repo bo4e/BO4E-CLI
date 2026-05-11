@@ -1,0 +1,69 @@
+{
+  "title": "Angebot",
+  "description": "Angebot fixture exercising every SqlField variant.",
+  "additionalProperties": true,
+  "type": "object",
+  "required": ["werte", "anhaenge"],
+  "properties": {
+    "_id": {
+      "title": " Id",
+      "default": null,
+      "anyOf": [
+        { "type": "string" },
+        { "type": "null" }
+      ]
+    },
+    "_typ": {
+      "default": "ANGEBOT",
+      "anyOf": [
+        { "$ref": "../enum/Typ.json#" },
+        { "type": "null" }
+      ]
+    },
+    "adresse": {
+      "default": null,
+      "anyOf": [
+        { "$ref": "../com/Adresse.json#" },
+        { "type": "null" }
+      ]
+    },
+    "adressen": {
+      "type": "array",
+      "items": { "$ref": "../com/Adresse.json#" }
+    },
+    "angebotsnummer": {
+      "title": "Angebotsnummer",
+      "default": null,
+      "anyOf": [
+        { "type": "string" },
+        { "type": "null" }
+      ]
+    },
+    "angebotsdatum": {
+      "title": "Angebotsdatum",
+      "default": null,
+      "anyOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    },
+    "werte": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "decimal"
+      }
+    },
+    "extras": {
+      "default": null,
+      "anyOf": [
+        {},
+        { "type": "null" }
+      ]
+    },
+    "anhaenge": {
+      "type": "array",
+      "items": {}
+    }
+  }
+}

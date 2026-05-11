@@ -1,0 +1,89 @@
+# Manually-triggered workflow that prepares a release: bumps Cargo.toml
+# versions, regenerates CHANGELOG.md via git-cliff, and opens a pull request.
+# Once that PR merges, the maintainer tags the resulting commit (`v<version>`)
+# and the existing release.yml workflow takes over to build artifacts and
+# create the GitHub Release.
+
+name: Release: prepare
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (semver, no leading "v"). E.g. 0.1.0 or 0.2.0-rc1'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # git-cliff needs full history
+
+      - name: Validate version
+        run: |
+          v='${{ inputs.version }}'
+          if ! echo "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::version must be semver, got: $v"
+            exit 1
+          fi
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Bump Cargo.toml versions
+        run: |
+          set -euo pipefail
+          new='${{ inputs.version }}'
+          # Bump the binary crate; workspace member crates that publish to
+          # crates.io should ideally be in lockstep. Adjust this list as the
+          # workspace grows.
+          sed -i -E "s/^version = \"[^\"]+\"/version = \"$new\"/" crates/bo4e-cli/Cargo.toml
+
+      - name: Prepend new CHANGELOG.md section
+        run: |
+          # `--unreleased --tag VERSION` emits only the section for the new
+          # tag (built from commits since the previous tag). `--prepend FILE`
+          # inserts it at the top of the existing CHANGELOG so the historical
+          # sections stay intact. The cliff.toml has an empty template header,
+          # so there's nothing to deduplicate.
+          git-cliff --unreleased --tag "v${{ inputs.version }}" --prepend CHANGELOG.md
+
+      - name: Refresh Cargo.lock
+        run: cargo update -p bo4e-cli --precise '${{ inputs.version }}' || cargo generate-lockfile
+
+      - name: Open release PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: release/v${{ inputs.version }}
+          commit-message: "chore: release v${{ inputs.version }}"
+          title: "chore: release v${{ inputs.version }}"
+          body: |
+            Auto-generated release preparation for **v${{ inputs.version }}**.
+
+            **What's in this PR:**
+            * Bump `crates/bo4e-cli/Cargo.toml` version to `${{ inputs.version }}`.
+            * Regenerate `CHANGELOG.md` with the new section via `git-cliff`.
+            * Refresh `Cargo.lock`.
+
+            **To ship:**
+            1. Review the CHANGELOG section and tweak if anything is missing.
+            2. Merge this PR.
+            3. From the merged commit on `main`/`rust`, push the tag:
+               ```
+               git tag v${{ inputs.version }}
+               git push origin v${{ inputs.version }}
+               ```
+               That fires `release.yml`, which builds artifacts and creates the
+               GitHub Release.
+          labels: release
+          delete-branch: true

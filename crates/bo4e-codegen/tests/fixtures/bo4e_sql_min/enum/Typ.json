@@ -1,0 +1,6 @@
+{
+  "title": "Typ",
+  "type": "string",
+  "enum": ["ANGEBOT", "VERTRAG"],
+  "description": "Geschäftsobjekt-Typ."
+}

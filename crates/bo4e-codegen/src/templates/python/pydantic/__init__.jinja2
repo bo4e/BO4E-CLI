@@ -1,0 +1,11 @@
+{% for cls in classes -%}
+from .{{ cls.module_path | join('.') }} import {{ cls.name }}
+{% endfor -%}
+from .__version__ import __version__
+
+__all__ = [
+    "__version__",
+{%- for cls in classes | sort(attribute='name') %}
+    "{{ cls.name }}",
+{%- endfor %}
+]

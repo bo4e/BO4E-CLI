@@ -1,0 +1,65 @@
+use crate::cprint_normal;
+use crate::io::github::{get_token_from_github_cli, is_valid_github_token};
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+use std::str::FromStr;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Token {
+    pub token: String,
+}
+
+impl FromStr for Token {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Token::new(s.to_string())
+    }
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.token)
+    }
+}
+
+impl From<Token> for String {
+    fn from(token: Token) -> Self {
+        token.token
+    }
+}
+
+impl From<&Token> for String {
+    fn from(token: &Token) -> Self {
+        token.token.clone()
+    }
+}
+
+impl Token {
+    pub fn new(token: String) -> Result<Self, String> {
+        is_valid_github_token(&token)
+            .then(|| Token { token })
+            .ok_or_else(|| "Invalid GitHub token.".to_string())
+    }
+    pub fn from_github_cli() -> Result<Self, String> {
+        get_token_from_github_cli()
+            .map(|token| Token { token })
+            .ok_or_else(|| "Could not retrieve GitHub token from GitHub CLI.".to_string())
+    }
+}
+
+pub fn get_token_as_string(token: &Option<Token>) -> Option<String> {
+    if let Some(t) = token {
+        cprint_normal!("Using GitHub Access Token for authentication.");
+        Some(t.into())
+    } else if let Ok(t) = Token::from_github_cli() {
+        cprint_normal!("Using GitHub Access Token from GitHub CLI for authentication.");
+        Some(t.into())
+    } else {
+        cprint_normal!(
+            "No GitHub Access Token provided. \
+             This may lead to rate limiting issues if you run this command multiple times."
+        );
+        None
+    }
+}

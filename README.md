@@ -1,38 +1,97 @@
 # BO4E-CLI
 
-![Unittests status badge](https://github.com/bo4e/BO4E-CLI/actions/workflows/unittests.yml/badge.svg?branch=main)
-![Coverage status badge](https://github.com/bo4e/BO4E-CLI/actions/workflows/coverage.yml/badge.svg?branch=main)
-![Linting status badge](https://github.com/bo4e/BO4E-CLI/actions/workflows/pythonlint.yml/badge.svg?branch=main)
-![Black status badge](https://github.com/bo4e/BO4E-CLI/actions/workflows/formatting.yml/badge.svg?branch=main)
-
-This is a command line interface (CLI) for developers working or wanting to work with BO4E models.
-It contains several features which can make your life easier when working with BO4E.
-
-> It uses the [JSON-Schemas](https://github.com/bo4e/BO4E-Schemas) of the BO4E standard as source of truth.
+A command-line tool for developers who work with [BO4E](https://www.bo4e.de/) models.
+It builds on the [BO4E-Schemas](https://github.com/bo4e/BO4E-Schemas) repository as
+single source of truth and helps you fetch, customise, compare and generate code from
+those schemas. It ships as a small self-contained binary with no runtime dependencies.
 
 ## Features
 
-- Pull JSON schemas of specific versions (or latest) conveniently from GitHub and replace the online
-  references with relative paths.
-- Edit JSON schemas using a static config file to customize the BO4E models to your usecase.
-- Generate the models in one of the [supported languages](#supported-languages).
-- Compare BO4E schemas of different versions. Create a machine-readable diff-file in json-format.
-- Create a difference matrix comparing multiple versions consecutively by using multiple diff-files.
-- Get information if a diff between two versions is functional or technical.
+- **Pull** JSON schemas of a specific version (or `latest`) from GitHub and replace the
+  online `$ref`s with relative paths so the schemas work offline.
+- **Edit** schemas via a static JSON config file — add fields, add models, add enum
+  values, mark fields as non-nullable — to tailor the BO4E models to your use case.
+- **Generate** code from the (edited) schemas. Currently supports
+  `python-pydantic` and `python-sql-model` outputs; further generators can be added.
+- **Diff** two schema directories and emit a machine-readable JSON diff.
+- **Compatibility matrix** across a chain of diff files for quick visual review.
+- **Classify** a version bump as technical / functional / major based on the diff.
+- **Repo versions** — list version tags of the BO4E-python repository. Mostly used
+  by CI.
 
 ## Install
 
-You need to have Python installed. Tested are Python versions `>3.10` but it may work for older versions too.
+Pre-built binaries are published for **macOS**, **Linux** and **Windows** on every tag
+of the [Releases page](https://github.com/bo4e/BO4E-CLI/releases/latest). Pick whichever
+channel is most convenient:
+
+### Linux / macOS — shell installer
 
 ```bash
-pip install bo4e-cli
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/bo4e/BO4E-CLI/releases/latest/download/bo4e-cli-installer.sh | sh
 ```
 
-Take a look at the CLI help:
+The script installs the binary under `~/.local/bin` (or `$CARGO_HOME/bin` if set) and
+records an uninstall hook beside it.
+
+### Windows — PowerShell installer
+
+```powershell
+irm https://github.com/bo4e/BO4E-CLI/releases/latest/download/bo4e-cli-installer.ps1 | iex
+```
+
+### Windows — MSI installer
+
+Download the latest `bo4e-cli-x86_64-pc-windows-msvc.msi` from the
+[Releases page](https://github.com/bo4e/BO4E-CLI/releases/latest) and double-click it.
+The CLI then appears under *Apps & Features*.
+
+### Manual download
+
+Each release also ships raw tarballs (`.tar.xz` / `.zip`) for every supported target —
+useful if you want to drop the binary somewhere yourself.
+
+### From source
 
 ```bash
+# compile from source:
+cargo install bo4e-cli
+# or fetch a pre-built binary without compiling:
+cargo binstall bo4e-cli
+```
+
+Verify the install:
+
+```bash
+bo4e --version
 bo4e --help
 ```
+
+> Homebrew tap and Scoop bucket distribution may be added later; until then please use
+> one of the channels above.
+
+### Slim install with only the generators you need
+
+When installing from source you can pick a single generator instead of all of them:
+
+```
+cargo install bo4e-cli --no-default-features --features python-pydantic
+cargo install bo4e-cli --no-default-features --features python-sql-model
+```
+
+Available selectors: `python` (umbrella for both), `python-pydantic`, `python-sql-model`.
+
+## Uninstall
+
+The binary is removable in one step from every channel it shipped with:
+
+| Installed via                 | Uninstall                                                                                                       |
+|-------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| Linux / macOS shell installer | run the `uninstall` script that the installer placed next to the binary, or simply `rm $(which bo4e)`           |
+| Windows PowerShell installer  | re-run the installer URL with `-Uninstall`, or delete `bo4e.exe` from the install prefix shown by the installer |
+| Windows MSI                   | *Apps & Features* → *bo4e-cli* → *Uninstall*                                                                    |
+| Manual download               | delete the binary you copied out of the tarball                                                                 |
+| `cargo install` / `binstall`  | `cargo uninstall bo4e-cli`                                                                                      |
 
 ## Commands
 
@@ -41,8 +100,12 @@ mind that I won't explain every command line option. In this regard, please refe
 If you are missing something in the following explanation and/or the help text, feel free
 to [create an issue](https://github.com/bo4e/BO4E-CLI/issues/new).
 
-> Note: If you want to have a more verbose output, you have to place the option `-v` *before* the subcommand.
-> I.e. you would have to write `bo4e -v pull -o ./bo4e_latest` or `bo4e -v diff version-bump ./diff.json`.
+> Note: The CLI has 3 output modes: normal, quiet and verbose. The normal mode is the default one and should be
+> sufficient for most use cases. The quiet mode is useful if you want to use the CLI in a script and just want to
+> check the exit code. The verbose mode is useful if you want to see more detailed information about the execution
+> of the CLI. You can switch between these modes using the `--quiet` and `--verbose` flags. If you want to see the
+> help text of a specific command, you can use the `--help` flag after the command. For example, `bo4e pull --help`
+> will show you the help text for the `pull` command.
 
 ## `bo4e pull`
 
@@ -66,15 +129,18 @@ with relative references.
 > If true, the CLI will receive a temporary token by executing `gh auth token`.
 >
 > Also note that you don't need any special permissions behind this PAT. The GitHub API will increase the rate limit
-> if the provided PAT is valid. If you are more interested in this, please refer to
->
-the [GitHub documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28)
+> if the provided PAT is valid. If you are more interested in this, please refer to the
+> [GitHub documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28)
 
-Example:
+Examples:
 
 ```bash
-bo4e pull -o ./bo4e_schemas_latest
+bo4e pull -o ./bo4e_schemas_latest                  # latest release
+bo4e pull -o ./bo4e_schemas_v202501 -t v202501.0.0  # a specific tag
 ```
+
+Other `pull` flags: `--no-update-refs` (keep online `$ref` URLs as-is) and
+`--no-clear-output` (skip wiping the output dir).
 
 ## `bo4e edit`
 
@@ -207,16 +273,22 @@ Example of `./models/bo/Geschaeftspartner_extension.json`:
 ]
 ```
 
-### Set Default Version
+### Default `_version` stamping
 
-All BO4E-Schemas contain a field `_version` which defines the used BO4E version. All schemas which are pulled
-from the repository [BO4E-Schemas](https://github.com/bo4e/BO4E-Schemas) will have the `_version` fields default value
-set to the respective version.
-But if you introduce additional models, it might be a bit cumbersome to set the `_version` field to the correct
-version each time you upgrade the BO4E version.
+All BO4E-Schemas contain a field `_version` which holds the BO4E version. The schemas
+pulled from [BO4E-Schemas](https://github.com/bo4e/BO4E-Schemas) carry that as a
+default; for additional models you define yourself this would otherwise be tedious to
+keep in sync across version upgrades.
 
-To solve this problem, you can use the `--set-default-version` flag. It will automatically set or override the default
-value for `_version` fields with the version inside the `.version` file.
+`bo4e edit` therefore **rewrites the `_version` default on every schema to match the
+`.version` file**. Pass `--no-default-version` to opt out.
+
+### Dirty-workdir suffix on the output version
+
+Edited output is "downstream" of the upstream BO4E release, so `bo4e edit` also brands
+the output version with today's date as a `.d<YYYYMMDD>` suffix (e.g.
+`v202501.0.0.d20260511`). This is on by default so the edited schemas are visibly
+distinguishable from the unmodified release; pass `--no-dirty-version` to disable.
 
 Example:
 
@@ -224,25 +296,32 @@ Example:
 bo4e edit -i ./bo4e_schemas_latest -o ./bo4e_schemas_edited -c ./my_config_file.json
 ```
 
+Other `edit` flags: `--no-clear-output` (skip wiping the output dir before writing).
+
 ## `bo4e generate`
 
-This is a code-generation command. It creates all BO4E-models from the input JSON-schemas for a supported
-output-type.
+Generate code from BO4E JSON schemas.
 
-<a name="supported-languages"></a>Currently supported output types are:
-
-- `python-pydantic-v1`: Programming language Python. Class definitions are
-  in [pydantic](https://github.com/pydantic/pydantic) v1 style.
-- `python-pydantic-v2`: Programming language Python. Class definitions are
-  in [pydantic](https://github.com/pydantic/pydantic) v2 style.
-- `python-sql-model`: Programming language Python. Class definitions are
-  in [SQLModel](https://github.com/fastapi/sqlmodel) style.
+```
+bo4e generate -i <input-dir> -o <output-dir> -t <output-type> [--no-clear-output] [--templates-dir <dir>]
+```
 
 Example:
 
 ```bash
-bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic-v2
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_sql -t python-sql-model
 ```
+
+<a name="supported-languages"></a>Flags:
+
+| Flag                | Short | Description                                                         |
+|---------------------|-------|---------------------------------------------------------------------|
+| `--input`           | `-i`  | Directory containing input JSON schemas.                            |
+| `--output`          | `-o`  | Directory to write generated code to.                               |
+| `--output-type`     | `-t`  | One of `python-pydantic`, `python-sql-model`.                       |
+| `--no-clear-output` |       | Skip clearing the output directory before writing (default: clear). |
+| `--templates-dir`   |       | Override embedded templates with a directory of Jinja templates.    |
 
 ## `bo4e diff schemas`
 
@@ -257,12 +336,13 @@ The output file will also contain information about the compared versions.
   "old_schemas": {
     "schemas": [
       {
-        "name": "Kundentyp",
         "module": [
           "enum",
           "Kundentyp"
         ],
-        "src": "bo4e_latest\\enum\\Kundentyp.json"
+        "schema": {
+          // ...
+        }
       }
       // ...
     ],
@@ -278,12 +358,13 @@ The output file will also contain information about the compared versions.
   "new_schemas": {
     "schemas": [
       {
-        "name": "Tarif",
         "module": [
           "bo",
           "Tarif"
         ],
-        "src": "bo4e_latest\\bo\\Tarif.json"
+        "schema": {
+          // ...
+        }
       }
       // ...
     ],
@@ -395,23 +476,95 @@ bo4e diff matrix diff_3.json diff_2.json diff_1.json -o matrix.csv -et csv
 
 ## `bo4e diff version-bump`
 
-Given a diff file this command will decide if the list of changes corresponds to a functional or just technical change.
-It will then take a look at the versions inside the file and will then print if the detected version bump is valid
-or not. Alternatively, you can execute this command in `--quiet` mode in which case it will error with exit code `1`
-if the version bump is invalid.
+Given a diff file this command decides whether the list of changes corresponds to a
+functional or just technical change, compares that to the version numbers in the diff
+file, and reports whether the version bump is consistent.
+
+**Exit code:** in `--quiet` mode the process exits with `1` on an invalid bump, so it
+plugs straight into CI checks. In normal / verbose mode the failure is printed to
+stderr but the process still exits `0` — interactive runs and shell pipelines that
+don't care about the bump are not poisoned.
+
+In `--verbose` mode the command additionally prints which bump kind it inferred from
+the version numbers vs. from the list of changes, and notes when a major bump was
+detected but suppressed via `--no-major`.
 
 Example:
 
 ```bash
 bo4e diff version-bump ./diff.json
+bo4e diff version-bump ./diff.json --no-major   # reject major bumps
+bo4e --quiet diff version-bump ./diff.json      # CI: exit code only
 ```
 
-## How to use this Repository on Your Machine
+## `bo4e repo versions`
 
-Follow the instructions in
-our [Python template repository](https://github.com/Hochfrequenz/python_template_repository#how-to-use-this-repository-on-your-machine).
+Lists the recent BO4E-python version tags reachable from a git reference, in
+descending chronological order. Run it inside a clone of
+[bo4e/BO4E-python](https://github.com/bo4e/BO4E-python) (technically any repo with
+the same versioning scheme works).
 
-## Contribute
+Flags:
 
-You are very welcome to contribute to this repository by opening a pull request against the main branch or by creating
-an issue.
+| Flag                        | Short | Description                                                                                           |
+|-----------------------------|-------|-------------------------------------------------------------------------------------------------------|
+| `-n`                        |       | Number of versions to retrieve. `0` (default) returns all versions since `v202401.0.0`.               |
+| `--ref`                     | `-r`  | Tag / branch / commit to start from (default: `main`). For a tag the tag itself is excluded.          |
+| `--exclude-candidates`      | `-c`  | Skip release candidates.                                                                              |
+| `--exclude-technical-bumps` | `-t`  | Collapse technical-only versions to the latest one in each functional/major release.                  |
+| `--show-full-commit-sha`    | `-s`  | Show full commit SHA instead of the 6-character prefix.                                               |
+| `--no-validate-releases`    |       | Skip checking that each tag has a published GitHub release (faster, fully offline).                   |
+| `--token`                   |       | GitHub PAT for the release-validation step (falls back to `$GITHUB_ACCESS_TOKEN` or `gh auth token`). |
+
+Under `--quiet` only the version strings are printed (one per line) — handy for piping
+into `bo4e pull` or `bo4e diff`. In normal mode a styled table with commit SHA and
+date is rendered.
+
+Example:
+
+```bash
+bo4e repo versions -n 5 --exclude-candidates --exclude-technical-bumps
+```
+
+## Contributing
+
+This repo is a Cargo workspace with three crates:
+
+- `crates/bo4e-cli` — the `bo4e` binary, command dispatch, console, IO.
+- `crates/bo4e-schemas` — typed JSON-Schema model and version handling.
+- `crates/bo4e-codegen` — pluggable code generators (Python / pydantic, SQL model).
+
+Common commands:
+
+```bash
+cargo build --workspace
+cargo test  --workspace
+cargo clippy --workspace -- -D warnings
+cargo fmt --all
+```
+
+Issues and pull requests are very welcome — please open them against the main
+branch.
+
+Conventional Commits (`feat(...): …`, `fix(...): …`, `docs(...): …`, etc.) are
+required because the `CHANGELOG.md` is auto-generated from them. Commits whose
+type is not user-facing (`chore`, `ci`, `build`, `style`, `test`) are skipped.
+
+### Cutting a release
+
+1. Go to *Actions → Release: prepare → Run workflow* and enter the next semver
+   version (e.g. `0.2.0`).
+2. The workflow bumps `Cargo.toml`, regenerates `CHANGELOG.md` from the commits
+   since the previous tag, and opens a pull request.
+3. Review the CHANGELOG diff, tweak any wording, then merge the PR.
+4. From the merged commit, push the tag:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+   That fires the release pipeline, which cross-compiles for macOS / Linux /
+   Windows and publishes a GitHub Release with all installers and tarballs
+   attached. The CHANGELOG section for that version is embedded in the release
+   notes automatically.
