@@ -4,7 +4,6 @@ members = ["crates/bo4e-cli", "crates/bo4e-schemas", "crates/bo4e-codegen"]
 
 [workspace.package]
 edition = "2024"
-license = "MIT"
 repository = "https://github.com/bo4e/BO4E-CLI"
 
 [workspace.dependencies]

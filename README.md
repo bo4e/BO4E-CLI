@@ -16,8 +16,8 @@ those schemas. It ships as a small self-contained binary with no runtime depende
 - **Diff** two schema directories and emit a machine-readable JSON diff.
 - **Compatibility matrix** across a chain of diff files for quick visual review.
 - **Classify** a version bump as technical / functional / major based on the diff.
-- **Repo versions** — list version tags of the BO4E-python repository, useful when
-  picking a version to pull or to diff against.
+- **Repo versions** — list version tags of the BO4E-python repository. Mostly used
+  by CI.
 
 ## Install
 
@@ -70,6 +70,17 @@ bo4e --help
 > Homebrew tap and Scoop bucket distribution may be added later; until then please use
 > one of the channels above.
 
+### Slim install with only the generators you need
+
+When installing from source you can pick a single generator instead of all of them:
+
+```
+cargo install bo4e-cli --no-default-features --features python-pydantic
+cargo install bo4e-cli --no-default-features --features python-sql-model
+```
+
+Available selectors: `python` (umbrella for both), `python-pydantic`, `python-sql-model`.
+
 ## Uninstall
 
 The binary is removable in one step from every channel it shipped with:
@@ -118,9 +129,8 @@ with relative references.
 > If true, the CLI will receive a temporary token by executing `gh auth token`.
 >
 > Also note that you don't need any special permissions behind this PAT. The GitHub API will increase the rate limit
-> if the provided PAT is valid. If you are more interested in this, please refer to
->
-the [GitHub documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28)
+> if the provided PAT is valid. If you are more interested in this, please refer to the
+> [GitHub documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28)
 
 Examples:
 
@@ -290,7 +300,7 @@ Other `edit` flags: `--no-clear-output` (skip wiping the output dir before writi
 
 ## `bo4e generate`
 
-Generate Python code from BO4E JSON schemas.
+Generate code from BO4E JSON schemas.
 
 ```
 bo4e generate -i <input-dir> -o <output-dir> -t <output-type> [--no-clear-output] [--templates-dir <dir>]
@@ -305,24 +315,13 @@ bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_sql -t python-sql-model
 
 <a name="supported-languages"></a>Flags:
 
-| Flag                | Short | Description                                                            |
-|---------------------|-------|------------------------------------------------------------------------|
-| `--input`           | `-i`  | Directory containing input JSON schemas.                               |
-| `--output`          | `-o`  | Directory to write generated code to.                                  |
-| `--output-type`     | `-t`  | One of `python-pydantic`, `python-sql-model`.                          |
-| `--no-clear-output` |       | Skip clearing the output directory before writing (default: clear).    |
-| `--templates-dir`   |       | Override embedded templates with a directory of Jinja templates.       |
-
-### Slim install with only the generators you need
-
-When installing from source you can pick a single generator instead of all of them:
-
-```
-cargo install bo4e-cli --no-default-features --features python-pydantic
-cargo install bo4e-cli --no-default-features --features python-sql-model
-```
-
-Available selectors: `python` (umbrella for both), `python-pydantic`, `python-sql-model`.
+| Flag                | Short | Description                                                         |
+|---------------------|-------|---------------------------------------------------------------------|
+| `--input`           | `-i`  | Directory containing input JSON schemas.                            |
+| `--output`          | `-o`  | Directory to write generated code to.                               |
+| `--output-type`     | `-t`  | One of `python-pydantic`, `python-sql-model`.                       |
+| `--no-clear-output` |       | Skip clearing the output directory before writing (default: clear). |
+| `--templates-dir`   |       | Override embedded templates with a directory of Jinja templates.    |
 
 ## `bo4e diff schemas`
 
@@ -337,12 +336,13 @@ The output file will also contain information about the compared versions.
   "old_schemas": {
     "schemas": [
       {
-        "name": "Kundentyp",
         "module": [
           "enum",
           "Kundentyp"
         ],
-        "src": "bo4e_latest\\enum\\Kundentyp.json"
+        "schema": {
+          // ...
+        }
       }
       // ...
     ],
@@ -358,12 +358,13 @@ The output file will also contain information about the compared versions.
   "new_schemas": {
     "schemas": [
       {
-        "name": "Tarif",
         "module": [
           "bo",
           "Tarif"
         ],
-        "src": "bo4e_latest\\bo\\Tarif.json"
+        "schema": {
+          // ...
+        }
       }
       // ...
     ],
@@ -505,15 +506,15 @@ the same versioning scheme works).
 
 Flags:
 
-| Flag                       | Short | Description                                                                                             |
-|----------------------------|-------|---------------------------------------------------------------------------------------------------------|
-| `-n`                       |       | Number of versions to retrieve. `0` (default) returns all versions since `v202401.0.0`.                  |
-| `--ref`                    | `-r`  | Tag / branch / commit to start from (default: `main`). For a tag the tag itself is excluded.            |
-| `--exclude-candidates`     | `-c`  | Skip release candidates.                                                                                |
-| `--exclude-technical-bumps`| `-t`  | Collapse technical-only versions to the latest one in each functional/major release.                    |
-| `--show-full-commit-sha`   | `-s`  | Show full commit SHA instead of the 6-character prefix.                                                 |
-| `--no-validate-releases`   |       | Skip checking that each tag has a published GitHub release (faster, fully offline).                     |
-| `--token`                  |       | GitHub PAT for the release-validation step (falls back to `$GITHUB_ACCESS_TOKEN` or `gh auth token`).   |
+| Flag                        | Short | Description                                                                                           |
+|-----------------------------|-------|-------------------------------------------------------------------------------------------------------|
+| `-n`                        |       | Number of versions to retrieve. `0` (default) returns all versions since `v202401.0.0`.               |
+| `--ref`                     | `-r`  | Tag / branch / commit to start from (default: `main`). For a tag the tag itself is excluded.          |
+| `--exclude-candidates`      | `-c`  | Skip release candidates.                                                                              |
+| `--exclude-technical-bumps` | `-t`  | Collapse technical-only versions to the latest one in each functional/major release.                  |
+| `--show-full-commit-sha`    | `-s`  | Show full commit SHA instead of the 6-character prefix.                                               |
+| `--no-validate-releases`    |       | Skip checking that each tag has a published GitHub release (faster, fully offline).                   |
+| `--token`                   |       | GitHub PAT for the release-validation step (falls back to `$GITHUB_ACCESS_TOKEN` or `gh auth token`). |
 
 Under `--quiet` only the version strings are printed (one per line) — handy for piping
 into `bo4e pull` or `bo4e diff`. In normal mode a styled table with commit SHA and
@@ -542,12 +543,5 @@ cargo clippy --workspace -- -D warnings
 cargo fmt --all
 ```
 
-Issues and pull requests are very welcome — please open them against the active
-development branch.
-
-## License
-
-MIT. The SPDX identifier is declared on the Cargo manifests (`license = "MIT"`).
-
-You are very welcome to contribute to this repository by opening a pull request against the main branch or by creating
-an issue.
+Issues and pull requests are very welcome — please open them against the main
+branch.
