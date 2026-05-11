@@ -1,15 +1,18 @@
 use crate::cli::base::Executable;
+use crate::console::console::{CONSOLE, Level};
 use crate::console::spinner;
-use crate::cprint_normal;
 use crate::diff::diff::diff_schemas;
 use crate::diff::matrix::{build_chain, create_compatibility_matrix};
 use crate::diff::version::check_version_bump;
 use crate::io::changes::{read_changes_from_diff_files, write_changes};
 use crate::io::matrix::{write_compatibility_matrix_csv, write_compatibility_matrix_json};
+use crate::{cerror, cprint_normal, cprint_verbose};
 use bo4e_schemas::io::schemas::read_schemas;
 use clap::{Args, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
+/// Command group for comparing JSON-schemas of different BO4E versions.
+/// See 'diff --help' for more information.
 #[derive(Args)]
 pub struct Diff {
     #[command(subcommand)]
@@ -23,29 +26,48 @@ pub enum DiffSubcommand {
     VersionBump(VersionBumpArgs),
 }
 
+/// Compare the JSON-schemas in the two input directories and save the differences to the output
+/// file (JSON).
+///
+/// The output file will contain the differences in JSON-format. It will also contain information
+/// about the compared versions.
 #[derive(Args)]
 pub struct DiffSchemasArgs {
-    /// Baseline directory of JSON schemas (the "old" side).
     pub input_dir_base: PathBuf,
-    /// Directory of JSON schemas to compare against the baseline (the "new" side).
     pub input_dir_comp: PathBuf,
-    /// Output diff JSON file.
+    /// The JSON-file to save the differences to.
     #[arg(short = 'o', long = "output", required = true)]
     pub output_file: PathBuf,
 }
 
+/// Create a difference matrix from the diff-files created by the 'diff schemas' command.
+///
+/// The data structure models a table where the columns are a list of ascending versions where
+/// each column is a comparison to the version before. This means that the very first version
+/// will not appear in the matrix as text. The rows will represent each model such that each
+/// cell indicates how the model has changed between the two versions.
 #[derive(Args)]
 pub struct DiffMatrixArgs {
-    /// One or more diff JSON files. Order does not matter.
+    /// An unordered list of Diff-files created by the 'diff schemas' command. At least one file
+    /// must be provided.
+    ///
+    /// The versions inside these diff files must be consecutive and ascending. I.e. you have to
+    /// be able to create an ascending series of versions from the versions in the diff files.
+    /// E.g.:
+    ///
+    /// |      file 3      | -> |      file 1      | -> |      file 2      |
+    ///
+    /// | v1.0.0 -> v1.0.2 |    | v1.0.2 -> v1.3.0 |    | v1.3.0 -> v2.0.0 |
     #[arg(required = true)]
     pub input_diff_files: Vec<PathBuf>,
-    /// Output file path (CSV or JSON).
+    /// The file to save the difference matrix to.
     #[arg(short = 'o', long = "output", required = true)]
     pub output_file: PathBuf,
-    /// Output format.
+    /// The type of the output file.
     #[arg(short = 't', long = "output-type", default_value = "csv")]
     pub output_type: MatrixOutputType,
-    /// Use emoji symbols instead of plain-text labels.
+    /// Whether to use emojis in the output file. If disabled, text will be used instead to
+    /// indicate the type of change.
     #[arg(long = "use-emotes", default_value_t = false)]
     pub use_emotes: bool,
 }
@@ -56,9 +78,13 @@ pub enum MatrixOutputType {
     Csv,
 }
 
+/// Determine the release bump type according to a diff file created by 'diff schemas'.
+///
+/// Prints 'valid' to stdout if the version bump is valid. Otherwise, a descriptive error
+/// message is printed. The bump type will be determined using the list of changes and compared
+/// to the corresponding versions inside the diff file.
 #[derive(Args)]
 pub struct VersionBumpArgs {
-    /// Diff JSON file to validate.
     pub diff_file: PathBuf,
     /// Reject major version bumps.
     #[arg(long = "no-major", action = clap::ArgAction::SetFalse, default_value_t = true)]
@@ -97,28 +123,82 @@ fn run_schemas(a: &DiffSchemasArgs) -> Result<(), String> {
 }
 
 fn run_matrix(a: &DiffMatrixArgs) -> Result<(), String> {
-    let (chain, matrix) = {
-        let _spin = spinner::squish("Creating compatibility matrix...");
-        let diffs = read_changes_from_diff_files(&a.input_diff_files)?;
-        let chain = build_chain(diffs)?;
-        let matrix = create_compatibility_matrix(&chain, a.use_emotes);
-        (chain, matrix)
-    };
-    let path: Vec<String> = chain.nodes.iter().map(|n| n.version_key.clone()).collect();
-    match a.output_type {
-        MatrixOutputType::Csv => write_compatibility_matrix_csv(&a.output_file, &matrix, &path)?,
-        MatrixOutputType::Json => write_compatibility_matrix_json(&a.output_file, &matrix)?,
+    cprint_verbose!(
+        "Received {} diff file(s) in input order:",
+        a.input_diff_files.len()
+    );
+    for (idx, p) in a.input_diff_files.iter().enumerate() {
+        cprint_verbose!("  [{}] {}", idx, p.display());
     }
-    cprint_normal!("Saved compatibility matrix to: {}", a.output_file.display());
+    let (chain, diff_versions) = {
+        let _spin = spinner::squish("Reading changes from diff files...");
+        let diffs = read_changes_from_diff_files(&a.input_diff_files)?;
+        let parsed: Vec<(String, String)> = diffs
+            .iter()
+            .map(|d| (d.old_version().to_string(), d.new_version().to_string()))
+            .collect();
+        let chain = build_chain(diffs)?;
+        (chain, parsed)
+    };
+    cprint_normal!("Read changes from diff files.");
+    cprint_verbose!("Parsed diff files (input order, before chaining):");
+    for (idx, (old, new)) in diff_versions.iter().enumerate() {
+        cprint_verbose!("  [{}] {} -> {}", idx, old, new);
+    }
+    cprint_verbose!(
+        "Detected version chain ({} version(s), {} edge(s)):",
+        chain.nodes.len(),
+        chain.edges.len()
+    );
+    for (idx, node) in chain.nodes.iter().enumerate() {
+        cprint_verbose!("  [{}] {}", idx, node.version_key);
+    }
+    let matrix = {
+        let _spin = spinner::squish("Creating compatibility matrix...");
+        create_compatibility_matrix(&chain, a.use_emotes)
+    };
+    cprint_normal!("Created compatibility matrix.");
+
+    let path: Vec<String> = chain.nodes.iter().map(|n| n.version_key.clone()).collect();
+    {
+        let _spin = spinner::squish(format!(
+            "Saving compatibility matrix to file {} ...",
+            a.output_file.display()
+        ));
+        match a.output_type {
+            MatrixOutputType::Csv => write_compatibility_matrix_csv(&a.output_file, &matrix, &path)?,
+            MatrixOutputType::Json => write_compatibility_matrix_json(&a.output_file, &matrix)?,
+        }
+    }
+    cprint_normal!("Saved compatibility matrix to file {}.", a.output_file.display());
     Ok(())
 }
 
 fn run_version_bump(a: &VersionBumpArgs) -> Result<(), String> {
     let mut diffs = read_changes_from_diff_files(std::slice::from_ref(&a.diff_file))?;
     let changes = diffs.pop().ok_or("Empty diff file list")?;
-    let kind = check_version_bump(&changes, a.major_bump_allowed)?;
-    cprint_normal!("Valid {:?} version bump.", kind);
-    Ok(())
+    match check_version_bump(&changes, a.major_bump_allowed) {
+        Ok(kind) => {
+            cprint_normal!("The version bump is valid ({} bump).", kind);
+            Ok(())
+        }
+        Err(e) => {
+            // Exit code is only nonzero in --quiet mode: non-quiet runs surface the failure on
+            // stderr (always shown) but still exit 0 so interactive callers and shell pipelines
+            // that don't care about the bump outcome are not poisoned. Quiet mode is the
+            // scripted/CI path: there the exit code is the signal, so bubble the error up.
+            let quiet = !CONSOLE
+                .get()
+                .expect("CONSOLE not initialized")
+                .would_emit(Level::Normal);
+            if quiet {
+                Err(e)
+            } else {
+                cerror!("{e}");
+                Ok(())
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -160,7 +240,11 @@ mod tests {
     }
 
     #[test]
-    fn test_run_version_bump_errors_on_dirty_baseline() {
+    fn test_run_version_bump_swallows_error_in_non_quiet_mode() {
+        // In non-quiet mode the failure goes to stderr (via cerror!) but the process exits 0
+        // — see `run_version_bump`. Tests share a single CONSOLE (OnceLock) initialised to
+        // Normal, so the quiet-path Err branch is exercised via the lower-level
+        // `check_version_bump` tests instead.
         ensure_console();
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("d.json");
@@ -169,7 +253,7 @@ mod tests {
             diff_file: p,
             major_bump_allowed: true,
         };
-        assert!(run_version_bump(&args).is_err());
+        assert!(run_version_bump(&args).is_ok());
     }
 
     #[test]

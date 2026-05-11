@@ -1,12 +1,23 @@
 use crate::cprint_verbose;
 use crate::models::changes::Changes;
 use bo4e_schemas::models::version::Version;
+use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VersionBumpKind {
     Technical,
     Functional,
     Major,
+}
+
+impl Display for VersionBumpKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VersionBumpKind::Technical => write!(f, "technical"),
+            VersionBumpKind::Functional => write!(f, "functional"),
+            VersionBumpKind::Major => write!(f, "major"),
+        }
+    }
 }
 
 pub fn check_version_bump(
@@ -26,28 +37,50 @@ pub fn check_version_bump(
         return Err("The new version must be newer than the old version.".into());
     }
 
-    if v_new.bumped_major(&v_old) {
+    // Bump kind as implied by the version numbers themselves.
+    let version_bump_kind = if v_new.bumped_major(&v_old) {
+        VersionBumpKind::Major
+    } else if v_new.bumped_functional(&v_old) {
+        VersionBumpKind::Functional
+    } else {
+        VersionBumpKind::Technical
+    };
+    cprint_verbose!(
+        "Detected {} bump from comparing versions ({} -> {}).",
+        version_bump_kind,
+        v_old,
+        v_new
+    );
+
+    // Bump kind as implied by the list of changes (any change ⇒ functional, none ⇒ technical).
+    let has_functional_changes = !changes.changes.is_empty();
+    let changes_bump_kind = if has_functional_changes {
+        VersionBumpKind::Functional
+    } else {
+        VersionBumpKind::Technical
+    };
+    cprint_verbose!(
+        "Detected {} bump from list of changes ({} change(s) found).",
+        changes_bump_kind,
+        changes.changes.len()
+    );
+
+    if version_bump_kind == VersionBumpKind::Major {
         if !major_bump_allowed {
+            cprint_verbose!("Major version bump detected but disallowed by --no-major flag.");
             return Err("Major version bump detected. Major bump is not allowed.".into());
         }
         return Ok(VersionBumpKind::Major);
     }
 
-    let functional = !changes.changes.is_empty();
-    let is_functional_bump = v_new.bumped_functional(&v_old);
-
-    if functional && !is_functional_bump {
+    if has_functional_changes && version_bump_kind == VersionBumpKind::Technical {
         return Err("Technical bump detected but functional changes found.".into());
     }
-    if !functional && is_functional_bump {
+    if !has_functional_changes && version_bump_kind == VersionBumpKind::Functional {
         return Err("Functional bump detected but no functional changes found.".into());
     }
 
-    Ok(if functional {
-        VersionBumpKind::Functional
-    } else {
-        VersionBumpKind::Technical
-    })
+    Ok(version_bump_kind)
 }
 
 #[cfg(test)]

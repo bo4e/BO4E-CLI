@@ -1,8 +1,8 @@
 use crate::cli::base::Executable;
 use crate::console::console::CONSOLE;
+use crate::console::highlighter::SchemaModule;
 use crate::edit::add::{transform_all_additional_enum_items, transform_all_additional_fields};
 use crate::edit::non_nullable::transform_all_non_nullable_fields;
-use crate::edit::update_refs::update_references_all;
 use crate::io::cleanse::clear_dir_if_needed;
 use crate::io::config::{get_additional_schemas, load_config};
 use bo4e_schemas::io::schemas::{read_schemas, write_schemas};
@@ -13,9 +13,30 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-/// Edit JSON-schemas in the input directory and save results to the output directory.
+fn classify_schema_module(module: &[String]) -> SchemaModule {
+    match module.first().map(String::as_str) {
+        Some("bo") => SchemaModule::Bo,
+        Some("com") => SchemaModule::Com,
+        Some("enum") => SchemaModule::Enum,
+        _ => SchemaModule::Other,
+    }
+}
+
+fn classify_all(schemas: &bo4e_schemas::models::schema_meta::Schemas) -> Vec<(SchemaModule, String)> {
+    schemas
+        .schemas()
+        .iter()
+        .map(|s| {
+            let s = s.borrow();
+            (classify_schema_module(s.module()), s.name().to_string())
+        })
+        .collect()
+}
+
+/// Edit JSON-schemas in the input directory and save the results to the output directory.
 ///
-/// If no configuration file is provided, schemas are copied unchanged (with references updated).
+/// The schemas in the input directory won't be changed. If no configuration file is provided,
+/// schemas are copied unchanged.
 #[derive(Args)]
 pub struct Edit {
     /// The directory to read the JSON-schemas from.
@@ -26,17 +47,23 @@ pub struct Edit {
     #[arg(short = 'o', long = "output", required = true, value_name = "OUTPUT_DIRECTORY")]
     pub output_dir: PathBuf,
 
-    /// The configuration file for editing the schemas.
+    /// The configuration file to use for editing the JSON-schemas.
     #[arg(short = 'c', long = "config", value_name = "CONFIG_FILE")]
     pub config_file: Option<PathBuf>,
 
-    /// Skip automatically setting the `_version` field default.
+    /// Don't set the default value of the `_version` field of all schemas to the BO4E version.
     #[arg(long)]
     pub no_default_version: bool,
 
-    /// Skip clearing the output directory before saving.
+    /// Don't clear the output directory before saving the schemas.
     #[arg(long)]
     pub no_clear_output: bool,
+
+    /// Don't append a `.d<YYYYMMDD>` dirty-workdir suffix to the output version. By default the
+    /// edited output is branded with today's date so it is distinguishable from the upstream
+    /// (unmodified) BO4E release.
+    #[arg(long)]
+    pub no_dirty_version: bool,
 }
 
 impl Executable for Edit {
@@ -51,22 +78,20 @@ impl Executable for Edit {
         let mut schemas = out.schemas;
 
         if let Some(config_path) = &self.config_file {
+            cprint_normal!("Loading config from {}", config_path.display());
             let config = load_config(config_path)?;
 
             let extra = get_additional_schemas(&config.additional_models, config_path)?;
             for schema in extra {
+                let name = schema.name().to_string();
                 schemas.add_schema(Rc::new(RefCell::new(schema)))?;
+                cprint_verbose!("Loaded additional model {}", name);
             }
 
-            let names: Vec<String> = schemas
-                .schemas()
-                .iter()
-                .map(|s| s.borrow().name().to_string())
-                .collect();
             CONSOLE
                 .get()
                 .expect("CONSOLE not initialized")
-                .add_schema_names(&names);
+                .add_schema_names(&classify_all(&schemas));
             cprint_normal!("Added all additional models");
 
             transform_all_additional_fields(&config.additional_fields, &mut schemas);
@@ -77,6 +102,19 @@ impl Executable for Edit {
 
             transform_all_additional_enum_items(&config.additional_enum_items, &mut schemas);
             cprint_normal!("Added all additional enum items");
+        } else {
+            // No config: still register schema names so the highlighter colours them in any
+            // subsequent output (mirrors Python's `add_schemas_to_highlighter` call site).
+            CONSOLE
+                .get()
+                .expect("CONSOLE not initialized")
+                .add_schema_names(&classify_all(&schemas));
+        }
+
+        if !self.no_dirty_version {
+            let today = chrono::Local::now().date_naive();
+            schemas.version.set_dirty_worktree_date(today);
+            cprint_normal!("Marked output version as locally edited: {}", schemas.version);
         }
 
         if !self.no_default_version {
@@ -105,10 +143,8 @@ impl Executable for Edit {
                     base.default = Some(PrimitiveValue::String(version_str.clone()));
                 }
             }
-            cprint_normal!("Set default versions");
+            cprint_normal!("Set default versions to {}", schemas.version);
         }
-
-        update_references_all(&mut schemas)?;
 
         write_schemas(&schemas, &self.output_dir).map_err(|e| e.to_string())
     }
@@ -171,6 +207,7 @@ mod tests {
             config_file: None,
             no_default_version: true,
             no_clear_output: false,
+            no_dirty_version: true,
         };
         cmd.run().unwrap();
 
@@ -193,6 +230,7 @@ mod tests {
             config_file: Some(cfg_path),
             no_default_version: true,
             no_clear_output: false,
+            no_dirty_version: true,
         };
         cmd.run().unwrap();
 
@@ -225,11 +263,57 @@ mod tests {
             config_file: None,
             no_default_version: false,  // enable version stamping
             no_clear_output: false,
+            no_dirty_version: true,
         };
         cmd.run().unwrap();
 
         let text = fs::read_to_string(output.path().join("bo/WithVersion.json")).unwrap();
         assert!(text.contains("\"default\""), "output should contain a default value");
         assert!(text.contains("v202401.1.0"), "default should be the schema version");
+    }
+
+    #[test]
+    fn test_edit_marks_dirty_version_by_default() {
+        init_console();
+        let input = make_input_dir();
+        let output = tempfile::tempdir().unwrap();
+
+        let cmd = Edit {
+            input_dir: input.path().to_path_buf(),
+            output_dir: output.path().to_path_buf(),
+            config_file: None,
+            no_default_version: true,
+            no_clear_output: false,
+            no_dirty_version: false, // default: mark dirty
+        };
+        cmd.run().unwrap();
+
+        // The persisted .version file should now carry today's `.dYYYYMMDD` suffix.
+        let written = fs::read_to_string(output.path().join(".version")).unwrap();
+        let today = chrono::Local::now().date_naive().format("%Y%m%d").to_string();
+        assert!(
+            written.contains(&format!(".d{}", today)),
+            "expected dirty workdir suffix in {written}"
+        );
+    }
+
+    #[test]
+    fn test_edit_keeps_clean_version_when_disabled() {
+        init_console();
+        let input = make_input_dir();
+        let output = tempfile::tempdir().unwrap();
+
+        let cmd = Edit {
+            input_dir: input.path().to_path_buf(),
+            output_dir: output.path().to_path_buf(),
+            config_file: None,
+            no_default_version: true,
+            no_clear_output: false,
+            no_dirty_version: true,
+        };
+        cmd.run().unwrap();
+
+        let written = fs::read_to_string(output.path().join(".version")).unwrap();
+        assert!(!written.contains(".d"), "expected no dirty suffix in {written}");
     }
 }

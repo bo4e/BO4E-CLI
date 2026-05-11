@@ -301,6 +301,18 @@ impl DirtyVersion {
     pub fn is_dirty(&self) -> bool {
         self.commit_part.is_some() || self.dirty_worktree_date.is_some()
     }
+
+    /// Get the dirty workdir date, if any.
+    pub fn dirty_worktree_date(&self) -> Option<NaiveDate> {
+        self.dirty_worktree_date
+    }
+
+    /// Set (or replace) the `.d<YYYYMMDD>` dirty-workdir suffix so the version round-trips
+    /// as `<semver>[.+g<commit>].d<date>`. Used by `bo4e edit` to brand the output schemas
+    /// as locally edited.
+    pub fn set_dirty_worktree_date(&mut self, date: NaiveDate) {
+        self.dirty_worktree_date = Some(date);
+    }
 }
 
 impl PartialEq<DirtyVersion> for Version {
