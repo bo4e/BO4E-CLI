@@ -22,33 +22,9 @@ It contains several features which can make your life easier when working with B
 
 ## Install
 
-Pre-built binaries are published for **macOS**, **Linux** and **Windows** on every tag.
-Pick whichever channel is most convenient:
-
-### macOS / Linux — Homebrew
-
-```bash
-brew install bo4e/tap/bo4e-cli
-```
-
-### Windows — Scoop
-
-```powershell
-scoop bucket add bo4e https://github.com/bo4e/scoop-bucket
-scoop install bo4e-cli
-```
-
-### Windows — MSI installer
-
-Download the latest `bo4e-cli-x86_64-pc-windows-msvc.msi` from the
-[Releases page](https://github.com/bo4e/BO4E-CLI/releases/latest) and double-click it.
-The CLI then appears under *Apps & Features*.
-
-### Windows — PowerShell installer
-
-```powershell
-irm https://github.com/bo4e/BO4E-CLI/releases/latest/download/bo4e-cli-installer.ps1 | iex
-```
+Pre-built binaries are published for **macOS**, **Linux** and **Windows** on every tag
+of the [Releases page](https://github.com/bo4e/BO4E-CLI/releases/latest). Pick whichever
+channel is most convenient:
 
 ### Linux / macOS — shell installer
 
@@ -58,6 +34,23 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/bo4e/BO4E-CLI/releases/
 
 The script installs the binary under `~/.local/bin` (or `$CARGO_HOME/bin` if set) and
 records an uninstall hook beside it.
+
+### Windows — PowerShell installer
+
+```powershell
+irm https://github.com/bo4e/BO4E-CLI/releases/latest/download/bo4e-cli-installer.ps1 | iex
+```
+
+### Windows — MSI installer
+
+Download the latest `bo4e-cli-x86_64-pc-windows-msvc.msi` from the
+[Releases page](https://github.com/bo4e/BO4E-CLI/releases/latest) and double-click it.
+The CLI then appears under *Apps & Features*.
+
+### Manual download
+
+Each release also ships raw tarballs (`.tar.xz` / `.zip`) for every supported target —
+useful if you want to drop the binary somewhere yourself.
 
 ### From source (Rust toolchain)
 
@@ -75,18 +68,20 @@ bo4e --version
 bo4e --help
 ```
 
+> Homebrew tap and Scoop bucket distribution may be added later; until then please use
+> one of the channels above.
+
 ## Uninstall
 
 The binary is removable in one step from every channel it shipped with:
 
-| Installed via                  | Uninstall                                                          |
-|--------------------------------|--------------------------------------------------------------------|
-| Homebrew                       | `brew uninstall bo4e-cli`                                          |
-| Scoop                          | `scoop uninstall bo4e-cli`                                         |
-| Windows MSI                    | *Apps & Features* → *bo4e-cli* → *Uninstall*                       |
-| Windows PowerShell installer   | re-run the installer URL with `-Uninstall`, or delete `bo4e.exe` from the install prefix shown by the installer |
-| Linux / macOS shell installer  | run the `uninstall` script that the installer placed next to the binary, or simply `rm $(which bo4e)` |
-| `cargo install` / `binstall`   | `cargo uninstall bo4e-cli`                                         |
+| Installed via                 | Uninstall                                                                                                       |
+|-------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| Linux / macOS shell installer | run the `uninstall` script that the installer placed next to the binary, or simply `rm $(which bo4e)`            |
+| Windows PowerShell installer  | re-run the installer URL with `-Uninstall`, or delete `bo4e.exe` from the install prefix shown by the installer |
+| Windows MSI                   | *Apps & Features* → *bo4e-cli* → *Uninstall*                                                                    |
+| Manual download               | delete the binary you copied out of the tarball                                                                 |
+| `cargo install` / `binstall`  | `cargo uninstall bo4e-cli`                                                                                      |
 
 ## Commands
 
