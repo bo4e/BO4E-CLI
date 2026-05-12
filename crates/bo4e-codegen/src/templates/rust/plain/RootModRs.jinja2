@@ -7,3 +7,9 @@ pub mod {{ m }};
 {%- endfor %}
 
 pub const VERSION: &str = "{{ version }}";
+
+/// Default value for `_version` fields on generated models.
+/// Used by serde's `default = "..."` attribute.
+pub(crate) fn default_version() -> String {
+    VERSION.to_string()
+}

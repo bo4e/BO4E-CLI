@@ -49,6 +49,24 @@ fn angebot_has_struct_and_sibling_use() {
     );
     assert!(body.contains("pub enum AngebotTyp"), "got:\n{body}");
     assert!(body.contains("impl Default for Angebot"), "got:\n{body}");
+    assert!(
+        body.contains("use super::super::default_version;"),
+        "expected use line for centralized default_version, got:\n{body}"
+    );
+    assert!(
+        !body.contains("fn default_version()"),
+        "default_version fn should not be defined per-file anymore, got:\n{body}"
+    );
+}
+
+#[test]
+fn root_mod_rs_defines_default_version_fn() {
+    let tmp = generate_into_tmp();
+    let body = std::fs::read_to_string(tmp.path().join("mod.rs")).unwrap();
+    assert!(
+        body.contains("pub(crate) fn default_version() -> String"),
+        "expected default_version fn at root, got:\n{body}"
+    );
 }
 
 #[test]

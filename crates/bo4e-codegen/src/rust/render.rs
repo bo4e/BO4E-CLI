@@ -224,16 +224,21 @@ pub(crate) fn render_object(
         });
     }
 
-    let uses = render_use_block(imports.iter().cloned(), depth);
+    let mut uses = render_use_block(imports.iter().cloned(), depth);
+    if needs_default_version_fn {
+        let supers = "super::".repeat(depth);
+        let extra_use = format!("use {supers}default_version;");
+        uses = if uses.is_empty() {
+            extra_use
+        } else {
+            format!("{uses}\n{extra_use}")
+        };
+    }
     let module_doc = render_module_doc(obj.base.description.as_deref());
     let doc = render_doc_comment(obj.base.description.as_deref(), "");
 
     let default_impl = render_default_impl(class_name, &fields);
-    let default_version_fn = if needs_default_version_fn {
-        render_default_version_fn()
-    } else {
-        String::new()
-    };
+    let default_version_fn = String::new(); // No longer emitted per-file; lives in root mod.rs / lib.rs.
 
     let tpl = env.get_template("rust/plain/Struct.jinja2")?;
     let body = tpl.render(context! {
@@ -309,10 +314,6 @@ fn render_default_impl(class_name: &str, fields: &[RustField]) -> String {
     out.push_str("    }\n");
     out.push_str("}\n");
     out
-}
-
-fn render_default_version_fn() -> String {
-    "fn default_version() -> String {\n    super::super::VERSION.to_string()\n}\n".to_string()
 }
 
 /// Detect a `_typ`-style discriminator. Returns `Some(wire_value)` when the
