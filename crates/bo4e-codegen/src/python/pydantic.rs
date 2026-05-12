@@ -77,29 +77,19 @@ pub fn generate(
     let version_str = schemas.version.to_string();
 
     // ── Per-schema files ───────────────────────────────────────────────────────
-    for schema_rc in schemas {
-        let mut schema = schema_rc.borrow_mut();
-        let module = schema.module().to_vec();
-        let class_name = schema.name().to_string();
-
-        let (out_dir, file_name, depth) = crate::python::module_paths(output_dir, &module, "py");
-        std::fs::create_dir_all(&out_dir)?;
-        let out_path = out_dir.join(&file_name);
-
-        // Resolve the parsed JSON Schema (clone so we drop the borrow before render).
-        let parsed = schema.schema().map_err(Error::Schema)?.clone();
-        drop(schema); // release the RefCell borrow before any further work
-
-        let body = match &parsed {
-            SchemaRootType::StrEnum(e) => render_enum(&env, &class_name, &e.str_enum.enum_values)?,
-            SchemaRootType::Object(o) => {
-                render_object(&env, &class_name, &module, &o.object, depth)?
+    written.extend(crate::for_each_schema_file(
+        schemas,
+        output_dir,
+        "py",
+        |ctx| match &ctx.parsed {
+            SchemaRootType::StrEnum(e) => {
+                render_enum(&env, &ctx.class_name, &e.str_enum.enum_values)
             }
-        };
-
-        std::fs::write(&out_path, body)?;
-        written.push(out_path);
-    }
+            SchemaRootType::Object(o) => {
+                render_object(&env, &ctx.class_name, &ctx.module, &o.object, ctx.depth)
+            }
+        },
+    )?);
 
     // ── __version__.py at the root ─────────────────────────────────────────────
     let version_path = output_dir.join("__version__.py");

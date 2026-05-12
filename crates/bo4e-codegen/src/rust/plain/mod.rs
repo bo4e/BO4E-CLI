@@ -4,10 +4,10 @@ use bo4e_schemas::Schemas;
 use bo4e_schemas::models::json_schema::SchemaRootType;
 use minijinja::context;
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::Error;
-use crate::layout::{first_level_subdirs, module_paths};
+use crate::layout::first_level_subdirs;
 use crate::rust::render::{render_object, render_str_enum};
 
 pub fn generate(
@@ -22,7 +22,6 @@ pub fn generate(
     }
     let env = crate::env::make_environment(opts.templates_dir)?;
 
-    let mut written: Vec<PathBuf> = Vec::new();
     let mut diagnostics: Vec<String> = Vec::new();
     let version_str = schemas.version.to_string();
 
@@ -33,62 +32,44 @@ pub fn generate(
     // (e.g. `PreisblattDienstleistung` would become `Preisblattdienstleistung`).
     let mut by_top: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
 
-    for schema_rc in schemas {
-        let mut schema = schema_rc.borrow_mut();
-        let module = schema.module().to_vec();
-        let class_name = schema.name().to_string();
+    let mut written = crate::for_each_schema_file(schemas, output_dir, "rs", |ctx| {
+        let top_dir = ctx.module.first().map(|s| s.as_str()).unwrap_or("");
+        let leaf = ctx.file_name.trim_end_matches(".rs");
+        let file_rel = format!("{top_dir}/{leaf}.rs");
 
-        let (out_dir, file_name, depth) = module_paths(output_dir, &module, "rs");
-        std::fs::create_dir_all(&out_dir)?;
-        let out_path = out_dir.join(&file_name);
-
-        let parsed = schema.schema().map_err(Error::Schema)?.clone();
-        drop(schema);
-
-        let (body, diag) = match &parsed {
+        let (body, diag) = match &ctx.parsed {
             SchemaRootType::StrEnum(e) => {
                 let n = e.str_enum.enum_values.len();
-                let file_rel = format!(
-                    "{}/{}.rs",
-                    module.first().map(|s| s.as_str()).unwrap_or(""),
-                    file_name.trim_end_matches(".rs")
-                );
-                let d = format!("{file_rel}: enum {class_name} ({n} variants)");
+                let body = render_str_enum(
+                    &env,
+                    &ctx.class_name,
+                    &e.str_enum.enum_values,
+                    e.str_enum.base.description.as_deref(),
+                )?;
                 (
-                    render_str_enum(
-                        &env,
-                        &class_name,
-                        &e.str_enum.enum_values,
-                        e.str_enum.base.description.as_deref(),
-                    )?,
-                    d,
+                    body,
+                    format!("{file_rel}: enum {} ({n} variants)", ctx.class_name),
                 )
             }
             SchemaRootType::Object(o) => {
-                let rendered = render_object(&env, &class_name, &o.object, depth)?;
-                let file_rel = format!(
-                    "{}/{}.rs",
-                    module.first().map(|s| s.as_str()).unwrap_or(""),
-                    file_name.trim_end_matches(".rs")
-                );
-                let d = format!("{file_rel}: {}", rendered.diagnostic);
-                (rendered.body, d)
+                let rendered = render_object(&env, &ctx.class_name, &o.object, ctx.depth)?;
+                (
+                    rendered.body,
+                    format!("{file_rel}: {}", rendered.diagnostic),
+                )
             }
         };
         diagnostics.push(diag);
 
-        std::fs::write(&out_path, &body)?;
-        written.push(out_path);
-
-        if module.len() > 1 {
-            let top = module[0].to_ascii_lowercase();
-            let leaf = file_name.trim_end_matches(".rs").to_string();
+        if ctx.module.len() > 1 {
             by_top
-                .entry(top)
+                .entry(ctx.module[0].to_ascii_lowercase())
                 .or_default()
-                .push((leaf, class_name.clone()));
+                .push((leaf.to_string(), ctx.class_name.clone()));
         }
-    }
+
+        Ok(body)
+    })?;
 
     // Per-subdir mod.rs files. BO4E's `enum/` directory is renamed to `enums/`
     // because `enum` is a Rust keyword.

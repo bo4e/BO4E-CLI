@@ -45,6 +45,77 @@ pub struct GenerateOutput {
     pub diagnostics: Vec<String>,
 }
 
+/// Per-schema rendering context passed to the closure that
+/// [`for_each_schema_file`] invokes for every schema in the input.
+///
+/// Carries everything the closure needs to render a single file without
+/// touching the underlying `Rc<RefCell<Schema>>` borrow — the iterator
+/// already cloned the parsed shape and released the cell.
+#[cfg(any(
+    feature = "python-pydantic",
+    feature = "python-sql-model",
+    feature = "rust-plain",
+))]
+pub(crate) struct SchemaCtx {
+    pub class_name: String,
+    pub module: Vec<String>,
+    pub parsed: bo4e_schemas::models::json_schema::SchemaRootType,
+    pub depth: usize,
+    pub file_name: String,
+}
+
+/// Drive the per-schema file write loop shared by every per-flavour
+/// generator. For each schema:
+///
+/// 1. Borrow the cell, snapshot `module` / `name` / parsed schema, drop the
+///    borrow (so the closure can call back into anything without aliasing).
+/// 2. Compute the output path via [`crate::layout::module_paths`] with the
+///    flavour's file extension and create the parent directory.
+/// 3. Call `render` for the file body.
+/// 4. Write the body and record the path.
+///
+/// Returns every path written, in the same order as iteration. Closures
+/// that need extra per-file state (diagnostics, mod.rs reexport maps, …)
+/// capture it themselves.
+#[cfg(any(
+    feature = "python-pydantic",
+    feature = "python-sql-model",
+    feature = "rust-plain",
+))]
+pub(crate) fn for_each_schema_file<F>(
+    schemas: &bo4e_schemas::Schemas,
+    output_dir: &Path,
+    ext: &str,
+    mut render: F,
+) -> Result<Vec<PathBuf>, Error>
+where
+    F: FnMut(&SchemaCtx) -> Result<String, Error>,
+{
+    let mut written = Vec::new();
+    for schema_rc in schemas {
+        let mut schema = schema_rc.borrow_mut();
+        let module = schema.module().to_vec();
+        let class_name = schema.name().to_string();
+        let (out_dir, file_name, depth) = layout::module_paths(output_dir, &module, ext);
+        let parsed = schema.schema().map_err(Error::Schema)?.clone();
+        drop(schema);
+
+        std::fs::create_dir_all(&out_dir)?;
+        let ctx = SchemaCtx {
+            class_name,
+            module,
+            parsed,
+            depth,
+            file_name: file_name.clone(),
+        };
+        let body = render(&ctx)?;
+        let out_path = out_dir.join(&file_name);
+        std::fs::write(&out_path, &body)?;
+        written.push(out_path);
+    }
+    Ok(written)
+}
+
 pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
     if dir.exists() {
         for entry in std::fs::read_dir(dir)? {
