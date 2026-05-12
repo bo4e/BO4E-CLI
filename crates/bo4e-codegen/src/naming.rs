@@ -30,11 +30,15 @@ pub fn to_snake_case(name: &str) -> String {
 
 /// Convert an identifier-shaped string (typically UPPER_SNAKE_CASE or sanitised
 /// member-name shape) into PascalCase. Words are split on `_`; each word's
-/// first character is uppercased and the rest are lowercased. A leading `_`
-/// is preserved (the sanitiser uses it to escape digit-starters).
+/// first character is uppercased and the rest are lowercased. As a special
+/// case, an input whose leading `_` is the sanitiser's digit-starter escape
+/// (i.e. `_` followed immediately by a digit or another `_`) is returned
+/// unchanged, so the escape isn't lost. Any other leading underscore is
+/// treated as a normal separator and dropped.
 /// `to_pascal_case("ANGEBOT")` → `"Angebot"`.
 /// `to_pascal_case("Z88_VERGLEICHSMESSUNG_GEEICHT_")` → `"Z88VergleichsmessungGeeicht"`.
 /// `to_pascal_case("_2_01_7_001")` → `"_2_01_7_001"` (digit-starter prefix preserved).
+/// `to_pascal_case("_Foo")` → `"Foo"` (non-escape leading underscore dropped).
 pub fn to_pascal_case(name: &str) -> String {
     if name.is_empty() {
         return String::new();
@@ -136,6 +140,11 @@ mod tests {
     #[test]
     fn pascal_case_with_leading_underscore() {
         assert_eq!(to_pascal_case("_2_01_7_001"), "_2_01_7_001");
+    }
+
+    #[test]
+    fn pascal_case_non_escape_leading_underscore_is_dropped() {
+        assert_eq!(to_pascal_case("_Foo"), "Foo");
     }
 
     #[test]
