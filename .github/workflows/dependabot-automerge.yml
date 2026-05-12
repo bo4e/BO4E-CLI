@@ -1,0 +1,35 @@
+name: Dependabot auto-approve / -merge
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+jobs:
+  dependabot:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Resolve PR number
+        id: pr
+        run: |
+          NUM='${{ github.event.workflow_run.pull_requests[0].number }}'
+          if [ -z "$NUM" ] || [ "$NUM" = "null" ]; then
+            echo "No PR associated with this workflow_run; nothing to do."
+            exit 0
+          fi
+          echo "number=$NUM" >> "$GITHUB_OUTPUT"
+      - name: Approve PR
+        if: steps.pr.outputs.number != ''
+        run: gh pr review --approve --repo "$GITHUB_REPOSITORY" "${{ steps.pr.outputs.number }}"
+      - name: Enable auto-merge
+        if: steps.pr.outputs.number != ''
+        run: gh pr merge --auto --squash --repo "$GITHUB_REPOSITORY" "${{ steps.pr.outputs.number }}"
