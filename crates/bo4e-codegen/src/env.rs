@@ -18,7 +18,7 @@ pub(crate) fn make_environment(
         match (value.kind(), method) {
             (ValueKind::Map, "items" | "dict") => {
                 let _: () = from_args(args)?;
-                state.apply_filter("items", &[value.clone()])
+                state.apply_filter("items", std::slice::from_ref(value))
             }
             _ => Err(MjError::from(ErrorKind::UnknownMethod)),
         }

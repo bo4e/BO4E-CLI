@@ -140,7 +140,7 @@ fn group_imports(raw: BTreeSet<RawImport>) -> Vec<SqlImport> {
             }
         })
         .collect();
-    result.sort_by(|a, b| a.cmp(b));
+    result.sort();
     result
 }
 

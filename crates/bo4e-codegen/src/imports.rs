@@ -26,7 +26,7 @@ mod tests {
 
     #[test]
     fn named_imports_are_ordered_by_module_then_name() {
-        let mut v = vec![
+        let mut v = [
             Import::Named { module: "typing".into(), name: "Optional".into() },
             Import::Named { module: "decimal".into(), name: "Decimal".into() },
             Import::Named { module: "typing".into(), name: "Annotated".into() },

@@ -226,7 +226,7 @@ fn synth_id_field(obj: &ObjectSchema) -> SqlField {
     let title = obj
         .properties
         .get("_id")
-        .and_then(|s| literal_title(s))
+        .and_then(literal_title)
         .unwrap_or_else(|| "Primary key ID-Field".to_string());
     let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
     // The renderer rewrites `_id` → `id_` and injects `alias="_id"` automatically
@@ -445,6 +445,7 @@ fn classify_property(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn classify_optional(
     owner_class: &str,
     prop_name: &str,
