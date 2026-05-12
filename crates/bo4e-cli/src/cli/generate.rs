@@ -18,19 +18,19 @@ pub struct Generate {
 #[derive(Args)]
 pub struct GenerateCommon {
     /// The directory to read the JSON-schemas from.
-    #[arg(short = 'i', long = "input", global = true)]
-    pub input: Option<PathBuf>,
+    #[arg(short = 'i', long = "input")]
+    pub input: PathBuf,
 
     /// The directory to save the generated code to.
-    #[arg(short = 'o', long = "output", global = true)]
-    pub output: Option<PathBuf>,
+    #[arg(short = 'o', long = "output")]
+    pub output: PathBuf,
 
     /// Don't clear the output directory before saving the generated code.
-    #[arg(long = "no-clear-output", action = clap::ArgAction::SetFalse, default_value_t = true, global = true)]
+    #[arg(long = "no-clear-output", action = clap::ArgAction::SetFalse, default_value_t = true)]
     pub clear_output: bool,
 
     /// Override embedded templates with a directory of Jinja templates.
-    #[arg(long = "templates-dir", global = true)]
+    #[arg(long = "templates-dir")]
     pub templates_dir: Option<PathBuf>,
 }
 
@@ -59,16 +59,8 @@ pub struct RustCrateArgs {
 
 impl Executable for Generate {
     fn run(&self) -> Result<(), String> {
-        let input = self
-            .common
-            .input
-            .as_ref()
-            .ok_or_else(|| "missing required --input/-i".to_string())?;
-        let output = self
-            .common
-            .output
-            .as_ref()
-            .ok_or_else(|| "missing required --output/-o".to_string())?;
+        let input = &self.common.input;
+        let output = &self.common.output;
 
         let out = bo4e_schemas::io::schemas::read_schemas(input)
             .map_err(|e| format!("failed to read schemas: {e}"))?;
