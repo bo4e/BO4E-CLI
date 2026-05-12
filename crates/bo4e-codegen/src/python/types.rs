@@ -16,6 +16,8 @@
 use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaType, StringSchemaFormat};
 use std::collections::BTreeSet;
 
+pub use crate::imports::Import;
+
 // ── Public types ──────────────────────────────────────────────────────────────
 
 /// The result of mapping a JSON Schema fragment to a Python type expression.
@@ -25,22 +27,6 @@ pub struct MappedType {
     pub rendered: String,
     /// Imports that `rendered` depends on.
     pub imports: BTreeSet<Import>,
-}
-
-/// A single Python import statement that a mapped type depends on.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Import {
-    /// `from <module> import <name>`
-    Named { module: String, name: String },
-    /// Relative import from a sibling generated module.
-    ///
-    /// `module` carries the path segments in their *original case* (PascalCase class names are
-    /// kept as-is); the rendering layer (Task 6) is responsible for lowercasing the final segment
-    /// and computing the relative depth.
-    ///
-    /// Example: a `$ref` to `"../bo/Geschaeftspartner.json"` produces
-    /// `Sibling { module: vec!["bo", "Geschaeftspartner"], name: "Geschaeftspartner" }`.
-    Sibling { module: Vec<String>, name: String },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

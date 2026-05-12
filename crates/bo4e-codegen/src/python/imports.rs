@@ -3,7 +3,7 @@
 //! Collects [`Import`] values produced by [`crate::python::types`] mapping, deduplicates
 //! them, and renders a deterministic import block.
 
-use crate::python::types::Import;
+use crate::imports::Import;
 use std::collections::BTreeSet;
 
 /// A registry of imports collected while rendering a single module file.
