@@ -285,10 +285,10 @@ impl Version {
         Ok(self.major == other.major
             && self.functional == other.functional
             && self.technical == other.technical
-            && self.candidate.ok_or_else(
-                || "Cannot compare candidate versions if one of them is not a candidate.",
-            )? > other.candidate.ok_or_else(
-                || "Cannot compare candidate versions if one of them is not a candidate.",
+            && self.candidate.ok_or(
+                "Cannot compare candidate versions if one of them is not a candidate.",
+            )? > other.candidate.ok_or(
+                "Cannot compare candidate versions if one of them is not a candidate.",
             )?)
     }
 }

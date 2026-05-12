@@ -41,10 +41,10 @@ impl dyn Visitable {
         }
         let mut break_value: Option<B> = None;
         self.for_each_child(&mut |child| {
-            if break_value.is_none() {
-                if let ControlFlow::Break(b) = child.try_visit_all::<T, B>(f) {
-                    break_value = Some(b);
-                }
+            if break_value.is_none()
+                && let ControlFlow::Break(b) = child.try_visit_all::<T, B>(f)
+            {
+                break_value = Some(b);
             }
         });
         match break_value {
@@ -84,10 +84,10 @@ impl dyn Visitable {
         }
         let mut break_value: Option<B> = None;
         self.for_each_child_mut(&mut |child| {
-            if break_value.is_none() {
-                if let ControlFlow::Break(b) = child.try_visit_all_mut::<T, B>(f) {
-                    break_value = Some(b);
-                }
+            if break_value.is_none()
+                && let ControlFlow::Break(b) = child.try_visit_all_mut::<T, B>(f)
+            {
+                break_value = Some(b);
             }
         });
         match break_value {
