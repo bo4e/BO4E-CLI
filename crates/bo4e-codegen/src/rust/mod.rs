@@ -6,6 +6,8 @@ pub mod plain;
 #[cfg(feature = "rust-crate")]
 pub mod crate_;
 
+pub(crate) mod imports;
+
 /// Reserved Rust keywords (current + reserved-for-future) that a field name
 /// must not equal. Drives [`rust_field_name`]'s keyword-escape branch.
 #[allow(dead_code)] // used by plain/crate_ renderers added in later tasks
