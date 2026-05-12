@@ -87,3 +87,43 @@ fn root_mod_rs_lists_top_packages_and_version() {
     assert!(body.contains("pub mod enums;"));
     assert!(body.contains("pub const VERSION:"));
 }
+
+/// Regression: `mod.rs` reexports must use the schema's real PascalCase class
+/// name, not one reconstructed by uppercasing the first char of the lowercased
+/// file stem. The fixture set only contains single-word names (`Angebot`,
+/// `Adresse`), which happen to round-trip through that broken reconstruction —
+/// a multi-word name like `PreisblattDienstleistung` would lose its internal
+/// capital and yield `Preisblattdienstleistung` (which doesn't exist as a
+/// struct), so the generated crate would fail to compile.
+#[test]
+fn mod_rs_reexport_preserves_internal_camel_case() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut schemas = bo4e_schemas::Schemas::new("v202401.0.0".parse().unwrap());
+
+    let mut s =
+        bo4e_schemas::Schema::new(vec!["bo".into(), "PreisblattDienstleistung".into()], None)
+            .unwrap();
+    s.load_schema(
+        r#"{"type":"object","title":"PreisblattDienstleistung","properties":{},"required":[]}"#
+            .into(),
+    );
+    schemas
+        .add_schema(std::rc::Rc::new(std::cell::RefCell::new(s)))
+        .unwrap();
+
+    bo4e_codegen::rust::plain::generate(
+        &schemas,
+        tmp.path(),
+        &bo4e_codegen::Options {
+            clear_output: false,
+            templates_dir: None,
+        },
+    )
+    .expect("generate");
+
+    let bo_mod = std::fs::read_to_string(tmp.path().join("bo/mod.rs")).unwrap();
+    assert!(
+        bo_mod.contains("pub use preisblattdienstleistung::PreisblattDienstleistung;"),
+        "expected reexport of the real PascalCase class name, got:\n{bo_mod}",
+    );
+}

@@ -26,8 +26,12 @@ pub fn generate(
     let mut diagnostics: Vec<String> = Vec::new();
     let version_str = schemas.version.to_string();
 
-    // Track per top-level dir the leaf module names so we can write `mod.rs`s.
-    let mut by_top: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    // Track per top-level dir the `(leaf module name, class name)` pairs so we can
+    // emit accurate `pub use <leaf>::<ClassName>;` reexports in `mod.rs`. The class
+    // name must come from the schema itself — reconstructing it by uppercasing the
+    // first char of the lowercased file stem would lose internal CamelCase
+    // (e.g. `PreisblattDienstleistung` would become `Preisblattdienstleistung`).
+    let mut by_top: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
 
     for schema_rc in schemas {
         let mut schema = schema_rc.borrow_mut();
@@ -84,7 +88,10 @@ pub fn generate(
         if module.len() > 1 {
             let top = module[0].to_ascii_lowercase();
             let leaf = file_name.trim_end_matches(".rs").to_string();
-            by_top.entry(top).or_default().push(leaf);
+            by_top
+                .entry(top)
+                .or_default()
+                .push((leaf, class_name.clone()));
         }
     }
 
@@ -96,25 +103,18 @@ pub fn generate(
         .collect();
     let raw_subdirs = first_level_subdirs(modules.iter().map(Vec::as_slice));
     for raw_sub in &raw_subdirs {
-        let leaves: Vec<String> = by_top.get(raw_sub).cloned().unwrap_or_default();
-        let mut leaves_sorted = leaves;
-        leaves_sorted.sort();
-        leaves_sorted.dedup();
+        let mut entries: Vec<(String, String)> = by_top.get(raw_sub).cloned().unwrap_or_default();
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries.dedup_by(|a, b| a.0 == b.0);
 
         let mod_tpl = env.get_template("rust/plain/ModRs.jinja2")?;
-        let reexports: Vec<_> = leaves_sorted
+        let modules: Vec<&str> = entries.iter().map(|(leaf, _)| leaf.as_str()).collect();
+        let reexports: Vec<_> = entries
             .iter()
-            .map(|leaf| {
-                let mut chars = leaf.chars();
-                let class = match chars.next() {
-                    Some(c) => format!("{}{}", c.to_ascii_uppercase(), chars.as_str()),
-                    None => String::new(),
-                };
-                context! { module => leaf, name => class }
-            })
+            .map(|(leaf, class)| context! { module => leaf, name => class })
             .collect();
         let mod_body = mod_tpl.render(context! {
-            modules => &leaves_sorted,
+            modules => &modules,
             reexports => &reexports,
         })?;
         let mod_dir = output_dir.join(raw_sub);
