@@ -10,7 +10,10 @@ rust             = ["rust-plain", "rust-crate"]
 python-pydantic  = []
 python-sql-model = []
 rust-plain       = []
-rust-crate       = []
+# `rust-crate` wraps the `rust-plain` output (Cargo.toml + lib.rs around the
+# generated module tree) and calls `rust::plain::generate` internally, so it
+# needs the plain flavour's code + templates compiled in.
+rust-crate       = ["rust-plain"]
 
 [dependencies]
 bo4e-schemas = { path = "../bo4e-schemas" }
