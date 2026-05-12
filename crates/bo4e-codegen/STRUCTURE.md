@@ -16,17 +16,19 @@ src/
 ├── output_type.rs   # `OutputType` enum (variants gated by Cargo features)
 ├── env.rs           # MiniJinja Environment builder; embedded + disk template loaders
 ├── error.rs         # `Error` (thiserror)
-├── naming.rs        # Pure naming helpers: module_file_name, to_snake_case
+├── naming.rs        # Pure naming helpers: to_snake_case, to_pascal_case, sanitize_member_name
+├── layout.rs        # Output-tree layout helpers: module_file_name, module_paths, first_level_subdirs (extension-parameterised)
+├── refs.rs          # JSON-Schema $ref helpers: parse_ref, schema_base, enum_ref_target
+├── imports.rs       # Shared Import enum (Named / Sibling); language-neutral data model
 ├── python/
-│   ├── mod.rs       # Cross-flavour Python helpers (PYTHON_RESERVED, python_attr_name,
-│   │                #   sanitize_enum_member_name, module_paths, first_level_subdirs,
-│   │                #   write_empty_subdir_inits, root_init_module_docstring)
+│   ├── mod.rs       # Python-specific helpers (PYTHON_RESERVED, python_attr_name,
+│   │                #   root_init_module_docstring, write_empty_subdir_inits)
 │   ├── imports.rs   # ImportBlock — renders the per-file `from … import …` header
-│   ├── types.rs     # JSON-Schema → Python type-hint mapping, default formatting, refs
+│   ├── types.rs     # JSON-Schema → Python type-hint mapping (`map_pydantic`), default formatting
 │   ├── pydantic.rs  # `generate_pydantic` — per-class context + Jinja render
 │   └── sql_model/
 │       ├── mod.rs      # `generate_sql_model` orchestrator
-│       ├── plan.rs     # Pure two-phase planner: schemas → `SqlPlan` { tables, junctions }
+│       ├── plan.rs     # Pure two-phase planner: schemas → `SqlPlan { tables, junctions }`
 │       └── renderer.rs # Consumes `SqlPlan`, renders tables, many.py, __init__
 └── templates/
     └── python/
@@ -75,7 +77,7 @@ python-sql-model   = []
 
 1. `lib::generate` clears the output dir and calls `python::pydantic::generate_pydantic`.
 2. `generate_pydantic` iterates over `schemas`. For each schema:
-   - Compute `(out_dir, file_name, depth)` via `python::module_paths`.
+   - Compute `(out_dir, file_name, depth)` via `layout::module_paths`.
    - Build a per-class context struct (`PydanticField` / `EnumMember`) that mirrors the vendored `BaseModel.jinja2` / `Enum.jinja2` shape.
    - Render with MiniJinja; prepend an `ImportBlock` (the vendored template doesn't emit a pydantic import header — see the file-level docstring in `python/pydantic.rs` for the deliberate workarounds).
 3. Emit a root `__init__.py` (with `root_init_module_docstring`), `__version__.py`, and one empty `__init__.py` per first-level subpackage directory.
@@ -91,12 +93,12 @@ python-sql-model   = []
 - The pydantic templates are **byte-identical to upstream `data-model-code-generator`** so we can re-vendor with a clean `cp`. That ties the generator's per-field context shape to those templates — don't drift the field names lightly.
 - `env::make_environment` installs an `unknown_method_callback` so the templates' `.items()` / `.dict()` calls on map values resolve to the `items` filter (the vendored Jinja2 templates use Python-style method syntax).
 
-## Naming helpers (`naming.rs`, `python/mod.rs`)
+## Naming helpers (`naming.rs`, `layout.rs`, `python/mod.rs`)
 
 - `module_file_name(["bo", "Angebot"])` → `"angebot"`.
 - `to_snake_case("APIVersion")` → `"api_version"`. Acronyms collapse correctly (`"URL"` → `"url"`).
 - `python_attr_name("_id")` → `"id_"` — Pydantic v2 forbids leading-underscore attrs, but `id` would shadow the builtin, so we append `_`.
-- `sanitize_enum_member_name("2-01-7-001")` → `"_2_01_7_001"` — non-`[A-Za-z0-9_]` becomes `_`, digit-starters get prefixed.
+- `sanitize_member_name("2-01-7-001")` → `"_2_01_7_001"` — non-`[A-Za-z0-9_]` becomes `_`, digit-starters get prefixed.
 
 These functions are pure — no IO, no globals. Test them with plain assertions.
 
@@ -110,7 +112,7 @@ See `AGENTS.md` §6 for the rules. The shortest path:
 
 1. Add a feature flag in `Cargo.toml`.
 2. Add a variant to `OutputType` gated by it.
-3. Create `src/<language>/<flavour>/` with a `generate_<flavour>` orchestrator. Reuse `naming.rs`, the `python::module_paths` / `first_level_subdirs` helpers, and `env::make_environment`. If you find yourself copying logic from `pydantic.rs` or `sql_model/`, lift it into `mod.rs` or a new shared module instead.
+3. Create `src/<language>/<flavour>/` with a `generate_<flavour>` orchestrator. Reuse `naming.rs`, `layout.rs` (`module_paths` / `first_level_subdirs`), `refs.rs`, `imports.rs`, and `env::make_environment`. If you find yourself copying logic from `pydantic.rs` or `sql_model/`, lift it into `mod.rs` or a new shared module instead.
 4. Place templates under `src/templates/<language>/<flavour>/` and wire them up in `env::load_embedded` behind the new feature flag.
 5. Add an integration test under `tests/`. The existing `parity_*.rs` and `integration_*.rs` files are good templates.
 

@@ -487,8 +487,8 @@ mod tests {
     use super::*;
     use crate::models::changes::ChangeType;
     use bo4e_schemas::models::json_schema::{
-        LiteralTypeObject, LiteralTypeString, ObjectSchema, SchemaRootObject, SchemaRootStrEnum,
-        SchemaRootType, SchemaRootTypeBase, SchemaType, StrEnumSchema, TypeBase,
+        LiteralTypeObject, LiteralTypeString, ObjectSchema, SchemaRootObject, SchemaRootType,
+        SchemaRootTypeBase, SchemaType, StrEnumSchema, TypeBase,
     };
     use bo4e_schemas::models::schema_meta::{Schema, Schemas};
     use bo4e_schemas::models::version::DirtyVersion;

@@ -202,17 +202,12 @@ pub struct DecimalSchema {
 
 literal_enum!(LiteralFormatDecimal, Decimal);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum LiteralTypeDecimal {
+    #[default]
     Number,
     String,
-}
-
-impl Default for LiteralTypeDecimal {
-    fn default() -> Self {
-        LiteralTypeDecimal::Number
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
@@ -472,12 +467,9 @@ mod tests {
             SchemaRootType::Object(obj) => obj,
             _ => panic!("Deserialized type is not an ObjectSchema"),
         };
-        assert_eq!(deserialized == schema, true);
-        deserialized
-            .object
-            .properties
-            .remove(&"property1".to_string());
-        assert_eq!(deserialized != schema, true);
+        assert!(deserialized == schema);
+        deserialized.object.properties.remove("property1");
+        assert!(deserialized != schema);
     }
 
     fn get_ref_strings(schema: &SchemaRootObject) -> HashSet<String> {
@@ -501,7 +493,7 @@ mod tests {
             ("null", PrimitiveValue::Null),
             ("true", PrimitiveValue::Bool(true)),
             ("42", PrimitiveValue::Integer(42)),
-            ("3.14", PrimitiveValue::Float(3.14)),
+            ("1.23", PrimitiveValue::Float(1.23)),
             ("\"hello\"", PrimitiveValue::String("hello".into())),
         ];
         for (json, expected) in cases {

@@ -38,7 +38,7 @@ impl From<&Token> for String {
 impl Token {
     pub fn new(token: String) -> Result<Self, String> {
         is_valid_github_token(&token)
-            .then(|| Token { token })
+            .then_some(Token { token })
             .ok_or_else(|| "Invalid GitHub token.".to_string())
     }
     pub fn from_github_cli() -> Result<Self, String> {

@@ -1,6 +1,7 @@
 use super::plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
 use crate::error::Error;
-use crate::python::{python_attr_name, sanitize_enum_member_name};
+use crate::naming::sanitize_member_name;
+use crate::python::python_attr_name;
 use minijinja::{Environment, context};
 use serde::Serialize;
 use serde_json::Map as JsonMap;
@@ -139,7 +140,7 @@ fn group_imports(raw: BTreeSet<RawImport>) -> Vec<SqlImport> {
             }
         })
         .collect();
-    result.sort_by(|a, b| a.cmp(b));
+    result.sort();
     result
 }
 
@@ -523,7 +524,7 @@ fn render_enum(env: &Environment<'_>, table: &TablePlan) -> Result<String, Error
         .iter()
         .map(|v| {
             minijinja::Value::from_serialize(&context! {
-                name => sanitize_enum_member_name(v),
+                name => sanitize_member_name(v),
                 default => format!("\"{v}\""),
                 docstring => None::<String>,
             })
@@ -616,7 +617,7 @@ pub(crate) fn render_init(env: &Environment<'_>, plan: &SqlPlan) -> Result<Strin
                 .iter()
                 .take(t.module.len().saturating_sub(1))
                 .map(|s| s.to_ascii_lowercase())
-                .chain(std::iter::once(crate::naming::module_file_name(&t.module)))
+                .chain(std::iter::once(crate::layout::module_file_name(&t.module)))
                 .collect();
             context! {
                 name => t.class_name.clone(),
