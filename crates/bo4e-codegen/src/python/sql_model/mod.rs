@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 /// Orchestrate the entire SQL model code generation: walk the plan, render each table,
 /// write per-class files at the right paths, and write root-level __init__, __version__,
 /// and per-subpackage __init__ files.
-pub(crate) fn generate_sql_model(
+pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
     env: &Environment<'_>,

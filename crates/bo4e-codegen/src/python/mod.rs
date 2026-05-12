@@ -8,10 +8,10 @@ pub(crate) mod imports;
 pub(crate) mod types;
 
 #[cfg(feature = "python-pydantic")]
-pub(crate) mod pydantic;
+pub mod pydantic;
 
 #[cfg(feature = "python-sql-model")]
-pub(crate) mod sql_model;
+pub mod sql_model;
 
 /// Render the BO4E module-level docstring used by every generator's root `__init__.py`.
 /// One source of truth so pydantic, sql-model, and any future Python output stay in sync.

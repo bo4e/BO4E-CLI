@@ -7,7 +7,7 @@ mod output_type;
 pub mod refs;
 
 #[cfg(any(feature = "python-pydantic", feature = "python-sql-model",))]
-mod python;
+pub mod python;
 
 pub use error::Error;
 pub use output_type::OutputType;
@@ -44,11 +44,11 @@ pub fn generate(
     match output_type {
         #[cfg(feature = "python-pydantic")]
         OutputType::PythonPydantic => {
-            python::pydantic::generate_pydantic(schemas, output_dir, &env)
+            python::pydantic::generate(schemas, output_dir, &env)
         }
         #[cfg(feature = "python-sql-model")]
         OutputType::PythonSqlModel => {
-            python::sql_model::generate_sql_model(schemas, output_dir, &env)
+            python::sql_model::generate(schemas, output_dir, &env)
         }
         // When all python features are compiled out, OutputType has no variants and
         // this match has no arms; the wildcard keeps the code well-formed.

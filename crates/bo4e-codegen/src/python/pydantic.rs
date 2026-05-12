@@ -61,7 +61,7 @@ struct EnumMember {
     docstring: Option<String>,
 }
 
-pub(crate) fn generate_pydantic(
+pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
     env: &Environment<'static>,
