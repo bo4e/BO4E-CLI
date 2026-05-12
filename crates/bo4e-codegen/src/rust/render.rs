@@ -161,72 +161,70 @@ pub(crate) fn render_object(
 
         // Detect `_typ`-style discriminator: ConstantSchema or anyOf:[const,null] or
         // anyOf:[$ref to enum/Typ, null] with TypeBase.default
-        let (type_hint, default_expr) = if let Some(wire) =
-            single_variant_discriminator(prop_name, prop_schema)
-        {
-            let enum_name = format!(
-                "{class_name}{}",
-                to_pascal_case(&strip_leading_underscore(prop_name))
-            );
-            extra_enums.push(render_single_variant_enum(
-                &enum_name,
-                &wire,
-                schema_base(prop_schema).description.as_deref(),
-            ));
-            (enum_name.clone(), Some(format!("{enum_name}::default()")))
-        } else {
-            let mapped = map_rust(prop_schema).map_err(|UnsupportedShape(shape)| {
-                Error::UnsupportedSchemaShape {
-                    schema_name: class_name.to_string(),
-                    property: prop_name.clone(),
-                    shape,
-                }
-            })?;
-            imports.extend(mapped.imports.iter().cloned());
-
-            let json_default = literal_default_rust(prop_schema);
-            let has_non_null_default = json_default
-                .as_deref()
-                .is_some_and(|d| d != "None" && !d.is_empty());
-
-            // `_version` is always non-optional per design — it must hold a string
-            // value (typically the live BO4E version constant). This matters when
-            // bo4e edit marks `_version` as required, in which case `Option<String>`
-            // would defeat the contract.
-            let is_version_field = prop_name == "_version";
-
-            // Whether the schema permits `null` (`map_rust` returns `Option<T>` for
-            // `anyOf:[T, null]`). This is independent of `required`: a field can be
-            // required-and-nullable, in which case the Rust type stays `Option<T>` but
-            // the serde attrs differ (no `default`, no `skip_serializing_if`). The only
-            // overrides that promote a nullable field to non-`Option<T>` are: a non-null
-            // JSON default (treat as guaranteed-present), or the special `_version` slot.
-            let schema_is_nullable = mapped.rendered.starts_with("Option<");
-            let render_as_option = schema_is_nullable && !has_non_null_default && !is_version_field;
-
-            let inner = mapped
-                .rendered
-                .strip_prefix("Option<")
-                .and_then(|s| s.strip_suffix('>'))
-                .unwrap_or(&mapped.rendered)
-                .to_string();
-            let type_hint = if render_as_option {
-                mapped.rendered.clone()
+        let (type_hint, default_expr) =
+            if let Some(wire) = single_variant_discriminator(prop_name, prop_schema) {
+                let enum_name = format!(
+                    "{class_name}{}",
+                    to_pascal_case(&strip_leading_underscore(prop_name))
+                );
+                extra_enums.push(render_single_variant_enum(
+                    &enum_name,
+                    &wire,
+                    schema_base(prop_schema).description.as_deref(),
+                ));
+                (enum_name.clone(), Some(format!("{enum_name}::default()")))
             } else {
-                inner
-            };
+                let mapped = map_rust(prop_schema).map_err(|UnsupportedShape(shape)| {
+                    Error::UnsupportedSchemaShape {
+                        schema_name: class_name.to_string(),
+                        property: prop_name.clone(),
+                        shape,
+                    }
+                })?;
+                imports.extend(mapped.imports.iter().cloned());
 
-            let default_expr = if is_version_field {
-                needs_default_version_fn = true;
-                Some("default_version()".to_string())
-            } else if render_as_option {
-                Some("None".to_string())
-            } else {
-                json_default
-            };
+                let json_default = literal_default_rust(prop_schema);
 
-            (type_hint, default_expr)
-        };
+                // `_version` is always non-optional per design — it must hold a string
+                // value (typically the live BO4E version constant). This matters when
+                // bo4e edit marks `_version` as required, in which case `Option<String>`
+                // would defeat the contract.
+                let is_version_field = prop_name == "_version";
+
+                // A field is `Option<T>` when either the JSON value can be null
+                // (`map_rust` returns `Option<T>` for `anyOf:[T, null]`) OR the JSON key
+                // can be absent (i.e. the field is not in `required`). The only override
+                // is `_version`, which is kept as a plain `String` with a generated
+                // `default_version()` helper.
+                let schema_is_nullable = mapped.rendered.starts_with("Option<");
+                let render_as_option = !is_version_field && (schema_is_nullable || !is_required);
+
+                // Strip any outer `Option<>` from the mapped type so we can re-wrap
+                // consistently below — `map_rust` only adds it for `anyOf:[T, null]`,
+                // never recursively, so this only touches the outermost layer.
+                let inner = mapped
+                    .rendered
+                    .strip_prefix("Option<")
+                    .and_then(|s| s.strip_suffix('>'))
+                    .unwrap_or(&mapped.rendered)
+                    .to_string();
+                let type_hint = if render_as_option {
+                    format!("Option<{inner}>")
+                } else {
+                    inner
+                };
+
+                let default_expr = if is_version_field {
+                    needs_default_version_fn = true;
+                    Some("default_version()".to_string())
+                } else if render_as_option {
+                    Some("None".to_string())
+                } else {
+                    json_default
+                };
+
+                (type_hint, default_expr)
+            };
 
         let serde_attrs = build_serde_attrs(
             prop_name,
@@ -331,13 +329,15 @@ fn build_serde_attrs(
     } else if let Some(d) = default_expr {
         if d == "Default::default()" || d.ends_with("::default()") {
             parts.push("default".to_string());
-        } else if !is_required || prop_name == "_version" {
-            // `_version` always emits its default fn — the renderer guarantees one is
-            // generated, and we want it to fire whether or not the schema marks the
-            // field as required.
-            let stripped = prop_name.strip_prefix('_').unwrap_or(prop_name);
-            let fn_name = format!("default_{}", crate::naming::to_snake_case(stripped));
-            parts.push(format!("default = \"{fn_name}\""));
+        } else if prop_name == "_version" {
+            // `_version` is the only non-Option field with a serde-callable default:
+            // the root `default_version()` helper is generated in `RootModRs.jinja2`
+            // and pulled in via `use super::…default_version;` (see the
+            // `needs_default_version_fn` plumbing above). Any other non-Option field
+            // with a literal default keeps that literal in the `impl Default` block
+            // only — non-required fields are wrapped in `Option<T>` upstream, so
+            // serde never needs a missing-key fallback here.
+            parts.push("default = \"default_version\"".to_string());
         }
     }
     parts.join(", ")
@@ -614,6 +614,45 @@ mod tests {
         assert!(
             r.body.contains("skip_serializing_if = \"Option::is_none\""),
             "expected skip_serializing_if, got:\n{}",
+            r.body
+        );
+    }
+
+    /// Regression: a property that is *not* in `required` and is *not* nullable
+    /// (e.g. `type: "array"` without a `null` branch — `adressen` in BO4E's sql
+    /// fixture) must still be wrapped in `Option<T>` so deserialization survives
+    /// the JSON key being absent. Previously the renderer kept the raw type and
+    /// emitted no `default` attr, breaking serde on missing keys.
+    #[test]
+    #[cfg(feature = "rust-plain")]
+    fn render_object_optional_non_nullable_array_is_option() {
+        use bo4e_schemas::models::json_schema::{ArraySchema, LiteralTypeArray, ReferenceSchema};
+
+        let array_of_adresse = SchemaType::Array(ArraySchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeArray::Array,
+            items: Box::new(SchemaType::ReferenceSchema(ReferenceSchema {
+                base: TypeBase::default(),
+                r#ref: "../com/Adresse.json".to_string(),
+            })),
+        });
+
+        let env = make_env();
+        let schema = obj_with_props(
+            vec![("adressen", array_of_adresse)],
+            vec![], // not required
+            Some("An offer."),
+        );
+        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        assert!(
+            r.body.contains("pub adressen: Option<Vec<Adresse>>"),
+            "optional non-nullable array must be Option<Vec<_>>, got:\n{}",
+            r.body
+        );
+        assert!(
+            r.body.contains("default")
+                && r.body.contains("skip_serializing_if = \"Option::is_none\""),
+            "expected `default, skip_serializing_if = \"Option::is_none\"` on optional field, got:\n{}",
             r.body
         );
     }
