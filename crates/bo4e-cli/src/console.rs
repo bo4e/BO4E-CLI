@@ -1,3 +1,4 @@
+#[allow(clippy::module_inception)]
 pub mod console;
 pub mod highlighter;
 pub mod mark;

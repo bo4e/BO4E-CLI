@@ -35,13 +35,11 @@ pub fn filter_tags(
         if opts.exclude_candidates && v.is_release_candidate() {
             continue;
         }
-        if opts.exclude_technical_bumps {
-            if let Some(prev) = &last_yielded {
-                if prev.bumped_technical(v) {
-                    continue;
-                }
+        if opts.exclude_technical_bumps
+            && let Some(prev) = &last_yielded
+            && prev.bumped_technical(v) {
+                continue;
             }
-        }
         if i == 0 && opts.skip_first {
             continue;
         }
