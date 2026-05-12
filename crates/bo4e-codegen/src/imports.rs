@@ -4,6 +4,8 @@
 //! (`rust/imports.rs::UseBlock`) consume this type. The data model is
 //! language-neutral; each language owns its own rendering.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 /// A single import statement that a mapped type depends on.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Import {
@@ -18,6 +20,39 @@ pub enum Import {
     /// Example: a `$ref` to `"../bo/Geschaeftspartner.json"` produces
     /// `Sibling { module: vec!["bo", "Geschaeftspartner"], name: "Geschaeftspartner" }`.
     Sibling { module: Vec<String>, name: String },
+}
+
+/// Group every `Named` variant in `items` by its module path, with names
+/// collected into a sorted set per module. `Sibling` variants are ignored —
+/// each language renders those differently (Python: dotted relative paths;
+/// Rust: `super::`-prefixed paths) and that lives in the per-language
+/// renderer.
+///
+/// Used by both `python::imports::ImportBlock` and `rust::imports::UseBlock`.
+pub(crate) fn group_named_by_module(
+    items: &BTreeSet<Import>,
+) -> BTreeMap<&String, BTreeSet<&String>> {
+    let mut by_module: BTreeMap<&String, BTreeSet<&String>> = BTreeMap::new();
+    for item in items {
+        if let Import::Named { module, name } = item {
+            by_module.entry(module).or_default().insert(name);
+        }
+    }
+    by_module
+}
+
+/// Stitch a sequence of pre-rendered import-block strings (one per language
+/// "bucket": stdlib / third-party / sibling for Python; named / sibling for
+/// Rust) into the final block, separating non-empty entries with `sep` and
+/// dropping empty entries entirely. Returns an empty string when every input
+/// is empty.
+pub(crate) fn stitch_nonempty_blocks<S: AsRef<str>>(blocks: &[S], sep: &str) -> String {
+    blocks
+        .iter()
+        .map(|s| s.as_ref())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(sep)
 }
 
 #[cfg(test)]

@@ -24,34 +24,8 @@ impl UseBlock {
     pub fn render(&self, depth: usize) -> String {
         debug_assert!(depth >= 1, "depth must be >= 1");
 
-        use std::collections::BTreeMap;
-
-        let mut named: BTreeMap<&String, BTreeSet<&String>> = BTreeMap::new();
-        let mut sibling: BTreeSet<String> = BTreeSet::new();
-
-        for item in &self.items {
-            match item {
-                Import::Named { module, name } => {
-                    named.entry(module).or_default().insert(name);
-                }
-                Import::Sibling { module, name } => {
-                    let (last, head) = match module.split_last() {
-                        Some((l, h)) => (l, h),
-                        None => continue,
-                    };
-                    let supers: String = "super::".repeat(depth);
-                    let path: String = head
-                        .iter()
-                        .map(|s| s.to_ascii_lowercase())
-                        .chain(std::iter::once(last.to_ascii_lowercase()))
-                        .collect::<Vec<_>>()
-                        .join("::");
-                    sibling.insert(format!("use {supers}{path}::{name};"));
-                }
-            }
-        }
-
-        let named_lines: Vec<String> = named
+        // Named: shared grouping → `use module::Name;` / `use module::{A, B};`.
+        let named_lines: Vec<String> = crate::imports::group_named_by_module(&self.items)
             .iter()
             .map(|(module, names)| {
                 if names.len() == 1 {
@@ -68,15 +42,31 @@ impl UseBlock {
             })
             .collect();
 
-        let named_block = named_lines.join("\n");
-        let sibling_block = sibling.iter().cloned().collect::<Vec<_>>().join("\n");
-
-        match (named_block.is_empty(), sibling_block.is_empty()) {
-            (true, true) => String::new(),
-            (false, true) => named_block,
-            (true, false) => sibling_block,
-            (false, false) => format!("{named_block}\n\n{sibling_block}"),
+        // Sibling: `use super::super::…::lower::Name;` (path segments lower-cased).
+        let mut sibling: BTreeSet<String> = BTreeSet::new();
+        for item in &self.items {
+            if let Import::Sibling { module, name } = item {
+                let Some((last, head)) = module.split_last() else {
+                    continue;
+                };
+                let supers: String = "super::".repeat(depth);
+                let path: String = head
+                    .iter()
+                    .map(|s| s.to_ascii_lowercase())
+                    .chain(std::iter::once(last.to_ascii_lowercase()))
+                    .collect::<Vec<_>>()
+                    .join("::");
+                sibling.insert(format!("use {supers}{path}::{name};"));
+            }
         }
+
+        crate::imports::stitch_nonempty_blocks(
+            &[
+                named_lines.join("\n"),
+                sibling.iter().cloned().collect::<Vec<_>>().join("\n"),
+            ],
+            "\n\n",
+        )
     }
 }
 
