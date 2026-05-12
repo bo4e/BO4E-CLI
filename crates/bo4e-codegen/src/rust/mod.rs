@@ -7,6 +7,7 @@ pub mod plain;
 pub mod crate_;
 
 pub(crate) mod imports;
+pub(crate) mod types;
 
 /// Reserved Rust keywords (current + reserved-for-future) that a field name
 /// must not equal. Drives [`rust_field_name`]'s keyword-escape branch.
