@@ -70,6 +70,30 @@ pub fn to_pascal_case(name: &str) -> String {
     out
 }
 
+/// Make a string a valid C-family-style identifier.
+///
+/// Replaces any non-`[A-Za-z0-9_]` character with `_`. If the result starts
+/// with a digit, a leading `_` is prepended. Used by enum-member naming for
+/// both Python and Rust generators (sanitised member becomes a Python
+/// identifier directly; for Rust it then feeds into `to_pascal_case`).
+pub fn sanitize_member_name(raw: &str) -> String {
+    let cleaned: String = raw
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if cleaned.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("_{cleaned}")
+    } else {
+        cleaned
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,5 +173,24 @@ mod tests {
     #[test]
     fn pascal_case_empty_string() {
         assert_eq!(to_pascal_case(""), "");
+    }
+
+    #[test]
+    fn sanitize_member_keeps_valid_identifiers() {
+        assert_eq!(sanitize_member_name("STROM"), "STROM");
+        assert_eq!(sanitize_member_name("Z85_REALER"), "Z85_REALER");
+    }
+
+    #[test]
+    fn sanitize_member_replaces_hyphens_and_prefixes_digit_starts() {
+        assert_eq!(sanitize_member_name("2-01-7-001"), "_2_01_7_001");
+    }
+
+    #[test]
+    fn sanitize_member_replaces_parens() {
+        assert_eq!(
+            sanitize_member_name("Z88_VERGLEICHSMESSUNG(GEEICHT)"),
+            "Z88_VERGLEICHSMESSUNG_GEEICHT_"
+        );
     }
 }

@@ -1,6 +1,7 @@
 use super::plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
 use crate::error::Error;
-use crate::python::{python_attr_name, sanitize_enum_member_name};
+use crate::naming::sanitize_member_name;
+use crate::python::python_attr_name;
 use minijinja::{Environment, context};
 use serde::Serialize;
 use serde_json::Map as JsonMap;
@@ -523,7 +524,7 @@ fn render_enum(env: &Environment<'_>, table: &TablePlan) -> Result<String, Error
         .iter()
         .map(|v| {
             minijinja::Value::from_serialize(&context! {
-                name => sanitize_enum_member_name(v),
+                name => sanitize_member_name(v),
                 default => format!("\"{v}\""),
                 docstring => None::<String>,
             })
