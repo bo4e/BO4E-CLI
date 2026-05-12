@@ -1,0 +1,9 @@
+//! BO4E {{ version }} — generated Rust types.
+//!
+//! Querying the BO4E version at runtime: `crate::VERSION`.
+
+{%- for m in top_modules %}
+pub mod {{ m }};
+{%- endfor %}
+
+pub const VERSION: &str = "{{ version }}";

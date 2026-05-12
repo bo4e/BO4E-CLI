@@ -1,0 +1,33 @@
+{%- if module_doc %}
+{{ module_doc }}
+
+{% endif -%}
+{%- if uses %}
+{{ uses }}
+
+{% endif -%}
+{%- for ext in extra_enums %}
+{{ ext }}
+{% endfor -%}
+{%- if doc %}
+{{ doc }}
+{% endif -%}
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct {{ class_name }} {
+{%- for f in fields %}
+    {%- if f.doc %}
+    {{ f.doc | indent(4) }}
+    {%- endif %}
+    {%- if f.serde_attrs %}
+    #[serde({{ f.serde_attrs }})]
+    {%- endif %}
+    pub {{ f.name }}: {{ f.type_hint }},
+{%- endfor %}
+}
+{% if default_impl %}
+{{ default_impl }}
+{% endif -%}
+{%- if default_version_fn %}
+{{ default_version_fn }}
+{% endif -%}

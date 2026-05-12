@@ -68,6 +68,22 @@ fn load_embedded(env: &mut minijinja::Environment<'static>) -> Result<(), Error>
         )?;
     }
 
+    #[cfg(feature = "rust-plain")]
+    {
+        env.add_template(
+            "rust/plain/Struct.jinja2",
+            include_str!("templates/rust/plain/Struct.jinja2"),
+        )?;
+        env.add_template(
+            "rust/plain/ModRs.jinja2",
+            include_str!("templates/rust/plain/ModRs.jinja2"),
+        )?;
+        env.add_template(
+            "rust/plain/RootModRs.jinja2",
+            include_str!("templates/rust/plain/RootModRs.jinja2"),
+        )?;
+    }
+
     Ok(())
 }
 
@@ -149,5 +165,34 @@ mod tests {
         assert!(out.contains("from .many import AngebotAdressenLink"));
         assert!(out.contains("__all__ = ["));
         assert!(out.contains("\"Angebot\","));
+    }
+
+    #[cfg(feature = "rust-plain")]
+    #[test]
+    fn embedded_rust_plain_struct_template_loads() {
+        let env = make_environment(None).expect("env builds");
+        let tpl = env
+            .get_template("rust/plain/Struct.jinja2")
+            .expect("template registered");
+        let out = tpl
+            .render(context! {
+                module_doc => "//! example",
+                uses => "use serde::{Deserialize, Serialize};",
+                extra_enums => Vec::<String>::new(),
+                doc => "/// docstring",
+                class_name => "Foo",
+                fields => vec![context!{
+                    name => "id",
+                    type_hint => "Option<String>",
+                    serde_attrs => "rename = \"_id\", default, skip_serializing_if = \"Option::is_none\"",
+                    doc => "/// id docstring"
+                }],
+                default_impl => "",
+                default_version_fn => "",
+            })
+            .unwrap();
+        assert!(out.contains("pub struct Foo"));
+        assert!(out.contains("pub id: Option<String>"));
+        assert!(out.contains("rename = \"_id\""));
     }
 }
