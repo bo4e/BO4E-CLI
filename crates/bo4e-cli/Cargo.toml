@@ -48,10 +48,13 @@ bo4e-schemas = { path = "../bo4e-schemas" }
 bo4e-codegen = { path = "../bo4e-codegen", default-features = false }
 
 [features]
-default = ["bo4e-codegen/default"]
-python = ["bo4e-codegen/python"]
-python-pydantic   = ["bo4e-codegen/python-pydantic"]
-python-sql-model  = ["bo4e-codegen/python-sql-model"]
+default          = ["bo4e-codegen/default"]
+python           = ["bo4e-codegen/python"]
+python-pydantic  = ["bo4e-codegen/python-pydantic"]
+python-sql-model = ["bo4e-codegen/python-sql-model"]
+rust             = ["bo4e-codegen/rust"]
+rust-plain       = ["bo4e-codegen/rust-plain"]
+rust-crate       = ["bo4e-codegen/rust-crate"]
 
 [dev-dependencies]
 tempfile = "3"
