@@ -125,10 +125,7 @@ fn dispatch(
             bo4e_codegen::python::sql_model::generate(schemas, output, opts)
         }
         #[cfg(feature = "rust-plain")]
-        GenerateFlavour::RustPlain => {
-            // Wired in Task 22.
-            unimplemented!("rust-plain dispatch is wired in Task 22")
-        }
+        GenerateFlavour::RustPlain => bo4e_codegen::rust::plain::generate(schemas, output, opts),
         #[cfg(feature = "rust-crate")]
         GenerateFlavour::RustCrate(_args) => {
             // Wired in Task 23.
