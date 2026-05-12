@@ -24,7 +24,8 @@
 //!   the import block and stitch it on before writing the file.
 
 use crate::error::Error;
-use crate::naming::{module_file_name, sanitize_member_name, to_snake_case};
+use crate::layout::module_file_name;
+use crate::naming::{sanitize_member_name, to_snake_case};
 use crate::python::imports::ImportBlock;
 use crate::python::types::{Import, enum_ref_target, literal_default, map_pydantic, schema_base};
 use crate::python::{python_attr_name, root_init_module_docstring};
@@ -76,7 +77,7 @@ pub(crate) fn generate_pydantic(
         let module = schema.module().to_vec();
         let class_name = schema.name().to_string();
 
-        let (out_dir, file_name, depth) = crate::python::module_paths(output_dir, &module);
+        let (out_dir, file_name, depth) = crate::python::module_paths(output_dir, &module, "py");
         std::fs::create_dir_all(&out_dir)?;
         let out_path = out_dir.join(&file_name);
 

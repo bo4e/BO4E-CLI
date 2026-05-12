@@ -1,14 +1,5 @@
 //! Pure naming conversions used by all output types.
 
-/// Lower-case the schema's last module segment to form its Python module file name.
-/// `module_file_name(&["bo", "Angebot"])` → `"angebot"`.
-pub fn module_file_name(module: &[String]) -> String {
-    module
-        .last()
-        .map(|s| s.to_ascii_lowercase())
-        .unwrap_or_default()
-}
-
 /// Convert a JSON property name (typically camelCase) into snake_case for use as a
 /// Python field name. Acronyms are treated as case-preserving runs.
 /// `to_snake_case("marktlokationsId")` → `"marktlokations_id"`.
@@ -97,24 +88,6 @@ pub fn sanitize_member_name(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn module_file_name_lowercases_last_segment() {
-        let m = vec!["bo".to_string(), "Angebot".to_string()];
-        assert_eq!(module_file_name(&m), "angebot");
-    }
-
-    #[test]
-    fn module_file_name_handles_single_segment() {
-        let m = vec!["Typ".to_string()];
-        assert_eq!(module_file_name(&m), "typ");
-    }
-
-    #[test]
-    fn module_file_name_handles_already_lowercase() {
-        let m = vec!["enum".to_string(), "marktrolle".to_string()];
-        assert_eq!(module_file_name(&m), "marktrolle");
-    }
 
     #[test]
     fn snake_case_basic_camel_case() {

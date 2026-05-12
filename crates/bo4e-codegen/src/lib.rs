@@ -1,6 +1,7 @@
 mod env;
 mod error;
 pub mod imports;
+pub mod layout;
 pub mod naming;
 pub mod refs;
 mod output_type;

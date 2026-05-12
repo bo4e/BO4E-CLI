@@ -617,7 +617,7 @@ pub(crate) fn render_init(env: &Environment<'_>, plan: &SqlPlan) -> Result<Strin
                 .iter()
                 .take(t.module.len().saturating_sub(1))
                 .map(|s| s.to_ascii_lowercase())
-                .chain(std::iter::once(crate::naming::module_file_name(&t.module)))
+                .chain(std::iter::once(crate::layout::module_file_name(&t.module)))
                 .collect();
             context! {
                 name => t.class_name.clone(),
