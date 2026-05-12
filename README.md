@@ -300,28 +300,40 @@ Other `edit` flags: `--no-clear-output` (skip wiping the output dir before writi
 
 ## `bo4e generate`
 
-Generate code from BO4E JSON schemas.
+Generate code from BO4E JSON schemas. The output flavour is selected as a positional subcommand.
 
 ```
-bo4e generate -i <input-dir> -o <output-dir> -t <output-type> [--no-clear-output] [--templates-dir <dir>]
+bo4e generate -i <input-dir> -o <output-dir> [--no-clear-output] [--templates-dir <dir>] <FLAVOUR> [flavour-options]
 ```
 
-Example:
+Examples:
 
 ```bash
-bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python -t python-pydantic
-bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_sql -t python-sql-model
+# Python (pydantic-v2 models)
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_python python-pydantic
+
+# Python (SQLModel — pydantic + SQLAlchemy ORM)
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e_schemas_sql python-sql-model
+
+# Rust (loose files for embedding into your own crate)
+bo4e generate -i ./bo4e_schemas_edited -o ./src/bo4e rust-plain
+
+# Rust (full Cargo crate with custom name)
+bo4e generate -i ./bo4e_schemas_edited -o ./bo4e-rust-crate rust-crate --crate-name my-bo4e
 ```
 
-<a name="supported-languages"></a>Flags:
+<a name="supported-languages"></a>Arguments:
 
-| Flag                | Short | Description                                                         |
-|---------------------|-------|---------------------------------------------------------------------|
-| `--input`           | `-i`  | Directory containing input JSON schemas.                            |
-| `--output`          | `-o`  | Directory to write generated code to.                               |
-| `--output-type`     | `-t`  | One of `python-pydantic`, `python-sql-model`.                       |
-| `--no-clear-output` |       | Skip clearing the output directory before writing (default: clear). |
-| `--templates-dir`   |       | Override embedded templates with a directory of Jinja templates.    |
+| Argument            | Short | Description                                                          |
+|---------------------|-------|----------------------------------------------------------------------|
+| `--input`           | `-i`  | Directory containing input JSON schemas.                             |
+| `--output`          | `-o`  | Directory to write generated code to.                                |
+| `--no-clear-output` |       | Skip clearing the output directory before writing (default: clear).  |
+| `--templates-dir`   |       | Override embedded Jinja templates with a directory.                  |
+| `<FLAVOUR>`         |       | One of `python-pydantic`, `python-sql-model`, `rust-plain`, `rust-crate`. |
+| `--crate-name`      |       | `rust-crate` only — Cargo package name written into the generated `Cargo.toml` (default: `bo4e`). |
+
+**Breaking change vs. earlier versions:** the `-t <flavour>` flag has been replaced with a positional subcommand. Migrate by removing `-t` and moving the flavour name to the end of the command.
 
 ## `bo4e diff schemas`
 
