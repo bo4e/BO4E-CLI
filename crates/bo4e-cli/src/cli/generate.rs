@@ -127,10 +127,14 @@ fn dispatch(
         #[cfg(feature = "rust-plain")]
         GenerateFlavour::RustPlain => bo4e_codegen::rust::plain::generate(schemas, output, opts),
         #[cfg(feature = "rust-crate")]
-        GenerateFlavour::RustCrate(_args) => {
-            // Wired in Task 23.
-            unimplemented!("rust-crate dispatch is wired in Task 23")
-        }
+        GenerateFlavour::RustCrate(args) => bo4e_codegen::rust::crate_::generate(
+            schemas,
+            output,
+            opts,
+            &bo4e_codegen::RustCrateOptions {
+                crate_name: args.crate_name.clone(),
+            },
+        ),
         #[allow(unreachable_patterns)]
         _ => unreachable!("GenerateFlavour variant not handled"),
     }
