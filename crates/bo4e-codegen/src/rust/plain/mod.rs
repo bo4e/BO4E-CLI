@@ -119,16 +119,11 @@ pub fn generate(
     }
 
     // Rename `<out>/enum/` → `<out>/enums/` (since `enum` is a keyword).
-    let enum_dir = output_dir.join("enum");
-    let enums_dir = output_dir.join("enums");
-    if enum_dir.exists() && !enums_dir.exists() {
-        std::fs::rename(&enum_dir, &enums_dir)?;
-        for p in &mut written {
-            if let Ok(rel) = p.strip_prefix(&enum_dir) {
-                *p = enums_dir.join(rel);
-            }
-        }
-    }
+    crate::rename_in_written(
+        &output_dir.join("enum"),
+        &output_dir.join("enums"),
+        &mut written,
+    )?;
 
     // Root mod.rs
     let mut top: Vec<String> = raw_subdirs

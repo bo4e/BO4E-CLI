@@ -13,7 +13,7 @@ pub mod rust;
 
 pub use error::Error;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default)]
 pub struct Options<'a> {
@@ -57,6 +57,35 @@ pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
         }
     } else {
         std::fs::create_dir_all(dir)?;
+    }
+    Ok(())
+}
+
+/// Rename `from` → `to` on disk and update any matching entries in `written` to
+/// point at the new path. Works for both a single file (exact-match) and a
+/// directory (any descendant path is relocated). No-op when `from` doesn't
+/// exist or `to` already does (the latter keeps repeat `--no-clear-output`
+/// runs idempotent rather than failing).
+///
+/// Used by:
+/// - `rust::plain::generate` to rename `<out>/enum/` → `<out>/enums/`
+///   (the JSON-schema dir name is a Rust keyword).
+/// - `rust::crate_::generate` to rename `<out>/src/mod.rs` → `<out>/src/lib.rs`.
+pub(crate) fn rename_in_written(
+    from: &Path,
+    to: &Path,
+    written: &mut Vec<PathBuf>,
+) -> std::io::Result<()> {
+    if !from.exists() || to.exists() {
+        return Ok(());
+    }
+    std::fs::rename(from, to)?;
+    for p in written.iter_mut() {
+        if *p == from {
+            *p = to.to_path_buf();
+        } else if let Ok(rel) = p.strip_prefix(from) {
+            *p = to.join(rel);
+        }
     }
     Ok(())
 }

@@ -31,13 +31,8 @@ pub fn generate(
     // Rename `<src>/mod.rs` → `<src>/lib.rs`.
     let mod_rs = src_dir.join("mod.rs");
     let lib_rs = src_dir.join("lib.rs");
-    if mod_rs.exists() {
-        std::fs::rename(&mod_rs, &lib_rs)?;
-        for p in &mut written {
-            if *p == mod_rs {
-                *p = lib_rs.clone();
-            }
-        }
+    crate::rename_in_written(&mod_rs, &lib_rs, &mut written)?;
+    if lib_rs.exists() {
         diagnostics.push("renamed mod.rs → lib.rs".to_string());
     }
 

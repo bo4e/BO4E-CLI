@@ -105,6 +105,19 @@ pub(crate) enum DefaultImplOutcome {
     Skipped { missing: Vec<String> },
 }
 
+impl std::fmt::Display for DefaultImplOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Emitted => write!(f, "Default impl emitted"),
+            Self::Skipped { missing } => write!(
+                f,
+                "Default impl SKIPPED: field `{}` has no default expression",
+                missing.join("`, `")
+            ),
+        }
+    }
+}
+
 fn default_impl_outcome(fields: &[RustField]) -> DefaultImplOutcome {
     let missing: Vec<String> = fields
         .iter()
@@ -252,25 +265,12 @@ pub(crate) fn render_object(
 
     let n_fields = fields.len();
     let n_synth = extra_enums.len();
-    let diagnostic = match &outcome {
-        DefaultImplOutcome::Emitted => format!(
-            "struct {class_name} ({n_fields} fields, Default impl emitted{synth})",
-            synth = if n_synth > 0 {
-                format!(", {n_synth} synthetic enums")
-            } else {
-                String::new()
-            }
-        ),
-        DefaultImplOutcome::Skipped { missing } => format!(
-            "struct {class_name} ({n_fields} fields, Default impl SKIPPED: field `{}` has no default expression{synth})",
-            missing.join("`, `"),
-            synth = if n_synth > 0 {
-                format!(", {n_synth} synthetic enums")
-            } else {
-                String::new()
-            }
-        ),
+    let synth = if n_synth > 0 {
+        format!(", {n_synth} synthetic enums")
+    } else {
+        String::new()
     };
+    let diagnostic = format!("struct {class_name} ({n_fields} fields, {outcome}{synth})");
 
     let tpl = env.get_template("rust/plain/Struct.jinja2")?;
     let body = tpl.render(context! {
