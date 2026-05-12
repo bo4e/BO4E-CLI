@@ -37,6 +37,39 @@ pub fn to_snake_case(name: &str) -> String {
     out
 }
 
+/// Convert an identifier-shaped string (typically UPPER_SNAKE_CASE or sanitised
+/// member-name shape) into PascalCase. Words are split on `_`; each word's
+/// first character is uppercased and the rest are lowercased. A leading `_`
+/// is preserved (the sanitiser uses it to escape digit-starters).
+/// `to_pascal_case("ANGEBOT")` → `"Angebot"`.
+/// `to_pascal_case("Z88_VERGLEICHSMESSUNG_GEEICHT_")` → `"Z88VergleichsmessungGeeicht"`.
+/// `to_pascal_case("_2_01_7_001")` → `"_2_01_7_001"` (digit-starter prefix preserved).
+pub fn to_pascal_case(name: &str) -> String {
+    if name.is_empty() {
+        return String::new();
+    }
+    let leading_underscore = name.starts_with('_')
+        && name
+            .chars()
+            .nth(1)
+            .is_some_and(|c| c.is_ascii_digit() || c == '_');
+    if leading_underscore {
+        return name.to_string();
+    }
+    let body = name;
+    let mut out = String::with_capacity(name.len());
+    for word in body.split('_').filter(|w| !w.is_empty()) {
+        let mut chars = word.chars();
+        if let Some(first) = chars.next() {
+            out.push(first.to_ascii_uppercase());
+            for c in chars {
+                out.push(c.to_ascii_lowercase());
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,5 +120,34 @@ mod tests {
     #[test]
     fn snake_case_with_digits() {
         assert_eq!(to_snake_case("v2Version"), "v2_version");
+    }
+
+    #[test]
+    fn pascal_case_from_upper_snake() {
+        assert_eq!(to_pascal_case("ANGEBOT"), "Angebot");
+        assert_eq!(to_pascal_case("BUENDELVERTRAG"), "Buendelvertrag");
+    }
+
+    #[test]
+    fn pascal_case_from_mixed_underscore() {
+        assert_eq!(
+            to_pascal_case("Z88_VERGLEICHSMESSUNG_GEEICHT_"),
+            "Z88VergleichsmessungGeeicht"
+        );
+    }
+
+    #[test]
+    fn pascal_case_with_leading_underscore() {
+        assert_eq!(to_pascal_case("_2_01_7_001"), "_2_01_7_001");
+    }
+
+    #[test]
+    fn pascal_case_already_pascal_pass_through() {
+        assert_eq!(to_pascal_case("Angebot"), "Angebot");
+    }
+
+    #[test]
+    fn pascal_case_empty_string() {
+        assert_eq!(to_pascal_case(""), "");
     }
 }
