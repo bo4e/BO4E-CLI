@@ -325,17 +325,25 @@ fn build_serde_attrs(
             parts.push("skip_serializing_if = \"Option::is_none\"".to_string());
         }
     } else if let Some(d) = default_expr {
-        if d == "Default::default()" || d.ends_with("::default()") {
-            parts.push("default".to_string());
-        } else if prop_name == "_version" {
-            // `_version` is the only non-Option field with a serde-callable default:
-            // the root `default_version()` helper is generated in `RootModRs.jinja2`
-            // and pulled in via `use super::…default_version;` (see the
-            // `needs_default_version_fn` plumbing above). Any other non-Option field
-            // with a literal default keeps that literal in the `impl Default` block
-            // only — non-required fields are wrapped in `Option<T>` upstream, so
-            // serde never needs a missing-key fallback here.
+        if prop_name == "_version" {
+            // `_version` is the only non-Option field that gets a serde-callable
+            // default *unconditionally* (even when the schema marks it as
+            // required): the root `default_version()` helper is generated in
+            // `RootModRs.jinja2` and pulled in via `use super::…default_version;`
+            // (see the `needs_default_version_fn` plumbing above). The contract is
+            // "version is always populated by the live BO4E version constant",
+            // schema `required` flag notwithstanding.
             parts.push("default = \"default_version\"".to_string());
+        } else if !is_required && (d == "Default::default()" || d.ends_with("::default()")) {
+            // Non-required + has a `::default()`-shaped expression (e.g. a
+            // synthetic discriminator enum like `AngebotTyp::default()`):
+            // tell serde to use the field type's Default on a missing key.
+            // For *required* fields we intentionally omit this so a missing
+            // key fails to deserialize — matches the required + `Option<T>`
+            // branch above, and matches pydantic's strict-required semantics.
+            // The literal default still lives in `impl Default for Struct`
+            // (for `Struct::default()` callers).
+            parts.push("default".to_string());
         }
     }
     parts.join(", ")
@@ -747,6 +755,54 @@ mod tests {
             !r.body.contains("pub typ: Option<AngebotTyp>"),
             "non-nullable discriminator must NOT be wrapped in Option, got:\n{}",
             r.body
+        );
+        // Regression: required + non-Option fields must NOT carry a serde
+        // `default` attr — that would let a missing JSON key silently
+        // deserialize via `AngebotTyp::default()`, contradicting the
+        // schema's `required` contract. (`#[serde(rename = "_typ")]` is
+        // allowed; only the standalone `default` token is forbidden here.)
+        let body_lines: Vec<&str> = r.body.lines().collect();
+        let typ_attr_line = body_lines
+            .iter()
+            .find(|l| l.contains("#[serde(") && l.contains("rename = \"_typ\""))
+            .copied()
+            .unwrap_or("");
+        assert!(
+            !typ_attr_line.contains("default"),
+            "required + non-Option discriminator must not emit a serde `default` attr, got line:\n{typ_attr_line}",
+        );
+    }
+
+    /// Optional + non-Option fields with a `::default()`-shaped default
+    /// expression (e.g. a synthetic single-variant enum on an optional
+    /// `_typ`) still get the bare `default` serde attr so missing JSON
+    /// keys fall back to `EnumName::default()`. This is the inverse of
+    /// the required case above.
+    #[test]
+    #[cfg(feature = "rust-plain")]
+    fn render_object_optional_non_nullable_discriminator_keeps_serde_default() {
+        use bo4e_schemas::models::json_schema::ConstantSchema;
+
+        let const_typ = SchemaType::ConstantSchema(ConstantSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "ANGEBOT".to_string(),
+        });
+
+        let env = make_env();
+        // `_typ` is NOT in required.
+        let schema = obj_with_props(vec![("_typ", const_typ)], vec![], None);
+        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        let body_lines: Vec<&str> = r.body.lines().collect();
+        let typ_attr_line = body_lines
+            .iter()
+            .find(|l| l.contains("#[serde(") && l.contains("rename = \"_typ\""))
+            .copied()
+            .unwrap_or("");
+        assert!(
+            typ_attr_line.contains("default"),
+            "optional + non-Option discriminator should emit `default` so missing JSON keys fall back, got line:\n{typ_attr_line}",
         );
     }
 }
