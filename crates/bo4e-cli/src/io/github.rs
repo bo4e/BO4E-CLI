@@ -235,7 +235,6 @@ async fn get_target_commitish_from_tag(
 /// Query the GitHub API of `bo4e/BO4E-Schemas` for a specific version.
 /// Returns metadata of all BO4E schemas.
 // Uses octocrab to interact with the GitHub API.
-
 pub async fn get_schemas_from_github(
     version_tag: &Version,
     token: Option<&str>,

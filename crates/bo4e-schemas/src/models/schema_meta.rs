@@ -64,7 +64,7 @@ impl Schema {
         &self.module
     }
     pub fn name(&self) -> &str {
-        &self.module.last().unwrap()
+        self.module.last().unwrap()
     }
 
     pub fn as_relative_json_path(&self) -> PathBuf {
@@ -318,8 +318,7 @@ mod tests {
         let original = collection(&[&["bo", "Angebot"], &["com", "Adresse"]]);
         let json = serde_json::to_string(&original).unwrap();
         let restored: Schemas = serde_json::from_str(&json).unwrap();
-        let mut mods: Vec<Vec<String>> =
-            restored.modules().into_iter().map(|m| m.clone()).collect();
+        let mut mods: Vec<Vec<String>> = restored.modules().into_iter().cloned().collect();
         mods.sort();
         assert_eq!(
             mods,

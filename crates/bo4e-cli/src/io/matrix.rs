@@ -6,11 +6,11 @@ pub fn write_compatibility_matrix_csv(
     matrix: &CompatibilityMatrix,
     versions: &[String],
 ) -> Result<(), String> {
-    if let Some(parent) = output.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
-        }
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
     }
     if versions.len() < 2 {
         return Err("Need at least two versions to write a CSV matrix.".to_string());
@@ -49,11 +49,11 @@ pub fn write_compatibility_matrix_json(
     output: &Path,
     matrix: &CompatibilityMatrix,
 ) -> Result<(), String> {
-    if let Some(parent) = output.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
-        }
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
     }
     let text = serde_json::to_string_pretty(matrix)
         .map_err(|e| format!("Failed to serialize matrix: {}", e))?;

@@ -24,10 +24,11 @@
 //!   the import block and stitch it on before writing the file.
 
 use crate::error::Error;
-use crate::naming::{module_file_name, to_snake_case};
+use crate::layout::module_file_name;
+use crate::naming::{sanitize_member_name, to_snake_case};
 use crate::python::imports::ImportBlock;
 use crate::python::types::{Import, enum_ref_target, literal_default, map_pydantic, schema_base};
-use crate::python::{python_attr_name, root_init_module_docstring, sanitize_enum_member_name};
+use crate::python::{python_attr_name, root_init_module_docstring};
 use bo4e_schemas::Schemas;
 use bo4e_schemas::models::json_schema::SchemaRootType;
 use minijinja::{Environment, context};
@@ -76,7 +77,7 @@ pub(crate) fn generate_pydantic(
         let module = schema.module().to_vec();
         let class_name = schema.name().to_string();
 
-        let (out_dir, file_name, depth) = crate::python::module_paths(output_dir, &module);
+        let (out_dir, file_name, depth) = crate::python::module_paths(output_dir, &module, "py");
         std::fs::create_dir_all(&out_dir)?;
         let out_path = out_dir.join(&file_name);
 
@@ -157,7 +158,7 @@ fn render_enum(
     let fields: Vec<EnumMember> = members
         .iter()
         .map(|v| EnumMember {
-            name: sanitize_enum_member_name(v),
+            name: sanitize_member_name(v),
             default: format!("\"{v}\""),
             docstring: None,
         })
@@ -225,7 +226,7 @@ fn render_object(
                     _ => None,
                 };
                 if let Some((enum_name, enum_module)) = typing_enum {
-                    let member = sanitize_enum_member_name(value);
+                    let member = sanitize_member_name(value);
                     mapped.rendered = format!("Literal[{enum_name}.{member}]");
                     mapped.imports.clear();
                     mapped.imports.insert(Import::Named {
@@ -393,7 +394,7 @@ fn qualify_enum_default(
         module: enum_module,
         name: enum_name.clone(),
     }]);
-    let member = sanitize_enum_member_name(value);
+    let member = sanitize_member_name(value);
     Some(format!("{enum_name}.{member}"))
 }
 

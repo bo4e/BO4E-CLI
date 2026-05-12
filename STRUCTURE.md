@@ -55,6 +55,7 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 
 ## Key architectural decisions
 
+- **Shared, language-neutral helpers** live at the top of `bo4e-codegen/src/` (`naming.rs`, `layout.rs`, `refs.rs`, `imports.rs`). Per-language modules (`python/`, future `rust/`) own only the bits that actually differ — type-string mapping, import-block rendering, language-specific reserved words.
 - **Schemas are the source of truth.** Everything downstream (edit, diff, generate) operates on a `Schemas` collection loaded from disk. The schema directory carries a `.version` file that captures the upstream BO4E version (plain or "dirty").
 - **Feature-gated output types.** `OutputType` variants in `bo4e-codegen` are `#[cfg(feature = …)]`-gated, so a slim install (e.g. `--no-default-features --features python-pydantic`) ships a binary whose clap parser only accepts the compiled-in generators. New output types add a feature, a variant, a template subdir, and an orchestrator — they do not branch the existing ones.
 - **Templates over hand-written emission.** Generators build a context struct (Python flavour matters: pydantic's per-field context mirrors what the vendored `data-model-code-generator` `BaseModel.jinja2` expects) and render embedded MiniJinja templates. The CLI exposes `--templates-dir` so users can override individual templates without rebuilding the binary.

@@ -17,11 +17,11 @@ pub fn read_changes_from_diff_files(paths: &[PathBuf]) -> Result<Vec<Changes>, S
 }
 
 pub fn write_changes(changes: &Changes, file_path: &Path) -> Result<(), String> {
-    if let Some(parent) = file_path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
-        }
+    if let Some(parent) = file_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
     }
     let text = serde_json::to_string_pretty(changes)
         .map_err(|e| format!("Failed to serialize Changes: {}", e))?;

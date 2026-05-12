@@ -285,11 +285,12 @@ impl Version {
         Ok(self.major == other.major
             && self.functional == other.functional
             && self.technical == other.technical
-            && self.candidate.ok_or_else(
-                || "Cannot compare candidate versions if one of them is not a candidate.",
-            )? > other.candidate.ok_or_else(
-                || "Cannot compare candidate versions if one of them is not a candidate.",
-            )?)
+            && self
+                .candidate
+                .ok_or("Cannot compare candidate versions if one of them is not a candidate.")?
+                > other.candidate.ok_or(
+                    "Cannot compare candidate versions if one of them is not a candidate.",
+                )?)
     }
 }
 
@@ -384,7 +385,7 @@ mod tests {
         let dv_clean: DirtyVersion = "v202401.0.1".parse().unwrap();
         let dv_dirty: DirtyVersion = "v202401.0.1+gabc".parse().unwrap();
         assert!(v == dv_clean);
-        assert!(!(v == dv_dirty)); // dirty is strictly newer at same semver
+        assert!(v != dv_dirty); // dirty is strictly newer at same semver
     }
 
     #[test]
