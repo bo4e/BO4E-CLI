@@ -92,6 +92,14 @@ fn load_embedded(env: &mut minijinja::Environment<'static>) -> Result<(), Error>
         )?;
     }
 
+    #[cfg(feature = "rust-crate")]
+    {
+        env.add_template(
+            "rust/crate_/CargoToml.jinja2",
+            include_str!("templates/rust/crate_/CargoToml.jinja2"),
+        )?;
+    }
+
     Ok(())
 }
 

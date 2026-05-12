@@ -1,6 +1,7 @@
 //! `rust-crate` orchestrator — wraps `rust-plain` output as a self-contained Cargo crate.
 
 use bo4e_schemas::Schemas;
+use minijinja::context;
 use std::path::Path;
 
 use crate::Error;
@@ -36,10 +37,18 @@ pub fn generate(
         diagnostics.push("renamed mod.rs → lib.rs".to_string());
     }
 
-    // Emit Cargo.toml.
+    // Emit Cargo.toml. We build a fresh env here rather than threading the
+    // plain orchestrator's env through, because `crate_` only needs this one
+    // template — the cost of re-loading the embedded set is negligible.
+    let env = crate::env::make_environment(opts.templates_dir)?;
     let version_str = schemas.version.to_string();
     let semver = to_cargo_semver(&version_str);
-    let cargo_toml = render_cargo_toml(&crate_opts.crate_name, &semver, &version_str);
+    let cargo_tpl = env.get_template("rust/crate_/CargoToml.jinja2")?;
+    let cargo_toml = cargo_tpl.render(context! {
+        crate_name => &crate_opts.crate_name,
+        semver => &semver,
+        bo4e_version => &version_str,
+    })?;
     let cargo_path = output_dir.join("Cargo.toml");
     std::fs::write(&cargo_path, cargo_toml)?;
     written.push(cargo_path);
@@ -83,31 +92,22 @@ fn to_cargo_semver(version_str: &str) -> String {
     s.to_string()
 }
 
-fn render_cargo_toml(crate_name: &str, semver: &str, bo4e_version: &str) -> String {
-    format!(
-        "[package]\n\
-         name = \"{crate_name}\"\n\
-         version = \"{semver}\"\n\
-         edition = \"2024\"\n\
-         description = \"Generated Rust types for the BO4E energy data model, version {bo4e_version}\"\n\
-         license = \"Apache-2.0\"\n\
-         \n\
-         [dependencies]\n\
-         serde = {{ version = \"1\", features = [\"derive\"] }}\n\
-         serde_json = \"1\"\n\
-         chrono = {{ version = \"0.4\", features = [\"serde\"] }}\n\
-         uuid = {{ version = \"1\", features = [\"serde\", \"v4\"] }}\n\
-         rust_decimal = {{ version = \"1\", features = [\"serde\"] }}\n"
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minijinja::context;
 
     #[test]
     fn cargo_toml_strips_leading_v_for_semver() {
-        let s = render_cargo_toml("bo4e", "202401.4.0", "v202401.4.0");
+        let env = crate::env::make_environment(None).unwrap();
+        let tpl = env.get_template("rust/crate_/CargoToml.jinja2").unwrap();
+        let s = tpl
+            .render(context! {
+                crate_name => "bo4e",
+                semver => "202401.4.0",
+                bo4e_version => "v202401.4.0",
+            })
+            .unwrap();
         assert!(s.contains("name = \"bo4e\""));
         assert!(s.contains("version = \"202401.4.0\""));
         assert!(s.contains(
