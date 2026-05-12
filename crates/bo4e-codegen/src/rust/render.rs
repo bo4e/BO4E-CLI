@@ -1,8 +1,16 @@
 //! Pure render helpers consumed by `rust::plain` and `rust::crate_` orchestrators.
 
+use bo4e_schemas::models::json_schema::{ObjectSchema, SchemaType};
+use minijinja::{Environment, context};
+use serde::Serialize;
+use std::collections::BTreeSet;
+
+use crate::Error;
 use crate::imports::Import;
 use crate::naming::{sanitize_member_name, to_pascal_case};
+use crate::refs::{enum_ref_target, schema_base};
 use crate::rust::imports::UseBlock;
+use crate::rust::types::{UnsupportedShape, literal_default_rust, map_rust};
 
 /// Render a docstring block as outer `///` lines. Empty input → empty string.
 /// Preserves embedded line breaks verbatim — Sphinx RST is not stripped.
@@ -19,49 +27,44 @@ pub(crate) fn render_doc_comment(description: Option<&str>, indent: &str) -> Str
 /// Render the single-variant enum that types a const-valued property.
 /// `class_name` = e.g. `"AngebotTyp"`; `wire_value` = the JSON literal, e.g. `"ANGEBOT"`.
 pub(crate) fn render_single_variant_enum(
+    env: &Environment<'static>,
     class_name: &str,
     wire_value: &str,
     docstring: Option<&str>,
-) -> String {
+) -> Result<String, Error> {
     let variant_ident = to_pascal_case(&sanitize_member_name(wire_value));
-    let doc = render_doc_comment(docstring, "");
-    let mut out = String::new();
-    if !doc.is_empty() {
-        out.push_str(&doc);
-        out.push('\n');
-    }
-    out.push_str(
-        "#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]\n",
-    );
-    out.push_str(&format!("pub enum {class_name} {{\n"));
-    out.push_str("    #[default]\n");
-    out.push_str(&format!("    #[serde(rename = \"{wire_value}\")]\n"));
-    out.push_str(&format!("    {variant_ident},\n"));
-    out.push_str("}\n");
-    out
+    let tpl = env.get_template("rust/plain/Enum.jinja2")?;
+    Ok(tpl.render(context! {
+        doc => render_doc_comment(docstring, ""),
+        single_variant => true,
+        class_name => class_name,
+        variants => vec![context! { wire => wire_value, name => variant_ident }],
+    })?)
 }
 
 /// Render the plain string-enum form (`enum Typ { Angebot, Ausschreibung, … }`).
 pub(crate) fn render_str_enum(
+    env: &Environment<'static>,
     class_name: &str,
     members: &[String],
     docstring: Option<&str>,
-) -> String {
-    let doc = render_doc_comment(docstring, "");
-    let mut out = String::new();
-    if !doc.is_empty() {
-        out.push_str(&doc);
-        out.push('\n');
-    }
-    out.push_str("#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]\n");
-    out.push_str(&format!("pub enum {class_name} {{\n"));
-    for m in members {
-        let variant = to_pascal_case(&sanitize_member_name(m));
-        out.push_str(&format!("    #[serde(rename = \"{m}\")]\n"));
-        out.push_str(&format!("    {variant},\n"));
-    }
-    out.push_str("}\n");
-    out
+) -> Result<String, Error> {
+    let variants: Vec<_> = members
+        .iter()
+        .map(|m| {
+            context! {
+                wire => m,
+                name => to_pascal_case(&sanitize_member_name(m)),
+            }
+        })
+        .collect();
+    let tpl = env.get_template("rust/plain/Enum.jinja2")?;
+    Ok(tpl.render(context! {
+        doc => render_doc_comment(docstring, ""),
+        single_variant => false,
+        class_name => class_name,
+        variants => variants,
+    })?)
 }
 
 /// Render the `use` block for a file at module depth `depth`.
@@ -70,15 +73,6 @@ pub(crate) fn render_use_block(imports: impl IntoIterator<Item = Import>, depth:
     b.extend(imports);
     b.render(depth)
 }
-
-use bo4e_schemas::models::json_schema::{ObjectSchema, SchemaType};
-use minijinja::{Environment, context};
-use serde::Serialize;
-use std::collections::BTreeSet;
-
-use crate::Error;
-use crate::refs::{enum_ref_target, schema_base};
-use crate::rust::types::{UnsupportedShape, literal_default_rust, map_rust};
 
 /// Per-field context for the Struct.jinja2 template.
 #[derive(Debug, Serialize)]
@@ -160,10 +154,11 @@ pub(crate) fn render_object(
                     to_pascal_case(&strip_leading_underscore(prop_name))
                 );
                 extra_enums.push(render_single_variant_enum(
+                    env,
                     &enum_name,
                     &disc.wire_value,
                     schema_base(prop_schema).description.as_deref(),
-                ));
+                )?);
                 // When the schema permits null we expose `Option<EnumName>` so
                 // schema-valid `null` payloads deserialize as `None` instead of
                 // erroring. The default still carries the single variant so
@@ -261,7 +256,7 @@ pub(crate) fn render_object(
     let doc = render_doc_comment(obj.base.description.as_deref(), "");
 
     let outcome = default_impl_outcome(&fields);
-    let default_impl = render_default_impl(class_name, &fields);
+    let default_impl = render_default_impl(env, class_name, &fields)?;
 
     let n_fields = fields.len();
     let n_synth = extra_enums.len();
@@ -337,30 +332,35 @@ fn build_serde_attrs(
     parts.join(", ")
 }
 
-fn render_default_impl(class_name: &str, fields: &[RustField]) -> String {
-    if fields.iter().any(|f| f.default_expr.is_none()) {
-        let missing: Vec<&str> = fields
+fn render_default_impl(
+    env: &Environment<'static>,
+    class_name: &str,
+    fields: &[RustField],
+) -> Result<String, Error> {
+    let missing: Vec<&str> = fields
+        .iter()
+        .filter(|f| f.default_expr.is_none())
+        .map(|f| f.name.as_str())
+        .collect();
+    let field_ctx: Vec<_> = if missing.is_empty() {
+        fields
             .iter()
-            .filter(|f| f.default_expr.is_none())
-            .map(|f| f.name.as_str())
-            .collect();
-        return format!(
-            "// Default impl omitted: field `{}` has no default expression.",
-            missing.join("`, `")
-        );
-    }
-    let mut out = String::new();
-    out.push_str(&format!("impl Default for {class_name} {{\n"));
-    out.push_str("    fn default() -> Self {\n");
-    out.push_str("        Self {\n");
-    for f in fields {
-        let expr = f.default_expr.as_deref().unwrap();
-        out.push_str(&format!("            {}: {},\n", f.name, expr));
-    }
-    out.push_str("        }\n");
-    out.push_str("    }\n");
-    out.push_str("}\n");
-    out
+            .map(|f| {
+                context! {
+                    name => f.name,
+                    expr => f.default_expr.as_deref().unwrap(),
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let tpl = env.get_template("rust/plain/DefaultImpl.jinja2")?;
+    Ok(tpl.render(context! {
+        class_name => class_name,
+        missing => missing,
+        fields => field_ctx,
+    })?)
 }
 
 /// Outcome of `single_variant_discriminator`: the constant wire value plus a
@@ -460,8 +460,16 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rust-plain")]
     fn single_variant_enum_shape() {
-        let s = render_single_variant_enum("AngebotTyp", "ANGEBOT", Some("Angebot discriminator"));
+        let env = make_env();
+        let s = render_single_variant_enum(
+            &env,
+            "AngebotTyp",
+            "ANGEBOT",
+            Some("Angebot discriminator"),
+        )
+        .unwrap();
         assert!(s.contains("/// Angebot discriminator"));
         assert!(s.contains("pub enum AngebotTyp"));
         assert!(s.contains("#[default]"));
@@ -470,9 +478,11 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rust-plain")]
     fn str_enum_one_variant_per_member() {
+        let env = make_env();
         let members = vec!["ANGEBOT".to_string(), "AUSSCHREIBUNG".to_string()];
-        let s = render_str_enum("Typ", &members, None);
+        let s = render_str_enum(&env, "Typ", &members, None).unwrap();
         assert!(s.contains("pub enum Typ"));
         assert!(s.contains("#[serde(rename = \"ANGEBOT\")]"));
         assert!(s.contains("Angebot,"));
@@ -481,9 +491,11 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rust-plain")]
     fn str_enum_handles_hyphenated_member() {
+        let env = make_env();
         let members = vec!["2-01-7-001".to_string()];
-        let s = render_str_enum("Code", &members, None);
+        let s = render_str_enum(&env, "Code", &members, None).unwrap();
         assert!(s.contains("#[serde(rename = \"2-01-7-001\")]"));
         assert!(s.contains("_2_01_7_001,"));
     }

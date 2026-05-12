@@ -56,10 +56,11 @@ pub fn generate(
                 let d = format!("{file_rel}: enum {class_name} ({n} variants)");
                 (
                     render_str_enum(
+                        &env,
                         &class_name,
                         &e.str_enum.enum_values,
                         e.str_enum.base.description.as_deref(),
-                    ),
+                    )?,
                     d,
                 )
             }

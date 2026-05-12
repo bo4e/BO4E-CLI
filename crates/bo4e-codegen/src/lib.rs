@@ -74,7 +74,7 @@ pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
 pub(crate) fn rename_in_written(
     from: &Path,
     to: &Path,
-    written: &mut Vec<PathBuf>,
+    written: &mut [PathBuf],
 ) -> std::io::Result<()> {
     if !from.exists() || to.exists() {
         return Ok(());

@@ -75,6 +75,14 @@ fn load_embedded(env: &mut minijinja::Environment<'static>) -> Result<(), Error>
             include_str!("templates/rust/plain/Struct.jinja2"),
         )?;
         env.add_template(
+            "rust/plain/Enum.jinja2",
+            include_str!("templates/rust/plain/Enum.jinja2"),
+        )?;
+        env.add_template(
+            "rust/plain/DefaultImpl.jinja2",
+            include_str!("templates/rust/plain/DefaultImpl.jinja2"),
+        )?;
+        env.add_template(
             "rust/plain/ModRs.jinja2",
             include_str!("templates/rust/plain/ModRs.jinja2"),
         )?;
