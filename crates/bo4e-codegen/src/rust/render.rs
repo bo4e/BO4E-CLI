@@ -87,6 +87,254 @@ pub(crate) fn render_use_block(imports: impl IntoIterator<Item = Import>, depth:
     b.render(depth)
 }
 
+use bo4e_schemas::models::json_schema::{ObjectSchema, SchemaType};
+use minijinja::{Environment, context};
+use serde::Serialize;
+use std::collections::BTreeSet;
+
+use crate::Error;
+use crate::refs::{enum_ref_target, schema_base};
+use crate::rust::types::{UnsupportedShape, literal_default_rust, map_rust};
+
+/// Per-field context for the Struct.jinja2 template.
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub(crate) struct RustField {
+    pub name: String,
+    pub type_hint: String,
+    pub serde_attrs: String,
+    pub doc: String,
+    /// Default expression for the field, used by `render_default_impl`.
+    #[serde(skip)]
+    pub default_expr: Option<String>,
+}
+
+/// Outcome of rendering an object schema: the file body, ready to write.
+#[allow(dead_code)]
+pub(crate) struct RenderedObject {
+    pub body: String,
+}
+
+/// Render a single object schema as a `.rs` file body.
+///
+/// `parent_module` is the schema's module path *without* the class name appended.
+/// `depth` is the file's directory depth from the output root (1 = root-level, 2 = under `bo/`, …).
+#[allow(dead_code)]
+pub(crate) fn render_object(
+    env: &Environment<'static>,
+    class_name: &str,
+    parent_module: &[String],
+    obj: &ObjectSchema,
+    depth: usize,
+) -> Result<RenderedObject, Error> {
+    let mut imports: BTreeSet<Import> = BTreeSet::new();
+
+    let required: BTreeSet<&str> = obj.required.iter().map(|s| s.as_str()).collect();
+    let mut fields: Vec<RustField> = Vec::new();
+    let mut extra_enums: Vec<String> = Vec::new();
+    let mut needs_default_version_fn = false;
+
+    for (prop_name, prop_schema) in &obj.properties {
+        let (rust_name, needs_rename) = crate::rust::rust_field_name(prop_name);
+        let is_required = required.contains(prop_name.as_str());
+
+        // Detect `_typ`-style discriminator: ConstantSchema or anyOf:[const,null] or
+        // anyOf:[$ref to enum/Typ, null] with TypeBase.default
+        let (type_hint, default_expr) =
+            if let Some(wire) = single_variant_discriminator(prop_name, prop_schema) {
+                let enum_name = format!(
+                    "{class_name}{}",
+                    to_pascal_case(&strip_leading_underscore(prop_name))
+                );
+                extra_enums.push(render_single_variant_enum(
+                    &enum_name,
+                    &wire,
+                    schema_base(prop_schema).description.as_deref(),
+                ));
+                (enum_name.clone(), Some(format!("{enum_name}::default()")))
+            } else {
+                let mapped = map_rust(prop_schema).map_err(|UnsupportedShape(shape)| {
+                    Error::UnsupportedSchemaShape {
+                        schema_name: class_name.to_string(),
+                        property: prop_name.clone(),
+                        shape,
+                    }
+                })?;
+                imports.extend(mapped.imports.iter().cloned());
+
+                let json_default = literal_default_rust(prop_schema);
+                let has_non_null_default = json_default
+                    .as_deref()
+                    .is_some_and(|d| d != "None" && !d.is_empty());
+
+                // `map_rust` already returns `Option<T>` when the schema is `anyOf:[T, null]`.
+                // In that case we must NOT wrap again; the type is already optional.
+                let already_optional = mapped.rendered.starts_with("Option<");
+                let optional = (!is_required && !has_non_null_default) || already_optional;
+                let type_hint = if optional && !already_optional {
+                    format!("Option<{}>", mapped.rendered)
+                } else {
+                    mapped.rendered.clone()
+                };
+
+                let default_expr = if prop_name == "_version" {
+                    needs_default_version_fn = true;
+                    Some("default_version()".to_string())
+                } else if optional {
+                    Some("None".to_string())
+                } else {
+                    json_default
+                };
+
+                (type_hint, default_expr)
+            };
+
+        let serde_attrs = build_serde_attrs(
+            prop_name,
+            needs_rename,
+            &type_hint,
+            default_expr.as_deref(),
+            is_required,
+        );
+        let doc = render_doc_comment(schema_base(prop_schema).description.as_deref(), "");
+
+        fields.push(RustField {
+            name: rust_name,
+            type_hint,
+            serde_attrs,
+            doc,
+            default_expr,
+        });
+    }
+
+    let uses = render_use_block(imports.iter().cloned(), depth);
+    let module_doc = render_module_doc(obj.base.description.as_deref());
+    let doc = render_doc_comment(obj.base.description.as_deref(), "");
+
+    let default_impl = render_default_impl(class_name, &fields);
+    let default_version_fn = if needs_default_version_fn {
+        render_default_version_fn()
+    } else {
+        String::new()
+    };
+
+    let tpl = env.get_template("rust/plain/Struct.jinja2")?;
+    let body = tpl.render(context! {
+        module_doc => module_doc,
+        uses => uses,
+        extra_enums => extra_enums,
+        doc => doc,
+        class_name => class_name,
+        fields => &fields,
+        default_impl => default_impl,
+        default_version_fn => default_version_fn,
+    })?;
+
+    let _ = parent_module; // silence unused warning until cross-module diagnostics use it
+    Ok(RenderedObject { body })
+}
+
+fn strip_leading_underscore(s: &str) -> String {
+    s.strip_prefix('_').unwrap_or(s).to_string()
+}
+
+fn build_serde_attrs(
+    prop_name: &str,
+    needs_rename: bool,
+    type_hint: &str,
+    default_expr: Option<&str>,
+    is_required: bool,
+) -> String {
+    let mut parts = Vec::<String>::new();
+    if needs_rename {
+        parts.push(format!("rename = \"{prop_name}\""));
+    }
+    let is_option = type_hint.starts_with("Option<");
+    if is_option {
+        parts.push("default".to_string());
+        parts.push("skip_serializing_if = \"Option::is_none\"".to_string());
+    } else if let Some(d) = default_expr {
+        if d == "Default::default()" || d.ends_with("::default()") {
+            parts.push("default".to_string());
+        } else if !is_required {
+            let stripped = prop_name.strip_prefix('_').unwrap_or(prop_name);
+            let fn_name = format!("default_{}", crate::naming::to_snake_case(stripped));
+            parts.push(format!("default = \"{fn_name}\""));
+        }
+    }
+    parts.join(", ")
+}
+
+fn render_default_impl(class_name: &str, fields: &[RustField]) -> String {
+    if fields.iter().any(|f| f.default_expr.is_none()) {
+        let missing: Vec<&str> = fields
+            .iter()
+            .filter(|f| f.default_expr.is_none())
+            .map(|f| f.name.as_str())
+            .collect();
+        return format!(
+            "// Default impl omitted: field `{}` has no default expression.",
+            missing.join("`, `")
+        );
+    }
+    let mut out = String::new();
+    out.push_str(&format!("impl Default for {class_name} {{\n"));
+    out.push_str("    fn default() -> Self {\n");
+    out.push_str("        Self {\n");
+    for f in fields {
+        let expr = f.default_expr.as_deref().unwrap();
+        out.push_str(&format!("            {}: {},\n", f.name, expr));
+    }
+    out.push_str("        }\n");
+    out.push_str("    }\n");
+    out.push_str("}\n");
+    out
+}
+
+fn render_default_version_fn() -> String {
+    "fn default_version() -> String {\n    super::super::VERSION.to_string()\n}\n".to_string()
+}
+
+/// Detect a `_typ`-style discriminator. Returns `Some(wire_value)` when the
+/// property's schema fixes one constant string value.
+fn single_variant_discriminator(_prop_name: &str, prop_schema: &SchemaType) -> Option<String> {
+    use bo4e_schemas::models::json_schema::PrimitiveValue;
+
+    fn const_value(s: &SchemaType) -> Option<&str> {
+        match s {
+            SchemaType::ConstantSchema(c) => Some(c.constant.as_str()),
+            SchemaType::StrEnum(e) if e.enum_values.len() == 1 => Some(e.enum_values[0].as_str()),
+            _ => None,
+        }
+    }
+
+    // direct
+    if let Some(v) = const_value(prop_schema) {
+        return Some(v.to_string());
+    }
+
+    // anyOf: [const, null] OR anyOf: [$ref to enum, null] with TypeBase.default
+    if let SchemaType::AnyOf(a) = prop_schema {
+        let non_null: Vec<&SchemaType> = a
+            .any_of
+            .iter()
+            .filter(|t| !matches!(t, SchemaType::NullSchema(_)))
+            .collect();
+        if non_null.len() == 1 {
+            if let Some(v) = const_value(non_null[0]) {
+                return Some(v.to_string());
+            }
+            if let Some(PrimitiveValue::String(default_val)) = &schema_base(prop_schema).default
+                && enum_ref_target(non_null[0]).is_some()
+            {
+                return Some(default_val.clone());
+            }
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,5 +414,78 @@ mod tests {
         let s = render_use_block(imports, 2);
         assert!(s.contains("use serde::Serialize;"));
         assert!(s.contains("use super::super::com::adresse::Adresse;"));
+    }
+
+    use bo4e_schemas::models::json_schema::{
+        AnyOfSchema, LiteralTypeObject, LiteralTypeString, NullSchema, ObjectSchema,
+        PrimitiveValue, SchemaType, StringSchema, TypeBase,
+    };
+    use std::collections::BTreeMap;
+
+    fn make_env() -> minijinja::Environment<'static> {
+        crate::env::make_environment(None).unwrap()
+    }
+
+    fn obj_with_props(
+        props: Vec<(&str, SchemaType)>,
+        required: Vec<&str>,
+        desc: Option<&str>,
+    ) -> ObjectSchema {
+        let mut base = TypeBase::default();
+        if let Some(d) = desc {
+            base.description = Some(d.to_string());
+        }
+        let mut map: BTreeMap<String, SchemaType> = BTreeMap::new();
+        for (k, v) in props {
+            map.insert(k.to_string(), v);
+        }
+        ObjectSchema {
+            base,
+            r#type: LiteralTypeObject::Object,
+            additional_properties: true,
+            properties: map,
+            required: required.into_iter().map(String::from).collect(),
+        }
+    }
+
+    fn p_string_or_null(default: Option<&str>) -> SchemaType {
+        let mut base = TypeBase::default();
+        if let Some(d) = default {
+            base.default = Some(PrimitiveValue::String(d.to_string()));
+        }
+        SchemaType::AnyOf(AnyOfSchema {
+            base,
+            any_of: vec![
+                SchemaType::StringSchema(StringSchema {
+                    base: TypeBase::default(),
+                    r#type: LiteralTypeString::String,
+                    format: None,
+                }),
+                SchemaType::NullSchema(NullSchema::default()),
+            ],
+        })
+    }
+
+    #[test]
+    #[cfg(feature = "rust-plain")]
+    fn render_object_emits_struct_and_field_renames() {
+        let env = make_env();
+        let schema = obj_with_props(
+            vec![
+                ("_id", p_string_or_null(None)),
+                ("angebotsnummer", p_string_or_null(None)),
+            ],
+            vec![],
+            Some("An offer."),
+        );
+        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        assert!(r.body.contains("pub struct Angebot"), "got:\n{}", r.body);
+        assert!(
+            r.body.contains("pub id: Option<String>"),
+            "got:\n{}",
+            r.body
+        );
+        assert!(r.body.contains("rename = \"_id\""), "got:\n{}", r.body);
+        assert!(r.body.contains("pub angebotsnummer: Option<String>"));
     }
 }
