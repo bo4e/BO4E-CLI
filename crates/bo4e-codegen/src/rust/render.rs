@@ -167,20 +167,37 @@ pub(crate) fn render_object(
                     .as_deref()
                     .is_some_and(|d| d != "None" && !d.is_empty());
 
+                // `_version` is always non-optional per design — it must hold a string
+                // value (typically the live BO4E version constant). This matters when
+                // bo4e edit marks `_version` as required, in which case `Option<String>`
+                // would defeat the contract.
+                let is_version_field = prop_name == "_version";
+
                 // `map_rust` already returns `Option<T>` when the schema is `anyOf:[T, null]`.
-                // In that case we must NOT wrap again; the type is already optional.
+                // We unwrap when the field should be non-optional (required, or has a
+                // non-null default, or is `_version`).
                 let already_optional = mapped.rendered.starts_with("Option<");
-                let optional = (!is_required && !has_non_null_default) || already_optional;
-                let type_hint = if optional && !already_optional {
-                    format!("Option<{}>", mapped.rendered)
+                let should_be_optional = !is_version_field && !is_required && !has_non_null_default;
+                let inner = mapped
+                    .rendered
+                    .strip_prefix("Option<")
+                    .and_then(|s| s.strip_suffix('>'))
+                    .unwrap_or(&mapped.rendered)
+                    .to_string();
+                let type_hint = if should_be_optional {
+                    if already_optional {
+                        mapped.rendered.clone()
+                    } else {
+                        format!("Option<{}>", mapped.rendered)
+                    }
                 } else {
-                    mapped.rendered.clone()
+                    inner
                 };
 
-                let default_expr = if prop_name == "_version" {
+                let default_expr = if is_version_field {
                     needs_default_version_fn = true;
                     Some("default_version()".to_string())
-                } else if optional {
+                } else if should_be_optional {
                     Some("None".to_string())
                 } else {
                     json_default
@@ -251,18 +268,15 @@ fn build_serde_attrs(
     }
     let is_option = type_hint.starts_with("Option<");
     if is_option {
-        // If there's a custom default function for this optional field (e.g. `_version`),
-        // emit `default = "fn_name"` instead of the bare `default` which would give None.
-        if prop_name == "_version" {
-            parts.push("default = \"default_version\"".to_string());
-        } else {
-            parts.push("default".to_string());
-        }
+        parts.push("default".to_string());
         parts.push("skip_serializing_if = \"Option::is_none\"".to_string());
     } else if let Some(d) = default_expr {
         if d == "Default::default()" || d.ends_with("::default()") {
             parts.push("default".to_string());
-        } else if !is_required {
+        } else if !is_required || prop_name == "_version" {
+            // `_version` always emits its default fn — the renderer guarantees one is
+            // generated, and we want it to fire whether or not the schema marks the
+            // field as required.
             let stripped = prop_name.strip_prefix('_').unwrap_or(prop_name);
             let fn_name = format!("default_{}", crate::naming::to_snake_case(stripped));
             parts.push(format!("default = \"{fn_name}\""));
@@ -298,8 +312,7 @@ fn render_default_impl(class_name: &str, fields: &[RustField]) -> String {
 }
 
 fn render_default_version_fn() -> String {
-    "fn default_version() -> Option<String> {\n    Some(super::super::VERSION.to_string())\n}\n"
-        .to_string()
+    "fn default_version() -> String {\n    super::super::VERSION.to_string()\n}\n".to_string()
 }
 
 /// Detect a `_typ`-style discriminator. Returns `Some(wire_value)` when the
