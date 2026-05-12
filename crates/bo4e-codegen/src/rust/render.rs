@@ -113,6 +113,27 @@ pub(crate) struct RustField {
 #[allow(dead_code)]
 pub(crate) struct RenderedObject {
     pub body: String,
+    /// Brief per-file decision summary suitable for verbose CLI output.
+    pub diagnostic: String,
+}
+
+#[derive(Debug)]
+pub(crate) enum DefaultImplOutcome {
+    Emitted,
+    Skipped { missing: Vec<String> },
+}
+
+fn default_impl_outcome(fields: &[RustField]) -> DefaultImplOutcome {
+    let missing: Vec<String> = fields
+        .iter()
+        .filter(|f| f.default_expr.is_none())
+        .map(|f| f.name.clone())
+        .collect();
+    if missing.is_empty() {
+        DefaultImplOutcome::Emitted
+    } else {
+        DefaultImplOutcome::Skipped { missing }
+    }
 }
 
 /// Render a single object schema as a `.rs` file body.
@@ -237,8 +258,31 @@ pub(crate) fn render_object(
     let module_doc = render_module_doc(obj.base.description.as_deref());
     let doc = render_doc_comment(obj.base.description.as_deref(), "");
 
+    let outcome = default_impl_outcome(&fields);
     let default_impl = render_default_impl(class_name, &fields);
     let default_version_fn = String::new(); // No longer emitted per-file; lives in root mod.rs / lib.rs.
+
+    let n_fields = fields.len();
+    let n_synth = extra_enums.len();
+    let diagnostic = match &outcome {
+        DefaultImplOutcome::Emitted => format!(
+            "struct {class_name} ({n_fields} fields, Default impl emitted{synth})",
+            synth = if n_synth > 0 {
+                format!(", {n_synth} synthetic enums")
+            } else {
+                String::new()
+            }
+        ),
+        DefaultImplOutcome::Skipped { missing } => format!(
+            "struct {class_name} ({n_fields} fields, Default impl SKIPPED: field `{}` has no default expression{synth})",
+            missing.join("`, `"),
+            synth = if n_synth > 0 {
+                format!(", {n_synth} synthetic enums")
+            } else {
+                String::new()
+            }
+        ),
+    };
 
     let tpl = env.get_template("rust/plain/Struct.jinja2")?;
     let body = tpl.render(context! {
@@ -253,7 +297,7 @@ pub(crate) fn render_object(
     })?;
 
     let _ = parent_module; // silence unused warning until cross-module diagnostics use it
-    Ok(RenderedObject { body })
+    Ok(RenderedObject { body, diagnostic })
 }
 
 fn strip_leading_underscore(s: &str) -> String {

@@ -65,7 +65,7 @@ pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
     opts: &crate::Options,
-) -> Result<Vec<PathBuf>, Error> {
+) -> Result<crate::GenerateOutput, Error> {
     if opts.clear_output {
         crate::clear_dir_if_exists(output_dir)?;
     } else {
@@ -144,7 +144,10 @@ pub fn generate(
     let subdirs = crate::python::first_level_subdirs(modules.iter().map(|m| m.as_slice()));
     crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
 
-    Ok(written)
+    Ok(crate::GenerateOutput {
+        written,
+        diagnostics: vec![],
+    })
 }
 
 // ── Renderers ────────────────────────────────────────────────────────────────

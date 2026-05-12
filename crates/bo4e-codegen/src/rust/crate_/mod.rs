@@ -1,7 +1,7 @@
 //! `rust-crate` orchestrator — wraps `rust-plain` output as a self-contained Cargo crate.
 
 use bo4e_schemas::Schemas;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::Error;
 
@@ -10,7 +10,7 @@ pub fn generate(
     output_dir: &Path,
     opts: &crate::Options,
     crate_opts: &crate::RustCrateOptions,
-) -> Result<Vec<PathBuf>, Error> {
+) -> Result<crate::GenerateOutput, Error> {
     if opts.clear_output {
         crate::clear_dir_if_exists(output_dir)?;
     } else {
@@ -23,7 +23,10 @@ pub fn generate(
         clear_output: false, // we already cleared
         templates_dir: opts.templates_dir,
     };
-    let mut written = crate::rust::plain::generate(schemas, &src_dir, &inner_opts)?;
+    let crate::GenerateOutput {
+        mut written,
+        mut diagnostics,
+    } = crate::rust::plain::generate(schemas, &src_dir, &inner_opts)?;
 
     // Rename `<src>/mod.rs` → `<src>/lib.rs`.
     let mod_rs = src_dir.join("mod.rs");
@@ -35,6 +38,7 @@ pub fn generate(
                 *p = lib_rs.clone();
             }
         }
+        diagnostics.push("renamed mod.rs → lib.rs".to_string());
     }
 
     // Emit Cargo.toml.
@@ -44,8 +48,15 @@ pub fn generate(
     let cargo_path = output_dir.join("Cargo.toml");
     std::fs::write(&cargo_path, cargo_toml)?;
     written.push(cargo_path);
+    diagnostics.push(format!(
+        "Cargo.toml: name={}, version={semver}",
+        crate_opts.crate_name
+    ));
 
-    Ok(written)
+    Ok(crate::GenerateOutput {
+        written,
+        diagnostics,
+    })
 }
 
 fn render_cargo_toml(crate_name: &str, semver: &str, bo4e_version: &str) -> String {

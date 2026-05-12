@@ -82,11 +82,17 @@ impl Executable for Generate {
         };
 
         let label = flavour_label(&self.flavour);
-        let written = {
+        let bo4e_codegen::GenerateOutput {
+            written,
+            diagnostics,
+        } = {
             let _spin = crate::console::spinner::squish(format!("Generating {label} output"));
             dispatch(&self.flavour, &out.schemas, output, &opts).map_err(|e| e.to_string())?
         };
 
+        for d in &diagnostics {
+            crate::cprint_verbose!("{}", d);
+        }
         crate::cprint_normal!("Wrote {} files to {}", written.len(), output.display());
         Ok(())
     }
@@ -113,7 +119,7 @@ fn dispatch(
     schemas: &bo4e_schemas::Schemas,
     output: &std::path::Path,
     opts: &bo4e_codegen::Options<'_>,
-) -> Result<Vec<PathBuf>, bo4e_codegen::Error> {
+) -> Result<bo4e_codegen::GenerateOutput, bo4e_codegen::Error> {
     #[allow(unreachable_patterns)]
     match flavour {
         #[cfg(feature = "python-pydantic")]

@@ -36,6 +36,15 @@ impl Default for RustCrateOptions {
     }
 }
 
+/// Result of a `generate` call: list of files written plus optional diagnostics
+/// (info-level messages — per-file decisions and similar — that callers can surface
+/// via verbose output).
+#[derive(Debug, Default)]
+pub struct GenerateOutput {
+    pub written: Vec<std::path::PathBuf>,
+    pub diagnostics: Vec<String>,
+}
+
 pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
     if dir.exists() {
         for entry in std::fs::read_dir(dir)? {

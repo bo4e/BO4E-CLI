@@ -14,7 +14,7 @@ pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
     opts: &crate::Options,
-) -> Result<Vec<PathBuf>, Error> {
+) -> Result<crate::GenerateOutput, Error> {
     if opts.clear_output {
         crate::clear_dir_if_exists(output_dir)?;
     } else {
@@ -23,6 +23,7 @@ pub fn generate(
     let env = crate::env::make_environment(opts.templates_dir)?;
 
     let mut written: Vec<PathBuf> = Vec::new();
+    let mut diagnostics: Vec<String> = Vec::new();
     let version_str = schemas.version.to_string();
 
     // Track per top-level dir the leaf module names so we can write `mod.rs`s.
@@ -40,23 +41,42 @@ pub fn generate(
         let parsed = schema.schema().map_err(Error::Schema)?.clone();
         drop(schema);
 
-        let body = match &parsed {
-            SchemaRootType::StrEnum(e) => render_str_enum(
-                &class_name,
-                &e.str_enum.enum_values,
-                e.str_enum.base.description.as_deref(),
-            ),
+        let (body, diag) = match &parsed {
+            SchemaRootType::StrEnum(e) => {
+                let n = e.str_enum.enum_values.len();
+                let file_rel = format!(
+                    "{}/{}.rs",
+                    module.first().map(|s| s.as_str()).unwrap_or(""),
+                    file_name.trim_end_matches(".rs")
+                );
+                let d = format!("{file_rel}: enum {class_name} ({n} variants)");
+                (
+                    render_str_enum(
+                        &class_name,
+                        &e.str_enum.enum_values,
+                        e.str_enum.base.description.as_deref(),
+                    ),
+                    d,
+                )
+            }
             SchemaRootType::Object(o) => {
-                render_object(
+                let rendered = render_object(
                     &env,
                     &class_name,
                     &module[..module.len().saturating_sub(1)],
                     &o.object,
                     depth,
-                )?
-                .body
+                )?;
+                let file_rel = format!(
+                    "{}/{}.rs",
+                    module.first().map(|s| s.as_str()).unwrap_or(""),
+                    file_name.trim_end_matches(".rs")
+                );
+                let d = format!("{file_rel}: {}", rendered.diagnostic);
+                (rendered.body, d)
             }
         };
+        diagnostics.push(diag);
 
         std::fs::write(&out_path, &body)?;
         written.push(out_path);
@@ -137,6 +157,13 @@ pub fn generate(
     let root_path = output_dir.join("mod.rs");
     std::fs::write(&root_path, format!("{root_body}\n"))?;
     written.push(root_path);
+    diagnostics.push(format!(
+        "mod.rs: VERSION = {version_str}, top-level modules: {}",
+        top.join(", ")
+    ));
 
-    Ok(written)
+    Ok(crate::GenerateOutput {
+        written,
+        diagnostics,
+    })
 }
