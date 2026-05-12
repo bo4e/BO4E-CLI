@@ -2,6 +2,7 @@ mod env;
 mod error;
 pub mod imports;
 pub mod naming;
+pub mod refs;
 mod output_type;
 
 #[cfg(any(feature = "python-pydantic", feature = "python-sql-model",))]

@@ -17,6 +17,7 @@ use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaType, StringSchema
 use std::collections::BTreeSet;
 
 pub use crate::imports::Import;
+pub use crate::refs::{enum_ref_target, parse_ref, schema_base};
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -30,57 +31,6 @@ pub struct MappedType {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Parse a `$ref` string into `(module_segments, class_name)`.
-///
-/// Accepts both relative paths (`"../bo/Geschaeftspartner.json"`) and absolute URLs
-/// (the form that appears before the normalisation pass).  The last path component
-/// (stripped of `.json`) becomes the class name; preceding path components (stripped of
-/// leading `../` traversals) form the module.
-///
-/// # Examples
-///
-/// ```
-/// // "../bo/Geschaeftspartner.json" → (["bo"], "Geschaeftspartner")
-/// // "https://.../bo4e_schemas/bo/Geschaeftspartner.json" → (["bo"], "Geschaeftspartner")
-/// // "../enum/Typ.json" → (["enum"], "Typ")
-/// ```
-pub(crate) fn parse_ref(ref_str: &str) -> (Vec<String>, String) {
-    // Strip URL scheme + host + path-prefix if this is a full URL.
-    let path_part = if let Some(idx) = ref_str.find("bo4e_schemas/") {
-        &ref_str[idx + "bo4e_schemas/".len()..]
-    } else {
-        // Relative path: strip leading `../` sequences.
-        let mut s = ref_str;
-        while let Some(rest) = s.strip_prefix("../") {
-            s = rest;
-        }
-        s
-    };
-
-    // Strip a trailing `#` fragment if present.
-    let path_part = path_part.split('#').next().unwrap_or(path_part);
-
-    let mut segments: Vec<String> = path_part
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect();
-
-    // The last segment is the file name; strip `.json`.
-    let file_name = segments.pop().unwrap_or_default();
-    let class_name = file_name
-        .strip_suffix(".json")
-        .unwrap_or(&file_name)
-        .to_string();
-
-    // Combine remaining path segments with the class name as the final module segment.
-    // Convention: module = [...path_segs, class_name] so the renderer can form
-    // `from ..<sub>.<file> import <Class>`.
-    segments.push(class_name.clone());
-
-    (segments, class_name)
-}
 
 fn simple(rendered: impl Into<String>) -> MappedType {
     MappedType {
@@ -98,65 +48,6 @@ fn with_import(rendered: impl Into<String>, module: &str, name: &str) -> MappedT
     MappedType {
         rendered: rendered.into(),
         imports,
-    }
-}
-
-// ── Public helper functions ───────────────────────────────────────────────────
-
-/// Extract the [`TypeBase`] (default/title/description) common to every schema variant.
-pub(crate) fn schema_base(schema: &SchemaType) -> &bo4e_schemas::models::json_schema::TypeBase {
-    match schema {
-        SchemaType::StringSchema(s) => &s.base,
-        SchemaType::IntegerSchema(s) => &s.base,
-        SchemaType::NumberSchema(s) => &s.base,
-        SchemaType::BooleanSchema(s) => &s.base,
-        SchemaType::DecimalSchema(s) => &s.base,
-        SchemaType::NullSchema(s) => &s.base,
-        SchemaType::AnySchema(s) => &s.base,
-        SchemaType::Array(s) => &s.base,
-        SchemaType::AnyOf(s) => &s.base,
-        SchemaType::AllOf(s) => &s.base,
-        SchemaType::ConstantSchema(s) => &s.base,
-        SchemaType::ReferenceSchema(s) => &s.base,
-        SchemaType::Object(s) => &s.base,
-        SchemaType::StrEnum(s) => &s.base,
-    }
-}
-
-/// If `schema` is (or wraps in `anyOf:[…, null]`) a `$ref` to an `enum/…` schema,
-/// return `(EnumClassName, sibling_module_path)`. Used by the pydantic renderer to
-/// qualify a string default as an enum member instead of emitting a bare string
-/// literal — e.g. `default="DE"` for an enum-typed `landescode` field becomes
-/// `default=Landescode.DE`.
-pub(crate) fn enum_ref_target(schema: &SchemaType) -> Option<(String, Vec<String>)> {
-    let r = match schema {
-        SchemaType::ReferenceSchema(r) if !r.r#ref.is_empty() => r,
-        SchemaType::AnyOf(a) => {
-            let non_null: Vec<&SchemaType> = a
-                .any_of
-                .iter()
-                .filter(|t| !matches!(t, SchemaType::NullSchema(_)))
-                .collect();
-            if non_null.len() == 1 {
-                if let SchemaType::ReferenceSchema(r) = non_null[0] {
-                    if r.r#ref.is_empty() {
-                        return None;
-                    }
-                    r
-                } else {
-                    return None;
-                }
-            } else {
-                return None;
-            }
-        }
-        _ => return None,
-    };
-    let (module, class_name) = parse_ref(&r.r#ref);
-    if module.first().map(|s| s.as_str()) == Some("enum") {
-        Some((class_name, module))
-    } else {
-        None
     }
 }
 
@@ -453,31 +344,6 @@ mod tests {
             module: vec!["bo".to_string(), "Geschaeftspartner".to_string()],
             name: "Geschaeftspartner".to_string(),
         }));
-    }
-
-    // ── Additional: parse_ref helper ──────────────────────────────────────────
-
-    #[test]
-    fn parse_ref_relative() {
-        let (module, name) = parse_ref("../bo/Geschaeftspartner.json");
-        assert_eq!(module, vec!["bo", "Geschaeftspartner"]);
-        assert_eq!(name, "Geschaeftspartner");
-    }
-
-    #[test]
-    fn parse_ref_relative_enum() {
-        let (module, name) = parse_ref("../enum/Typ.json");
-        assert_eq!(module, vec!["enum", "Typ"]);
-        assert_eq!(name, "Typ");
-    }
-
-    #[test]
-    fn parse_ref_absolute_url() {
-        let (module, name) = parse_ref(
-            "https://raw.githubusercontent.com/BO4E/BO4E-Schemas/v202501.1.0-rc1/src/bo4e_schemas/bo/Geschaeftspartner.json",
-        );
-        assert_eq!(module, vec!["bo", "Geschaeftspartner"]);
-        assert_eq!(name, "Geschaeftspartner");
     }
 
     #[test]
