@@ -31,32 +31,17 @@ pub fn generate(
     output_dir: &Path,
     options: &Options,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
-    if options.clear_output {
-        clear_dir_if_exists(output_dir)?;
-    } else {
-        std::fs::create_dir_all(output_dir)?;
-    }
-
-    #[allow(unused_variables)]
-    let env = env::make_environment(options.templates_dir)?;
-
     #[allow(unreachable_patterns)]
     match output_type {
         #[cfg(feature = "python-pydantic")]
-        OutputType::PythonPydantic => {
-            python::pydantic::generate(schemas, output_dir, &env)
-        }
+        OutputType::PythonPydantic => python::pydantic::generate(schemas, output_dir, options),
         #[cfg(feature = "python-sql-model")]
-        OutputType::PythonSqlModel => {
-            python::sql_model::generate(schemas, output_dir, &env)
-        }
-        // When all python features are compiled out, OutputType has no variants and
-        // this match has no arms; the wildcard keeps the code well-formed.
+        OutputType::PythonSqlModel => python::sql_model::generate(schemas, output_dir, options),
         _ => unreachable!("OutputType variant not handled"),
     }
 }
 
-fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
+pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
     if dir.exists() {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;

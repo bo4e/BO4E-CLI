@@ -64,9 +64,14 @@ struct EnumMember {
 pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
-    env: &Environment<'static>,
+    opts: &crate::Options,
 ) -> Result<Vec<PathBuf>, Error> {
-    std::fs::create_dir_all(output_dir)?;
+    if opts.clear_output {
+        crate::clear_dir_if_exists(output_dir)?;
+    } else {
+        std::fs::create_dir_all(output_dir)?;
+    }
+    let env = crate::env::make_environment(opts.templates_dir)?;
 
     let mut written: Vec<PathBuf> = Vec::new();
     let version_str = schemas.version.to_string();
@@ -86,9 +91,9 @@ pub fn generate(
         drop(schema); // release the RefCell borrow before any further work
 
         let body = match &parsed {
-            SchemaRootType::StrEnum(e) => render_enum(env, &class_name, &e.str_enum.enum_values)?,
+            SchemaRootType::StrEnum(e) => render_enum(&env, &class_name, &e.str_enum.enum_values)?,
             SchemaRootType::Object(o) => {
-                render_object(env, &class_name, &module, &o.object, depth)?
+                render_object(&env, &class_name, &module, &o.object, depth)?
             }
         };
 

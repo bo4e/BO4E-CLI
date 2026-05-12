@@ -9,7 +9,6 @@ mod renderer;
 
 use crate::error::Error;
 use bo4e_schemas::Schemas;
-use minijinja::Environment;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -19,9 +18,14 @@ use std::path::{Path, PathBuf};
 pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
-    env: &Environment<'_>,
+    opts: &crate::Options,
 ) -> Result<Vec<PathBuf>, Error> {
-    std::fs::create_dir_all(output_dir)?;
+    if opts.clear_output {
+        crate::clear_dir_if_exists(output_dir)?;
+    } else {
+        std::fs::create_dir_all(output_dir)?;
+    }
+    let env = crate::env::make_environment(opts.templates_dir)?;
     let mut written: Vec<PathBuf> = Vec::new();
     let plan = plan::build_plan(schemas)?;
 
@@ -45,7 +49,7 @@ pub fn generate(
         let (out_dir, file_name, depth) =
             crate::python::module_paths(output_dir, &table.module, "py");
         std::fs::create_dir_all(&out_dir)?;
-        let body = renderer::render_table(env, table, depth, &class_to_module)?;
+        let body = renderer::render_table(&env, table, depth, &class_to_module)?;
         let out_path = out_dir.join(&file_name);
         std::fs::write(&out_path, body)?;
         written.push(out_path);
@@ -53,7 +57,7 @@ pub fn generate(
 
     // ── many.py at the root (only if there are junctions) ──────────────────────
     if !plan.junctions.is_empty() {
-        let many = renderer::render_many(env, &plan.junctions)?;
+        let many = renderer::render_many(&env, &plan.junctions)?;
         let many_path = output_dir.join("many.py");
         std::fs::write(&many_path, many)?;
         written.push(many_path);
@@ -61,7 +65,7 @@ pub fn generate(
 
     // ── __init__.py + __version__.py at the root ───────────────────────────────
     let version_str = schemas.version.to_string();
-    let init_body = renderer::render_init(env, &plan)?;
+    let init_body = renderer::render_init(&env, &plan)?;
     let init_path = output_dir.join("__init__.py");
     std::fs::write(
         &init_path,
