@@ -6,7 +6,6 @@ use crate::rust::imports::UseBlock;
 
 /// Render a docstring block as outer `///` lines. Empty input → empty string.
 /// Preserves embedded line breaks verbatim — Sphinx RST is not stripped.
-#[allow(dead_code)] // consumed by render_object in Task 21
 pub(crate) fn render_doc_comment(description: Option<&str>, indent: &str) -> String {
     let Some(text) = description.map(str::trim).filter(|s| !s.is_empty()) else {
         return String::new();
@@ -19,7 +18,6 @@ pub(crate) fn render_doc_comment(description: Option<&str>, indent: &str) -> Str
 
 /// Render the single-variant enum that types a const-valued property.
 /// `class_name` = e.g. `"AngebotTyp"`; `wire_value` = the JSON literal, e.g. `"ANGEBOT"`.
-#[allow(dead_code)] // consumed by render_object in Task 21
 pub(crate) fn render_single_variant_enum(
     class_name: &str,
     wire_value: &str,
@@ -44,7 +42,6 @@ pub(crate) fn render_single_variant_enum(
 }
 
 /// Render the plain string-enum form (`enum Typ { Angebot, Ausschreibung, … }`).
-#[allow(dead_code)] // consumed by rust::plain orchestrator in Task 22
 pub(crate) fn render_str_enum(
     class_name: &str,
     members: &[String],
@@ -68,7 +65,6 @@ pub(crate) fn render_str_enum(
 }
 
 /// Render the `use` block for a file at module depth `depth`.
-#[allow(dead_code)] // consumed by render_object in Task 21
 pub(crate) fn render_use_block(imports: impl IntoIterator<Item = Import>, depth: usize) -> String {
     let mut b = UseBlock::new();
     b.extend(imports);
@@ -86,7 +82,6 @@ use crate::rust::types::{UnsupportedShape, literal_default_rust, map_rust};
 
 /// Per-field context for the Struct.jinja2 template.
 #[derive(Debug, Serialize)]
-#[allow(dead_code)]
 pub(crate) struct RustField {
     pub name: String,
     pub type_hint: String,
@@ -98,7 +93,6 @@ pub(crate) struct RustField {
 }
 
 /// Outcome of rendering an object schema: the file body, ready to write.
-#[allow(dead_code)]
 pub(crate) struct RenderedObject {
     pub body: String,
     /// Brief per-file decision summary suitable for verbose CLI output.
@@ -126,13 +120,10 @@ fn default_impl_outcome(fields: &[RustField]) -> DefaultImplOutcome {
 
 /// Render a single object schema as a `.rs` file body.
 ///
-/// `parent_module` is the schema's module path *without* the class name appended.
 /// `depth` is the file's directory depth from the output root (1 = root-level, 2 = under `bo/`, …).
-#[allow(dead_code)]
 pub(crate) fn render_object(
     env: &Environment<'static>,
     class_name: &str,
-    parent_module: &[String],
     obj: &ObjectSchema,
     depth: usize,
 ) -> Result<RenderedObject, Error> {
@@ -258,7 +249,6 @@ pub(crate) fn render_object(
 
     let outcome = default_impl_outcome(&fields);
     let default_impl = render_default_impl(class_name, &fields);
-    let default_version_fn = String::new(); // No longer emitted per-file; lives in root mod.rs / lib.rs.
 
     let n_fields = fields.len();
     let n_synth = extra_enums.len();
@@ -290,10 +280,8 @@ pub(crate) fn render_object(
         class_name => class_name,
         fields => &fields,
         default_impl => default_impl,
-        default_version_fn => default_version_fn,
     })?;
 
-    let _ = parent_module; // silence unused warning until cross-module diagnostics use it
     Ok(RenderedObject { body, diagnostic })
 }
 
@@ -579,7 +567,7 @@ mod tests {
             vec![],
             Some("An offer."),
         );
-        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        let r = render_object(&env, "Angebot", &schema, 2).unwrap();
         assert!(r.body.contains("pub struct Angebot"), "got:\n{}", r.body);
         assert!(
             r.body.contains("pub id: Option<String>"),
@@ -620,7 +608,7 @@ mod tests {
             vec!["zeitIntervallLaenge"],
             Some("A load profile."),
         );
-        let r = render_object(&env, "Lastgang", &["bo".to_string()], &schema, 2).unwrap();
+        let r = render_object(&env, "Lastgang", &schema, 2).unwrap();
         assert!(
             r.body.contains("pub zeit_intervall_laenge: Option<Menge>"),
             "required+nullable field must stay Option<T>, got:\n{}",
@@ -670,7 +658,7 @@ mod tests {
             vec![], // not required
             Some("An offer."),
         );
-        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        let r = render_object(&env, "Angebot", &schema, 2).unwrap();
         assert!(
             r.body.contains("pub adressen: Option<Vec<Adresse>>"),
             "optional non-nullable array must be Option<Vec<_>>, got:\n{}",
@@ -710,7 +698,7 @@ mod tests {
 
         let env = make_env();
         let schema = obj_with_props(vec![("_typ", typ_schema)], vec![], Some("An offer."));
-        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        let r = render_object(&env, "Angebot", &schema, 2).unwrap();
         assert!(
             r.body.contains("pub enum AngebotTyp"),
             "expected synthetic discriminator enum, got:\n{}",
@@ -745,7 +733,7 @@ mod tests {
 
         let env = make_env();
         let schema = obj_with_props(vec![("_typ", const_typ)], vec!["_typ"], None);
-        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        let r = render_object(&env, "Angebot", &schema, 2).unwrap();
         assert!(
             r.body.contains("pub typ: AngebotTyp"),
             "non-nullable discriminator must stay bare, got:\n{}",
@@ -793,7 +781,7 @@ mod tests {
         let env = make_env();
         // `_typ` is NOT in required.
         let schema = obj_with_props(vec![("_typ", const_typ)], vec![], None);
-        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        let r = render_object(&env, "Angebot", &schema, 2).unwrap();
         let body_lines: Vec<&str> = r.body.lines().collect();
         let typ_attr_line = body_lines
             .iter()

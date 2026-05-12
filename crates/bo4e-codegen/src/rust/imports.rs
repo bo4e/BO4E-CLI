@@ -5,12 +5,10 @@ use std::collections::BTreeSet;
 
 /// Collects [`Import`] values for one Rust source file and renders the `use` block.
 #[derive(Debug, Default)]
-#[allow(dead_code)] // wired up by Task 19 / Task 21 renderers
 pub(crate) struct UseBlock {
     items: BTreeSet<Import>,
 }
 
-#[allow(dead_code)] // wired up by Task 19 / Task 21 renderers
 impl UseBlock {
     pub fn new() -> Self {
         Self::default()

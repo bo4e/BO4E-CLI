@@ -6,7 +6,6 @@ use std::collections::BTreeSet;
 
 /// The result of mapping a JSON Schema fragment to a Rust type expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // consumed by render_object in Task 21
 pub struct MappedType {
     pub rendered: String,
     pub imports: BTreeSet<Import>,
@@ -42,7 +41,6 @@ fn with_imports(rendered: impl Into<String>, imports: Vec<Import>) -> MappedType
 ///
 /// Returns the "non-optional" form. The struct renderer wraps in `Option<T>`
 /// when the owning property is not in `required`.
-#[allow(dead_code)] // consumed by render_object in Task 21
 pub fn map_rust(schema_type: &SchemaType) -> Result<MappedType, UnsupportedShape> {
     Ok(match schema_type {
         SchemaType::StringSchema(s) => match &s.format {
@@ -146,7 +144,6 @@ fn rewrite_enum_dir(mut module: Vec<String>) -> Vec<String> {
 
 /// Returned by [`map_rust`] when the schema has a shape BO4E declares unused.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // wrapped into Error::UnsupportedSchemaShape by render_object
 pub struct UnsupportedShape(pub String);
 
 impl std::fmt::Display for UnsupportedShape {
@@ -156,7 +153,6 @@ impl std::fmt::Display for UnsupportedShape {
 }
 
 /// Render a JSON Schema `default` (when present, primitive) as a Rust literal expression.
-#[allow(dead_code)]
 pub fn literal_default_rust(schema: &SchemaType) -> Option<String> {
     crate::refs::schema_base(schema)
         .default

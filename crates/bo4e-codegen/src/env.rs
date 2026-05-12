@@ -187,7 +187,6 @@ mod tests {
                     doc => "/// id docstring"
                 }],
                 default_impl => "",
-                default_version_fn => "",
             })
             .unwrap();
         assert!(out.contains("pub struct Foo"));

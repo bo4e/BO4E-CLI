@@ -12,7 +12,6 @@ pub(crate) mod types;
 
 /// Reserved Rust keywords (current + reserved-for-future) that a field name
 /// must not equal. Drives [`rust_field_name`]'s keyword-escape branch.
-#[allow(dead_code)] // used by plain/crate_ renderers added in later tasks
 pub(crate) const RUST_RESERVED: &[&str] = &[
     // Keywords
     "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
@@ -37,7 +36,6 @@ pub(crate) const RUST_RESERVED: &[&str] = &[
 ///   - the original had a leading underscore, OR
 ///   - the name was keyword-escaped, OR
 ///   - the original wasn't pure camelCase (had digits, hyphens, etc. that survived).
-#[allow(dead_code)] // used by plain/crate_ renderers added in later tasks
 pub(crate) fn rust_field_name(json_name: &str) -> (String, bool) {
     let leading_underscore = json_name.starts_with('_');
     let stripped = json_name.strip_prefix('_').unwrap_or(json_name);
@@ -57,7 +55,6 @@ pub(crate) fn rust_field_name(json_name: &str) -> (String, bool) {
     (final_name, needs_rename)
 }
 
-#[allow(dead_code)] // used by rust_field_name which is used in later tasks
 fn snake_to_camel(snake: &str) -> String {
     let mut out = String::with_capacity(snake.len());
     let mut next_upper = false;

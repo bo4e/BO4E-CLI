@@ -64,13 +64,7 @@ pub fn generate(
                 )
             }
             SchemaRootType::Object(o) => {
-                let rendered = render_object(
-                    &env,
-                    &class_name,
-                    &module[..module.len().saturating_sub(1)],
-                    &o.object,
-                    depth,
-                )?;
+                let rendered = render_object(&env, &class_name, &o.object, depth)?;
                 let file_rel = format!(
                     "{}/{}.rs",
                     module.first().map(|s| s.as_str()).unwrap_or(""),
