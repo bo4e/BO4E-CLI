@@ -251,7 +251,13 @@ fn build_serde_attrs(
     }
     let is_option = type_hint.starts_with("Option<");
     if is_option {
-        parts.push("default".to_string());
+        // If there's a custom default function for this optional field (e.g. `_version`),
+        // emit `default = "fn_name"` instead of the bare `default` which would give None.
+        if prop_name == "_version" {
+            parts.push("default = \"default_version\"".to_string());
+        } else {
+            parts.push("default".to_string());
+        }
         parts.push("skip_serializing_if = \"Option::is_none\"".to_string());
     } else if let Some(d) = default_expr {
         if d == "Default::default()" || d.ends_with("::default()") {
@@ -292,7 +298,8 @@ fn render_default_impl(class_name: &str, fields: &[RustField]) -> String {
 }
 
 fn render_default_version_fn() -> String {
-    "fn default_version() -> String {\n    super::super::VERSION.to_string()\n}\n".to_string()
+    "fn default_version() -> Option<String> {\n    Some(super::super::VERSION.to_string())\n}\n"
+        .to_string()
 }
 
 /// Detect a `_typ`-style discriminator. Returns `Some(wire_value)` when the
