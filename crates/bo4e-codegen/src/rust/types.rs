@@ -167,7 +167,11 @@ pub fn literal_default_rust(schema: &SchemaType) -> Option<String> {
             PrimitiveValue::Bool(false) => "false".into(),
             PrimitiveValue::Integer(i) => format!("{i}i64"),
             PrimitiveValue::Float(f) => format!("{f}f64"),
-            PrimitiveValue::String(s) => format!("\"{s}\".to_string()"),
+            // `{s:?}` formats `&str` via its `Debug` impl, which emits a
+            // syntactically valid Rust string literal with quotes, backslashes,
+            // newlines, etc. properly escaped. Plain interpolation would break
+            // on a default like `He said "hi"` (or any backslash / control char).
+            PrimitiveValue::String(s) => format!("{s:?}.to_string()"),
         })
 }
 
@@ -356,6 +360,25 @@ mod tests {
             format: None,
         });
         assert_eq!(literal_default_rust(&schema).unwrap(), "\"DE\".to_string()");
+    }
+
+    /// Regression: string defaults must be escaped into valid Rust string
+    /// literals. Plain interpolation broke on quotes/backslashes/newlines.
+    #[test]
+    fn literal_default_string_escapes_quotes_and_backslashes() {
+        let schema = SchemaType::StringSchema(StringSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String(r#"He said "hi" \n"#.into())),
+                ..Default::default()
+            },
+            r#type: LiteralTypeString::String,
+            format: None,
+        });
+        // `{:?}` on a `&str` produces a Rust-syntax string literal.
+        assert_eq!(
+            literal_default_rust(&schema).unwrap(),
+            r#""He said \"hi\" \\n".to_string()"#
+        );
     }
 
     #[test]
