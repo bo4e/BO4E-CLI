@@ -100,6 +100,50 @@ mod tests {
     }
 
     #[test]
+    fn group_named_collects_by_module_and_skips_sibling() {
+        let mut items = BTreeSet::new();
+        items.insert(Import::Named {
+            module: "serde".into(),
+            name: "Serialize".into(),
+        });
+        items.insert(Import::Named {
+            module: "serde".into(),
+            name: "Deserialize".into(),
+        });
+        items.insert(Import::Named {
+            module: "chrono".into(),
+            name: "DateTime".into(),
+        });
+        items.insert(Import::Sibling {
+            module: vec!["com".into(), "Adresse".into()],
+            name: "Adresse".into(),
+        });
+        let grouped = group_named_by_module(&items);
+        // Sibling skipped.
+        assert_eq!(grouped.len(), 2);
+        // Names grouped under their module.
+        let serde = grouped.get(&"serde".to_string()).unwrap();
+        assert_eq!(serde.len(), 2);
+        assert!(serde.contains(&"Serialize".to_string()));
+        assert!(serde.contains(&"Deserialize".to_string()));
+        let chrono = grouped.get(&"chrono".to_string()).unwrap();
+        assert_eq!(chrono.len(), 1);
+    }
+
+    #[test]
+    fn stitch_drops_empties_and_joins_with_sep() {
+        let blocks = ["from a import b", "", "use c::d;"];
+        assert_eq!(
+            stitch_nonempty_blocks(&blocks, "\n\n"),
+            "from a import b\n\nuse c::d;"
+        );
+        let all_empty: [&str; 3] = ["", "", ""];
+        assert_eq!(stitch_nonempty_blocks(&all_empty, "\n\n"), "");
+        let single = ["only"];
+        assert_eq!(stitch_nonempty_blocks(&single, "\n\n"), "only");
+    }
+
+    #[test]
     fn sibling_and_named_can_coexist_in_sorted_set() {
         use std::collections::BTreeSet;
         let mut s = BTreeSet::new();
