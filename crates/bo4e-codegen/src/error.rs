@@ -24,4 +24,11 @@ pub enum Error {
         "cannot classify property `{class}.{property}`: schema shape is unsupported by the SQL plan"
     )]
     UnclassifiableProperty { class: String, property: String },
+
+    #[error("schema {schema_name} property `{property}`: unsupported shape ({shape})")]
+    UnsupportedSchemaShape {
+        schema_name: String,
+        property: String,
+        shape: String,
+    },
 }
