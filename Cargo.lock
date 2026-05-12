@@ -192,7 +192,6 @@ name = "bo4e-codegen"
 version = "0.1.0"
 dependencies = [
  "bo4e-schemas",
- "clap",
  "minijinja",
  "serde",
  "serde_json",

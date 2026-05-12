@@ -14,9 +14,6 @@ pub enum Error {
     #[error("schema lookup miss: {0}")]
     SchemaLookup(String),
 
-    #[error("output type {0} is not compiled in (enable the corresponding Cargo feature)")]
-    OutputTypeNotCompiledIn(&'static str),
-
     #[error("schema model error: {0}")]
     Schema(String),
 

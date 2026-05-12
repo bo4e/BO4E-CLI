@@ -15,9 +15,8 @@ fn generate_into_tmp() -> tempfile::TempDir {
     let out = bo4e_schemas::io::schemas::read_schemas(&fixture_dir()).expect("read_schemas");
     let schemas = out.schemas;
 
-    bo4e_codegen::generate(
+    bo4e_codegen::python::pydantic::generate(
         &schemas,
-        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: true,
@@ -94,9 +93,8 @@ fn pydantic_renders_richer_sql_fixture_without_error() {
     let tmp = tempfile::tempdir().unwrap();
     let out = bo4e_schemas::io::schemas::read_schemas(&fixture).expect("read_schemas");
 
-    bo4e_codegen::generate(
+    bo4e_codegen::python::pydantic::generate(
         &out.schemas,
-        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: true,

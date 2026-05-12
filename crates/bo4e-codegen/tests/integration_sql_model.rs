@@ -10,9 +10,8 @@ fn fixture_dir() -> PathBuf {
 fn generate_into_tmp() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = bo4e_schemas::io::schemas::read_schemas(&fixture_dir()).expect("read_schemas");
-    bo4e_codegen::generate(
+    bo4e_codegen::python::sql_model::generate(
         &out.schemas,
-        bo4e_codegen::OutputType::PythonSqlModel,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: true,

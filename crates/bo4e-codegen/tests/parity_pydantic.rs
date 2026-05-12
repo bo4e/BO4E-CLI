@@ -21,9 +21,8 @@ fn generated_angebot_parses_as_python_and_has_expected_class() {
     let tmp = tempfile::tempdir().unwrap();
     let out = bo4e_schemas::io::schemas::read_schemas(&fixture_dir()).unwrap();
 
-    bo4e_codegen::generate(
+    bo4e_codegen::python::pydantic::generate(
         &out.schemas,
-        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: true,
