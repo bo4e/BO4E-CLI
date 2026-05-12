@@ -176,7 +176,6 @@ mod tests {
             .expect("template registered");
         let out = tpl
             .render(context! {
-                module_doc => "//! example",
                 uses => "use serde::{Deserialize, Serialize};",
                 extra_enums => Vec::<String>::new(),
                 doc => "/// docstring",

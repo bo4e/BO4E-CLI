@@ -17,18 +17,6 @@ pub(crate) fn render_doc_comment(description: Option<&str>, indent: &str) -> Str
         .join("\n")
 }
 
-/// Render a module-level `//!` docstring. Empty input → empty string.
-#[allow(dead_code)] // consumed by render_object in Task 21
-pub(crate) fn render_module_doc(description: Option<&str>) -> String {
-    let Some(text) = description.map(str::trim).filter(|s| !s.is_empty()) else {
-        return String::new();
-    };
-    text.lines()
-        .map(|line| format!("//! {line}").trim_end().to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// Render the single-variant enum that types a const-valued property.
 /// `class_name` = e.g. `"AngebotTyp"`; `wire_value` = the JSON literal, e.g. `"ANGEBOT"`.
 #[allow(dead_code)] // consumed by render_object in Task 21
@@ -162,17 +150,29 @@ pub(crate) fn render_object(
         // Detect `_typ`-style discriminator: ConstantSchema or anyOf:[const,null] or
         // anyOf:[$ref to enum/Typ, null] with TypeBase.default
         let (type_hint, default_expr) =
-            if let Some(wire) = single_variant_discriminator(prop_name, prop_schema) {
+            if let Some(disc) = single_variant_discriminator(prop_name, prop_schema) {
                 let enum_name = format!(
                     "{class_name}{}",
                     to_pascal_case(&strip_leading_underscore(prop_name))
                 );
                 extra_enums.push(render_single_variant_enum(
                     &enum_name,
-                    &wire,
+                    &disc.wire_value,
                     schema_base(prop_schema).description.as_deref(),
                 ));
-                (enum_name.clone(), Some(format!("{enum_name}::default()")))
+                // When the schema permits null we expose `Option<EnumName>` so
+                // schema-valid `null` payloads deserialize as `None` instead of
+                // erroring. The default still carries the single variant so
+                // that `Struct::default()` produces a fully-populated,
+                // idiomatic BO4E object.
+                if disc.nullable {
+                    (
+                        format!("Option<{enum_name}>"),
+                        Some(format!("Some({enum_name}::default())")),
+                    )
+                } else {
+                    (enum_name.clone(), Some(format!("{enum_name}::default()")))
+                }
             } else {
                 let mapped = map_rust(prop_schema).map_err(|UnsupportedShape(shape)| {
                     Error::UnsupportedSchemaShape {
@@ -254,7 +254,6 @@ pub(crate) fn render_object(
             format!("{uses}\n{extra_use}")
         };
     }
-    let module_doc = render_module_doc(obj.base.description.as_deref());
     let doc = render_doc_comment(obj.base.description.as_deref(), "");
 
     let outcome = default_impl_outcome(&fields);
@@ -285,7 +284,6 @@ pub(crate) fn render_object(
 
     let tpl = env.get_template("rust/plain/Struct.jinja2")?;
     let body = tpl.render(context! {
-        module_doc => module_doc,
         uses => uses,
         extra_enums => extra_enums,
         doc => doc,
@@ -369,9 +367,23 @@ fn render_default_impl(class_name: &str, fields: &[RustField]) -> String {
     out
 }
 
-/// Detect a `_typ`-style discriminator. Returns `Some(wire_value)` when the
-/// property's schema fixes one constant string value.
-fn single_variant_discriminator(_prop_name: &str, prop_schema: &SchemaType) -> Option<String> {
+/// Outcome of `single_variant_discriminator`: the constant wire value plus a
+/// flag for whether the schema permits `null`. Nullable discriminators are
+/// wrapped in `Option<EnumName>` by the caller so that schema-valid `null`
+/// payloads deserialize as `None` instead of erroring (matches pydantic's
+/// looser typing for `anyOf:[const|$ref, null]`).
+struct DiscriminatorMatch {
+    wire_value: String,
+    nullable: bool,
+}
+
+/// Detect a `_typ`-style discriminator. Returns `Some` with the constant wire
+/// value and a flag indicating whether the schema's discriminator branch is
+/// nullable (`anyOf: […, null]`).
+fn single_variant_discriminator(
+    _prop_name: &str,
+    prop_schema: &SchemaType,
+) -> Option<DiscriminatorMatch> {
     use bo4e_schemas::models::json_schema::PrimitiveValue;
 
     fn const_value(s: &SchemaType) -> Option<&str> {
@@ -382,13 +394,20 @@ fn single_variant_discriminator(_prop_name: &str, prop_schema: &SchemaType) -> O
         }
     }
 
-    // direct
+    // direct (non-nullable by construction)
     if let Some(v) = const_value(prop_schema) {
-        return Some(v.to_string());
+        return Some(DiscriminatorMatch {
+            wire_value: v.to_string(),
+            nullable: false,
+        });
     }
 
     // anyOf: [const, null] OR anyOf: [$ref to enum, null] with TypeBase.default
     if let SchemaType::AnyOf(a) = prop_schema {
+        let nullable = a
+            .any_of
+            .iter()
+            .any(|t| matches!(t, SchemaType::NullSchema(_)));
         let non_null: Vec<&SchemaType> = a
             .any_of
             .iter()
@@ -396,12 +415,18 @@ fn single_variant_discriminator(_prop_name: &str, prop_schema: &SchemaType) -> O
             .collect();
         if non_null.len() == 1 {
             if let Some(v) = const_value(non_null[0]) {
-                return Some(v.to_string());
+                return Some(DiscriminatorMatch {
+                    wire_value: v.to_string(),
+                    nullable,
+                });
             }
             if let Some(PrimitiveValue::String(default_val)) = &schema_base(prop_schema).default
                 && enum_ref_target(non_null[0]).is_some()
             {
-                return Some(default_val.clone());
+                return Some(DiscriminatorMatch {
+                    wire_value: default_val.clone(),
+                    nullable,
+                });
             }
         }
     }
@@ -436,12 +461,6 @@ mod tests {
     fn doc_comment_indent_applied() {
         let s = render_doc_comment(Some("Hi"), "    ");
         assert_eq!(s, "    /// Hi");
-    }
-
-    #[test]
-    fn module_doc_renders_bangs() {
-        let s = render_module_doc(Some("First\nSecond"));
-        assert_eq!(s, "//! First\n//! Second");
     }
 
     #[test]
@@ -653,6 +672,80 @@ mod tests {
             r.body.contains("default")
                 && r.body.contains("skip_serializing_if = \"Option::is_none\""),
             "expected `default, skip_serializing_if = \"Option::is_none\"` on optional field, got:\n{}",
+            r.body
+        );
+    }
+
+    /// Regression: a `_typ`-style discriminator whose schema permits null
+    /// (`anyOf:[$ref to enum, null]`) must be wrapped in `Option<EnumName>` so
+    /// schema-valid `null` payloads deserialize as `None` instead of erroring.
+    /// The default still seeds `Some(default)` so `Struct::default()` produces
+    /// a fully-populated, idiomatic BO4E object.
+    #[test]
+    #[cfg(feature = "rust-plain")]
+    fn render_object_nullable_discriminator_is_option() {
+        use bo4e_schemas::models::json_schema::ReferenceSchema;
+
+        let typ_schema = SchemaType::AnyOf(AnyOfSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("ANGEBOT".into())),
+                ..TypeBase::default()
+            },
+            any_of: vec![
+                SchemaType::ReferenceSchema(ReferenceSchema {
+                    base: TypeBase::default(),
+                    r#ref: "../enum/BoTyp.json".to_string(),
+                }),
+                SchemaType::NullSchema(NullSchema::default()),
+            ],
+        });
+
+        let env = make_env();
+        let schema = obj_with_props(vec![("_typ", typ_schema)], vec![], Some("An offer."));
+        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        assert!(
+            r.body.contains("pub enum AngebotTyp"),
+            "expected synthetic discriminator enum, got:\n{}",
+            r.body
+        );
+        assert!(
+            r.body.contains("pub typ: Option<AngebotTyp>"),
+            "nullable discriminator must be Option<EnumName>, got:\n{}",
+            r.body
+        );
+        assert!(
+            r.body.contains("typ: Some(AngebotTyp::default())"),
+            "Struct::default() must seed Some(EnumName::default()), got:\n{}",
+            r.body
+        );
+    }
+
+    /// A discriminator whose schema is a *direct* `const`/single-`StrEnum` (no
+    /// null branch) stays as a bare `EnumName` — only the nullable shape gets
+    /// the `Option<…>` wrap.
+    #[test]
+    #[cfg(feature = "rust-plain")]
+    fn render_object_non_nullable_discriminator_is_bare() {
+        use bo4e_schemas::models::json_schema::ConstantSchema;
+
+        let const_typ = SchemaType::ConstantSchema(ConstantSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "ANGEBOT".to_string(),
+        });
+
+        let env = make_env();
+        let schema = obj_with_props(vec![("_typ", const_typ)], vec!["_typ"], None);
+        let r = render_object(&env, "Angebot", &["bo".to_string()], &schema, 2).unwrap();
+        assert!(
+            r.body.contains("pub typ: AngebotTyp"),
+            "non-nullable discriminator must stay bare, got:\n{}",
+            r.body
+        );
+        assert!(
+            !r.body.contains("pub typ: Option<AngebotTyp>"),
+            "non-nullable discriminator must NOT be wrapped in Option, got:\n{}",
             r.body
         );
     }
