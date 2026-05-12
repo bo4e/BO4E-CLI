@@ -127,11 +127,7 @@ pub fn generate(
     written.push(init_path);
 
     // ── Empty __init__.py per first-level subdirectory ─────────────────────────
-    let modules: Vec<Vec<String>> = schemas
-        .iter()
-        .map(|s| s.borrow().module().to_vec())
-        .collect();
-    let subdirs = crate::python::first_level_subdirs(modules.iter().map(|m| m.as_slice()));
+    let subdirs = crate::layout::first_level_subdirs_from_schemas(schemas);
     crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
 
     Ok(crate::GenerateOutput {

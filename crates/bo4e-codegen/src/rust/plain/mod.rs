@@ -7,7 +7,6 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::Error;
-use crate::layout::first_level_subdirs;
 use crate::rust::render::{render_object, render_str_enum};
 
 pub fn generate(
@@ -73,11 +72,7 @@ pub fn generate(
 
     // Per-subdir mod.rs files. BO4E's `enum/` directory is renamed to `enums/`
     // because `enum` is a Rust keyword.
-    let modules: Vec<Vec<String>> = schemas
-        .iter()
-        .map(|s| s.borrow().module().to_vec())
-        .collect();
-    let raw_subdirs = first_level_subdirs(modules.iter().map(Vec::as_slice));
+    let raw_subdirs = crate::layout::first_level_subdirs_from_schemas(schemas);
     for raw_sub in &raw_subdirs {
         let mut entries: Vec<(String, String)> = by_top.get(raw_sub).cloned().unwrap_or_default();
         entries.sort_by(|a, b| a.0.cmp(&b.0));

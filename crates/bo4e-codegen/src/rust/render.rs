@@ -67,13 +67,6 @@ pub(crate) fn render_str_enum(
     })?)
 }
 
-/// Render the `use` block for a file at module depth `depth`.
-pub(crate) fn render_use_block(imports: impl IntoIterator<Item = Import>, depth: usize) -> String {
-    let mut b = UseBlock::new();
-    b.extend(imports);
-    b.render(depth)
-}
-
 /// Per-field context for the Struct.jinja2 template.
 #[derive(Debug, Serialize)]
 pub(crate) struct RustField {
@@ -99,6 +92,25 @@ pub(crate) enum DefaultImplOutcome {
     Skipped { missing: Vec<String> },
 }
 
+impl DefaultImplOutcome {
+    /// Inspect `fields` and decide whether a `Default` impl can be emitted —
+    /// a field with no `default_expr` blocks the block. Computed once per
+    /// struct so `render_default_impl` and the renderer's diagnostic share
+    /// the same iteration.
+    fn from_fields(fields: &[RustField]) -> Self {
+        let missing: Vec<String> = fields
+            .iter()
+            .filter(|f| f.default_expr.is_none())
+            .map(|f| f.name.clone())
+            .collect();
+        if missing.is_empty() {
+            Self::Emitted
+        } else {
+            Self::Skipped { missing }
+        }
+    }
+}
+
 impl std::fmt::Display for DefaultImplOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -109,19 +121,6 @@ impl std::fmt::Display for DefaultImplOutcome {
                 missing.join("`, `")
             ),
         }
-    }
-}
-
-fn default_impl_outcome(fields: &[RustField]) -> DefaultImplOutcome {
-    let missing: Vec<String> = fields
-        .iter()
-        .filter(|f| f.default_expr.is_none())
-        .map(|f| f.name.clone())
-        .collect();
-    if missing.is_empty() {
-        DefaultImplOutcome::Emitted
-    } else {
-        DefaultImplOutcome::Skipped { missing }
     }
 }
 
@@ -148,7 +147,7 @@ pub(crate) fn render_object(
         // Detect `_typ`-style discriminator: ConstantSchema or anyOf:[const,null] or
         // anyOf:[$ref to enum/Typ, null] with TypeBase.default
         let (type_hint, default_expr) =
-            if let Some(disc) = single_variant_discriminator(prop_name, prop_schema) {
+            if let Some(disc) = single_variant_discriminator(prop_schema) {
                 let enum_name = format!(
                     "{class_name}{}",
                     to_pascal_case(&strip_leading_underscore(prop_name))
@@ -243,7 +242,11 @@ pub(crate) fn render_object(
         });
     }
 
-    let mut uses = render_use_block(imports.iter().cloned(), depth);
+    let mut uses = {
+        let mut b = UseBlock::new();
+        b.extend(imports.iter().cloned());
+        b.render(depth)
+    };
     if needs_default_version_fn {
         let supers = "super::".repeat(depth);
         let extra_use = format!("use {supers}default_version;");
@@ -255,8 +258,8 @@ pub(crate) fn render_object(
     }
     let doc = render_doc_comment(obj.base.description.as_deref(), "");
 
-    let outcome = default_impl_outcome(&fields);
-    let default_impl = render_default_impl(env, class_name, &fields)?;
+    let outcome = DefaultImplOutcome::from_fields(&fields);
+    let default_impl = render_default_impl(env, class_name, &fields, &outcome)?;
 
     let n_fields = fields.len();
     let n_synth = extra_enums.len();
@@ -336,24 +339,24 @@ fn render_default_impl(
     env: &Environment<'static>,
     class_name: &str,
     fields: &[RustField],
+    outcome: &DefaultImplOutcome,
 ) -> Result<String, Error> {
-    let missing: Vec<&str> = fields
-        .iter()
-        .filter(|f| f.default_expr.is_none())
-        .map(|f| f.name.as_str())
-        .collect();
-    let field_ctx: Vec<_> = if missing.is_empty() {
-        fields
-            .iter()
-            .map(|f| {
-                context! {
-                    name => f.name,
-                    expr => f.default_expr.as_deref().unwrap(),
-                }
-            })
-            .collect()
-    } else {
-        Vec::new()
+    let (missing, field_ctx) = match outcome {
+        DefaultImplOutcome::Emitted => {
+            let ctx: Vec<_> = fields
+                .iter()
+                .map(|f| {
+                    context! {
+                        name => f.name,
+                        expr => f.default_expr.as_deref().unwrap(),
+                    }
+                })
+                .collect();
+            (Vec::<&str>::new(), ctx)
+        }
+        DefaultImplOutcome::Skipped { missing } => {
+            (missing.iter().map(String::as_str).collect(), Vec::new())
+        }
     };
     let tpl = env.get_template("rust/plain/DefaultImpl.jinja2")?;
     Ok(tpl.render(context! {
@@ -376,10 +379,7 @@ struct DiscriminatorMatch {
 /// Detect a `_typ`-style discriminator. Returns `Some` with the constant wire
 /// value and a flag indicating whether the schema's discriminator branch is
 /// nullable (`anyOf: […, null]`).
-fn single_variant_discriminator(
-    _prop_name: &str,
-    prop_schema: &SchemaType,
-) -> Option<DiscriminatorMatch> {
+fn single_variant_discriminator(prop_schema: &SchemaType) -> Option<DiscriminatorMatch> {
     use bo4e_schemas::models::json_schema::PrimitiveValue;
 
     fn const_value(s: &SchemaType) -> Option<&str> {
@@ -498,23 +498,6 @@ mod tests {
         let s = render_str_enum(&env, "Code", &members, None).unwrap();
         assert!(s.contains("#[serde(rename = \"2-01-7-001\")]"));
         assert!(s.contains("_2_01_7_001,"));
-    }
-
-    #[test]
-    fn use_block_round_trip() {
-        let imports = vec![
-            Import::Named {
-                module: "serde".into(),
-                name: "Serialize".into(),
-            },
-            Import::Sibling {
-                module: vec!["com".into(), "Adresse".into()],
-                name: "Adresse".into(),
-            },
-        ];
-        let s = render_use_block(imports, 2);
-        assert!(s.contains("use serde::Serialize;"));
-        assert!(s.contains("use super::super::com::adresse::Adresse;"));
     }
 
     use bo4e_schemas::models::json_schema::{

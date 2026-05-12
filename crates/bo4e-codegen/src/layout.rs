@@ -57,6 +57,24 @@ where
         .collect()
 }
 
+/// Convenience wrapper for the common pydantic/rust-plain pattern of collecting
+/// the module path of every schema in `schemas` into a side `Vec`, just to feed
+/// [`first_level_subdirs`]. The intermediate `Vec<Vec<String>>` exists purely
+/// because each `s.borrow()` is a short-lived `Ref` that can't be slice-borrowed
+/// across the `first_level_subdirs` call.
+#[cfg(any(
+    feature = "python-pydantic",
+    feature = "python-sql-model",
+    feature = "rust-plain",
+))]
+pub fn first_level_subdirs_from_schemas(schemas: &bo4e_schemas::Schemas) -> BTreeSet<String> {
+    let modules: Vec<Vec<String>> = schemas
+        .iter()
+        .map(|s| s.borrow().module().to_vec())
+        .collect();
+    first_level_subdirs(modules.iter().map(Vec::as_slice))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
