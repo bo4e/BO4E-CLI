@@ -384,7 +384,7 @@ mod tests {
         let dv_clean: DirtyVersion = "v202401.0.1".parse().unwrap();
         let dv_dirty: DirtyVersion = "v202401.0.1+gabc".parse().unwrap();
         assert!(v == dv_clean);
-        assert!(!(v == dv_dirty)); // dirty is strictly newer at same semver
+        assert!(v != dv_dirty); // dirty is strictly newer at same semver
     }
 
     #[test]
