@@ -27,22 +27,40 @@ mod tests {
     #[test]
     fn named_imports_are_ordered_by_module_then_name() {
         let mut v = [
-            Import::Named { module: "typing".into(), name: "Optional".into() },
-            Import::Named { module: "decimal".into(), name: "Decimal".into() },
-            Import::Named { module: "typing".into(), name: "Annotated".into() },
+            Import::Named {
+                module: "typing".into(),
+                name: "Optional".into(),
+            },
+            Import::Named {
+                module: "decimal".into(),
+                name: "Decimal".into(),
+            },
+            Import::Named {
+                module: "typing".into(),
+                name: "Annotated".into(),
+            },
         ];
         v.sort();
         assert_eq!(
             v[0],
-            Import::Named { module: "decimal".into(), name: "Decimal".into() }
+            Import::Named {
+                module: "decimal".into(),
+                name: "Decimal".into()
+            }
         );
         assert_eq!(
             v[1],
-            Import::Named { module: "typing".into(), name: "Annotated".into() }
+            Import::Named {
+                module: "typing".into(),
+                name: "Annotated".into()
+            }
         );
         assert_eq!(
             v[2],
-            Import::Named { module: "typing".into(), name: "Optional".into() }
+            Import::Named {
+                module: "typing".into(),
+                name: "Optional".into()
+            }
         );
     }
 
@@ -50,7 +68,10 @@ mod tests {
     fn sibling_and_named_can_coexist_in_sorted_set() {
         use std::collections::BTreeSet;
         let mut s = BTreeSet::new();
-        s.insert(Import::Named { module: "decimal".into(), name: "Decimal".into() });
+        s.insert(Import::Named {
+            module: "decimal".into(),
+            name: "Decimal".into(),
+        });
         s.insert(Import::Sibling {
             module: vec!["bo".into(), "Adresse".into()],
             name: "Adresse".into(),

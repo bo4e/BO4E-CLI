@@ -37,9 +37,10 @@ pub fn filter_tags(
         }
         if opts.exclude_technical_bumps
             && let Some(prev) = &last_yielded
-            && prev.bumped_technical(v) {
-                continue;
-            }
+            && prev.bumped_technical(v)
+        {
+            continue;
+        }
         if i == 0 && opts.skip_first {
             continue;
         }

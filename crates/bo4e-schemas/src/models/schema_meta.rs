@@ -318,8 +318,7 @@ mod tests {
         let original = collection(&[&["bo", "Angebot"], &["com", "Adresse"]]);
         let json = serde_json::to_string(&original).unwrap();
         let restored: Schemas = serde_json::from_str(&json).unwrap();
-        let mut mods: Vec<Vec<String>> =
-            restored.modules().into_iter().cloned().collect();
+        let mut mods: Vec<Vec<String>> = restored.modules().into_iter().cloned().collect();
         mods.sort();
         assert_eq!(
             mods,

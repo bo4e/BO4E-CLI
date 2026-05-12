@@ -468,10 +468,7 @@ mod tests {
             _ => panic!("Deserialized type is not an ObjectSchema"),
         };
         assert!(deserialized == schema);
-        deserialized
-            .object
-            .properties
-            .remove("property1");
+        deserialized.object.properties.remove("property1");
         assert!(deserialized != schema);
     }
 

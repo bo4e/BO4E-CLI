@@ -10,9 +10,9 @@ fn check_success(output: &Output, error_message: &str) -> io::Result<()> {
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(io::Error::other(
-            format!("{error_message}\nStdout: {stdout}\nStderr: {stderr}"),
-        ))
+        Err(io::Error::other(format!(
+            "{error_message}\nStdout: {stdout}\nStderr: {stderr}"
+        )))
     } else {
         Ok(())
     }

@@ -37,9 +37,7 @@ pub fn write_schemas(
             .borrow()
             .get_serialized_schema()
             .map_err(|err| {
-                std::io::Error::other(
-                    format!("Failed to serialize schema {}: {}", name, err),
-                )
+                std::io::Error::other(format!("Failed to serialize schema {}: {}", name, err))
             })
             .and_then(|schema_text| std::fs::write(full_path, schema_text))?;
     }
