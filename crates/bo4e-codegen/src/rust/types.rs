@@ -70,7 +70,7 @@ pub fn map_rust(schema_type: &SchemaType) -> Result<MappedType, UnsupportedShape
         SchemaType::BooleanSchema(_) => simple("bool"),
         SchemaType::DecimalSchema(_) => with_import("Decimal", "rust_decimal", "Decimal"),
         SchemaType::NullSchema(_) => simple("()"),
-        SchemaType::AnySchema(_) => with_import("serde_json::Value", "serde_json", "Value"),
+        SchemaType::AnySchema(_) => with_import("Value", "serde_json", "Value"),
 
         SchemaType::Array(a) => {
             let inner = map_rust(&a.items)?;
@@ -114,7 +114,7 @@ pub fn map_rust(schema_type: &SchemaType) -> Result<MappedType, UnsupportedShape
 
         SchemaType::ReferenceSchema(r) => {
             if r.r#ref.is_empty() {
-                with_import("serde_json::Value", "serde_json", "Value")
+                with_import("Value", "serde_json", "Value")
             } else {
                 let (module, class_name) = crate::refs::parse_ref(&r.r#ref);
                 let mut imports = BTreeSet::new();
@@ -130,7 +130,7 @@ pub fn map_rust(schema_type: &SchemaType) -> Result<MappedType, UnsupportedShape
         }
 
         SchemaType::StrEnum(_) => simple("String"),
-        SchemaType::Object(_) => with_import("serde_json::Value", "serde_json", "Value"),
+        SchemaType::Object(_) => with_import("Value", "serde_json", "Value"),
         SchemaType::ConstantSchema(_) => simple("String"),
     })
 }
@@ -306,7 +306,11 @@ mod tests {
     #[test]
     fn map_any_uses_serde_json_value() {
         let m = map_rust(&SchemaType::AnySchema(AnySchema::default())).unwrap();
-        assert_eq!(m.rendered, "serde_json::Value");
+        assert_eq!(m.rendered, "Value");
+        assert!(m.imports.contains(&Import::Named {
+            module: "serde_json".into(),
+            name: "Value".into(),
+        }));
     }
 
     #[test]
