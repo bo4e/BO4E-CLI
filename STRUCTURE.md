@@ -30,13 +30,13 @@ bo4e-codegen  ◀── bo4e-cli (binary + lib facade)
 ```
 
 - `bo4e-schemas` has zero workspace deps; it owns the canonical schema types.
-- `bo4e-codegen` depends on `bo4e-schemas` and exposes `OutputType` + `generate(...)`.
+- `bo4e-codegen` depends on `bo4e-schemas` and exposes per-flavour `generate(...)` entry points.
 - `bo4e-cli` (binary `bo4e`) wires everything together: parses CLI args, loads/edits schemas, dispatches to codegen, prints to the console.
 
 ## Crate one-liners
 
 - **`bo4e-schemas`** — JSON-Schema model types, a `Visitable` tree-traversal trait (object-safe, closure-based), version parsing (`Version` / `DirtyVersion`), and on-disk read/write of a `.version`-anchored schema directory. See `crates/bo4e-schemas/STRUCTURE.md`.
-- **`bo4e-codegen`** — Generator core. Owns an embedded MiniJinja `Environment`, vendored templates under `src/templates/python/{pydantic,sql_model}/`, naming helpers, and one generator orchestrator per output type. See `crates/bo4e-codegen/STRUCTURE.md`.
+- **`bo4e-codegen`** — Generator core. Owns an embedded MiniJinja `Environment`, templates under `src/templates/{python,rust}/`, naming helpers, and one `pub fn generate` per flavour (`python::pydantic`, `python::sql_model`, `rust::plain`, `rust::crate_`). See `crates/bo4e-codegen/STRUCTURE.md`.
 - **`bo4e-cli`** — Subcommand modules (`pull`, `edit`, `diff`, `generate`, `repo`), the BO4E console (colour palette, highlighter, spinner/progress bar), GitHub / git / config IO, and the edit transforms. Also exposes a library facade so integration tests can drive internals. See `crates/bo4e-cli/STRUCTURE.md`.
 
 ## End-to-end data flow
@@ -44,7 +44,7 @@ bo4e-codegen  ◀── bo4e-cli (binary + lib facade)
 ```
 pull       : GitHub (BO4E-Schemas)  ─▶ schemas dir (.json files + .version)
 edit       : schemas dir + config   ─▶ edited schemas dir
-generate   : schemas dir            ─▶ Python package (pydantic / sql-model)
+generate   : schemas dir            ─▶ Python package (pydantic / sql-model) or Rust crate / module tree
 diff       : two schemas dirs       ─▶ JSON diff file (Changes)
 matrix     : N diff files           ─▶ CSV/JSON compatibility matrix
 version-bump : a diff file          ─▶ technical | functional | major
@@ -57,7 +57,10 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 
 - **Shared, language-neutral helpers** live at the top of `bo4e-codegen/src/` (`naming.rs`, `layout.rs`, `refs.rs`, `imports.rs`). Per-language modules (`python/`, future `rust/`) own only the bits that actually differ — type-string mapping, import-block rendering, language-specific reserved words.
 - **Schemas are the source of truth.** Everything downstream (edit, diff, generate) operates on a `Schemas` collection loaded from disk. The schema directory carries a `.version` file that captures the upstream BO4E version (plain or "dirty").
-- **Feature-gated output types.** `OutputType` variants in `bo4e-codegen` are `#[cfg(feature = …)]`-gated, so a slim install (e.g. `--no-default-features --features python-pydantic`) ships a binary whose clap parser only accepts the compiled-in generators. New output types add a feature, a variant, a template subdir, and an orchestrator — they do not branch the existing ones.
+- **Per-flavour `pub fn generate`.** `bo4e-codegen` exposes one public function per flavour
+  under language-named modules (`python::pydantic`, `python::sql_model`, `rust::plain`,
+  `rust::crate_`). The CLI's subcommand enum (`GenerateFlavour` in `cli/generate.rs`)
+  is the only runtime dispatcher; the library has no equivalent.
 - **Templates over hand-written emission.** Generators build a context struct (Python flavour matters: pydantic's per-field context mirrors what the vendored `data-model-code-generator` `BaseModel.jinja2` expects) and render embedded MiniJinja templates. The CLI exposes `--templates-dir` so users can override individual templates without rebuilding the binary.
 - **Closure-based, object-safe `Visitable`** for schema tree traversal. Avoids `RefCell`-style runtime borrow checking; supports early termination via `ControlFlow`. Used by the `edit` transforms and by `diff` walkers.
 - **Console singleton with sentinel markup.** The CLI uses a `OnceLock<Console>` so every print site (including in libraries that the CLI calls into) renders through one highlighter. `--verbose` / `--quiet` filter by `Level`. Warnings/errors always go to stderr and are never suppressed (info goes to stdout).
