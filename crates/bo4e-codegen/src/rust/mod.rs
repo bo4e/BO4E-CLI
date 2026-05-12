@@ -7,6 +7,7 @@ pub mod plain;
 pub mod crate_;
 
 pub(crate) mod imports;
+pub(crate) mod render;
 pub(crate) mod types;
 
 /// Reserved Rust keywords (current + reserved-for-future) that a field name
