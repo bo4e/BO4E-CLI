@@ -64,8 +64,8 @@ pub(crate) struct SchemaCtx {
     pub file_name: String,
 }
 
-/// Drive the per-schema file write loop shared by every per-flavour
-/// generator. For each schema:
+/// Drive the per-schema file write loop shared by the per-schema-file
+/// flavours (pydantic, rust-plain). For each schema:
 ///
 /// 1. Borrow the cell, snapshot `module` / `name` / parsed schema, drop the
 ///    borrow (so the closure can call back into anything without aliasing).
@@ -77,6 +77,9 @@ pub(crate) struct SchemaCtx {
 /// Returns every path written, in the same order as iteration. Closures
 /// that need extra per-file state (diagnostics, mod.rs reexport maps, …)
 /// capture it themselves.
+///
+/// `sql_model` deliberately doesn't use this helper: it iterates a pre-built
+/// `SqlPlan` rather than the raw `Schemas`, so the contract here doesn't fit.
 #[cfg(any(
     feature = "python-pydantic",
     feature = "python-sql-model",
@@ -106,10 +109,10 @@ where
             module,
             parsed,
             depth,
-            file_name: file_name.clone(),
+            file_name,
         };
         let body = render(&ctx)?;
-        let out_path = out_dir.join(&file_name);
+        let out_path = out_dir.join(&ctx.file_name);
         std::fs::write(&out_path, &body)?;
         written.push(out_path);
     }

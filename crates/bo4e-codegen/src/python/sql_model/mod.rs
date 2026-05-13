@@ -47,7 +47,7 @@ pub fn generate(
     // ── Per-class files ────────────────────────────────────────────────────────
     for table in plan.tables.values() {
         let (out_dir, file_name, depth) =
-            crate::python::module_paths(output_dir, &table.module, "py");
+            crate::layout::module_paths(output_dir, &table.module, "py");
         std::fs::create_dir_all(&out_dir)?;
         let body = renderer::render_table(&env, table, depth, &class_to_module)?;
         let out_path = out_dir.join(&file_name);
@@ -82,7 +82,7 @@ pub fn generate(
 
     // ── Empty __init__.py per first-level subdirectory ─────────────────────────
     let subdirs =
-        crate::python::first_level_subdirs(plan.tables.values().map(|t| t.module.as_slice()));
+        crate::layout::first_level_subdirs(plan.tables.values().map(|t| t.module.as_slice()));
     crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
 
     Ok(crate::GenerateOutput {

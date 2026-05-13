@@ -2,8 +2,6 @@ use crate::error::Error;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-pub(crate) use crate::layout::{first_level_subdirs, module_paths};
-
 pub(crate) mod imports;
 pub(crate) mod types;
 
