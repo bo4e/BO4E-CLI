@@ -14,19 +14,21 @@ use crate::rust::types::{UnsupportedShape, literal_default_rust, map_rust};
 
 /// Render a docstring block as outer `///` lines. Empty input → empty string.
 /// Preserves embedded line breaks verbatim — Sphinx RST is not stripped.
-pub(crate) fn render_doc_comment(description: Option<&str>, indent: &str) -> String {
+/// The struct template applies its own `{{ doc | indent(4) }}` when needed,
+/// so this helper always emits flush-left lines.
+fn render_doc_comment(description: Option<&str>) -> String {
     let Some(text) = description.map(str::trim).filter(|s| !s.is_empty()) else {
         return String::new();
     };
     text.lines()
-        .map(|line| format!("{indent}/// {line}").trim_end().to_string())
+        .map(|line| format!("/// {line}").trim_end().to_string())
         .collect::<Vec<_>>()
         .join("\n")
 }
 
 /// Render the single-variant enum that types a const-valued property.
 /// `class_name` = e.g. `"AngebotTyp"`; `wire_value` = the JSON literal, e.g. `"ANGEBOT"`.
-pub(crate) fn render_single_variant_enum(
+fn render_single_variant_enum(
     env: &Environment<'static>,
     class_name: &str,
     wire_value: &str,
@@ -35,7 +37,7 @@ pub(crate) fn render_single_variant_enum(
     let variant_ident = to_pascal_case(&sanitize_member_name(wire_value));
     let tpl = env.get_template("rust/plain/Enum.jinja2")?;
     Ok(tpl.render(context! {
-        doc => render_doc_comment(docstring, ""),
+        doc => render_doc_comment(docstring),
         single_variant => true,
         class_name => class_name,
         variants => vec![context! { wire => wire_value, name => variant_ident }],
@@ -60,7 +62,7 @@ pub(crate) fn render_str_enum(
         .collect();
     let tpl = env.get_template("rust/plain/Enum.jinja2")?;
     Ok(tpl.render(context! {
-        doc => render_doc_comment(docstring, ""),
+        doc => render_doc_comment(docstring),
         single_variant => false,
         class_name => class_name,
         variants => variants,
@@ -69,7 +71,7 @@ pub(crate) fn render_str_enum(
 
 /// Per-field context for the Struct.jinja2 template.
 #[derive(Debug, Serialize)]
-pub(crate) struct RustField {
+struct RustField {
     pub name: String,
     pub type_hint: String,
     pub serde_attrs: String,
@@ -87,7 +89,7 @@ pub(crate) struct RenderedObject {
 }
 
 #[derive(Debug)]
-pub(crate) enum DefaultImplOutcome {
+enum DefaultImplOutcome {
     Emitted,
     Skipped { missing: Vec<String> },
 }
@@ -231,7 +233,7 @@ pub(crate) fn render_object(
             default_expr.as_deref(),
             is_required,
         );
-        let doc = render_doc_comment(schema_base(prop_schema).description.as_deref(), "");
+        let doc = render_doc_comment(schema_base(prop_schema).description.as_deref());
 
         fields.push(RustField {
             name: rust_name,
@@ -256,7 +258,7 @@ pub(crate) fn render_object(
             format!("{uses}\n{extra_use}")
         };
     }
-    let doc = render_doc_comment(obj.base.description.as_deref(), "");
+    let doc = render_doc_comment(obj.base.description.as_deref());
 
     let outcome = DefaultImplOutcome::from_fields(&fields);
     let default_impl = render_default_impl(env, class_name, &fields, &outcome)?;
@@ -436,27 +438,21 @@ mod tests {
 
     #[test]
     fn doc_comment_single_line() {
-        let s = render_doc_comment(Some("Hello world"), "");
+        let s = render_doc_comment(Some("Hello world"));
         assert_eq!(s, "/// Hello world");
     }
 
     #[test]
     fn doc_comment_multi_line_preserves_breaks() {
-        let s = render_doc_comment(Some("Line one\nLine two"), "");
+        let s = render_doc_comment(Some("Line one\nLine two"));
         assert_eq!(s, "/// Line one\n/// Line two");
     }
 
     #[test]
     fn doc_comment_empty_returns_empty() {
-        assert_eq!(render_doc_comment(None, ""), "");
-        assert_eq!(render_doc_comment(Some(""), ""), "");
-        assert_eq!(render_doc_comment(Some("   "), ""), "");
-    }
-
-    #[test]
-    fn doc_comment_indent_applied() {
-        let s = render_doc_comment(Some("Hi"), "    ");
-        assert_eq!(s, "    /// Hi");
+        assert_eq!(render_doc_comment(None), "");
+        assert_eq!(render_doc_comment(Some("")), "");
+        assert_eq!(render_doc_comment(Some("   ")), "");
     }
 
     #[test]
