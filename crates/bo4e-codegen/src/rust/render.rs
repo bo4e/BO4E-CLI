@@ -90,23 +90,30 @@ pub(crate) struct RenderedObject {
 
 #[derive(Debug)]
 enum DefaultImplOutcome {
-    Emitted,
+    /// Every field has a default expression. Carries the validated
+    /// `(name, expr)` pairs so the renderer doesn't need to re-unwrap
+    /// `default_expr` and parallel-track invariants with the field slice.
+    Emitted { pairs: Vec<(String, String)> },
+    /// At least one field is missing a default; we emit a comment instead
+    /// of an `impl Default for X` block.
     Skipped { missing: Vec<String> },
 }
 
 impl DefaultImplOutcome {
     /// Inspect `fields` and decide whether a `Default` impl can be emitted —
-    /// a field with no `default_expr` blocks the block. Computed once per
-    /// struct so `render_default_impl` and the renderer's diagnostic share
-    /// the same iteration.
+    /// a field with no `default_expr` blocks the block. The two-pass version
+    /// (collect missing, then map fields) is fused into one walk here.
     fn from_fields(fields: &[RustField]) -> Self {
-        let missing: Vec<String> = fields
-            .iter()
-            .filter(|f| f.default_expr.is_none())
-            .map(|f| f.name.clone())
-            .collect();
+        let mut pairs: Vec<(String, String)> = Vec::with_capacity(fields.len());
+        let mut missing: Vec<String> = Vec::new();
+        for f in fields {
+            match f.default_expr.as_deref() {
+                Some(expr) => pairs.push((f.name.clone(), expr.to_string())),
+                None => missing.push(f.name.clone()),
+            }
+        }
         if missing.is_empty() {
-            Self::Emitted
+            Self::Emitted { pairs }
         } else {
             Self::Skipped { missing }
         }
@@ -116,7 +123,7 @@ impl DefaultImplOutcome {
 impl std::fmt::Display for DefaultImplOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Emitted => write!(f, "Default impl emitted"),
+            Self::Emitted { .. } => write!(f, "Default impl emitted"),
             Self::Skipped { missing } => write!(
                 f,
                 "Default impl SKIPPED: field `{}` has no default expression",
@@ -196,7 +203,7 @@ pub(crate) fn render_object(
                 // can be absent (i.e. the field is not in `required`). The only override
                 // is `_version`, which is kept as a plain `String` with a generated
                 // `default_version()` helper.
-                let schema_is_nullable = mapped.rendered.starts_with("Option<");
+                let schema_is_nullable = is_option_typed(&mapped.rendered);
                 let render_as_option = !is_version_field && (schema_is_nullable || !is_required);
 
                 // Strip any outer `Option<>` from the mapped type so we can re-wrap
@@ -261,7 +268,7 @@ pub(crate) fn render_object(
     let doc = render_doc_comment(obj.base.description.as_deref());
 
     let outcome = DefaultImplOutcome::from_fields(&fields);
-    let default_impl = render_default_impl(env, class_name, &fields, &outcome)?;
+    let default_impl = render_default_impl(env, class_name, &outcome)?;
 
     let n_fields = fields.len();
     let n_synth = extra_enums.len();
@@ -289,6 +296,15 @@ fn strip_leading_underscore(s: &str) -> String {
     s.strip_prefix('_').unwrap_or(s).to_string()
 }
 
+/// Whether a rendered Rust type string represents an `Option<T>`. We detect
+/// this by string prefix because `MappedType.rendered` is a `String` rather
+/// than a structured type — centralised here so the convention has one site
+/// to update if the rendering ever drifts (e.g. nested `Option`, custom
+/// spacing).
+fn is_option_typed(rendered: &str) -> bool {
+    rendered.starts_with("Option<")
+}
+
 fn build_serde_attrs(
     prop_name: &str,
     needs_rename: bool,
@@ -300,7 +316,7 @@ fn build_serde_attrs(
     if needs_rename {
         parts.push(format!("rename = \"{prop_name}\""));
     }
-    let is_option = type_hint.starts_with("Option<");
+    let is_option = is_option_typed(type_hint);
     if is_option {
         if is_required {
             // Required + nullable: the JSON key must be present (no `default`), but the
@@ -340,19 +356,13 @@ fn build_serde_attrs(
 fn render_default_impl(
     env: &Environment<'static>,
     class_name: &str,
-    fields: &[RustField],
     outcome: &DefaultImplOutcome,
 ) -> Result<String, Error> {
     let (missing, field_ctx) = match outcome {
-        DefaultImplOutcome::Emitted => {
-            let ctx: Vec<_> = fields
+        DefaultImplOutcome::Emitted { pairs } => {
+            let ctx: Vec<_> = pairs
                 .iter()
-                .map(|f| {
-                    context! {
-                        name => f.name,
-                        expr => f.default_expr.as_deref().unwrap(),
-                    }
-                })
+                .map(|(name, expr)| context! { name => name, expr => expr })
                 .collect();
             (Vec::<&str>::new(), ctx)
         }
