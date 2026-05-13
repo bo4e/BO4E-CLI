@@ -1,11 +1,12 @@
-{%- if uses %}
+{%- if uses -%}
 {{ uses }}
 
 {% endif -%}
-{%- for ext in extra_enums %}
+{%- for ext in extra_enums -%}
 {{ ext }}
+
 {% endfor -%}
-{%- if doc %}
+{%- if doc -%}
 {{ doc }}
 {% endif -%}
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

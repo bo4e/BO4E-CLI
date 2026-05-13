@@ -124,11 +124,18 @@ impl std::fmt::Display for DefaultImplOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Emitted { .. } => write!(f, "Default impl emitted"),
-            Self::Skipped { missing } => write!(
-                f,
-                "Default impl SKIPPED: field `{}` has no default expression",
-                missing.join("`, `")
-            ),
+            Self::Skipped { missing } => {
+                let (subject, verb) = if missing.len() > 1 {
+                    ("fields", "have")
+                } else {
+                    ("field", "has")
+                };
+                write!(
+                    f,
+                    "Default impl SKIPPED: {subject} `{}` {verb} no default expression",
+                    missing.join("`, `")
+                )
+            }
         }
     }
 }

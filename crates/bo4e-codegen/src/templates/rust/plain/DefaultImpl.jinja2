@@ -1,5 +1,5 @@
 {%- if missing %}
-// Default impl omitted: field `{{ missing | join("`, `") }}` has no default expression.
+// Default impl omitted: {% if missing | length > 1 %}fields{% else %}field{% endif %} `{{ missing | join("`, `") }}` {% if missing | length > 1 %}have{% else %}has{% endif %} no default expression.
 {%- else %}
 impl Default for {{ class_name }} {
     fn default() -> Self {

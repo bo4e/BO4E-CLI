@@ -1,4 +1,4 @@
-{%- if doc %}
+{%- if doc -%}
 {{ doc }}
 {% endif -%}
 #[derive(Debug, Clone, {% if single_variant %}Copy, {% endif %}PartialEq, {% if single_variant %}Default, {% endif %}serde::Serialize, serde::Deserialize)]

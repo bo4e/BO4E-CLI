@@ -269,17 +269,27 @@ mod tests {
         assert!(emitted.contains("impl Default for Angebot"));
         assert!(emitted.contains("id: None,"));
 
-        // Skipped variant: comment only, no `impl` block.
-        let skipped = tpl
+        // Skipped variant, single missing field — uses singular grammar.
+        let skipped_one = tpl
             .render(context! {
                 class_name => "Angebot",
                 missing => vec!["bad_field"],
                 fields => Vec::<minijinja::Value>::new(),
             })
             .unwrap();
-        assert!(skipped.contains("Default impl omitted"));
-        assert!(skipped.contains("bad_field"));
-        assert!(!skipped.contains("impl Default for"));
+        assert!(skipped_one.contains("Default impl omitted"));
+        assert!(skipped_one.contains("field `bad_field` has no"));
+        assert!(!skipped_one.contains("impl Default for"));
+
+        // Skipped variant, multiple missing fields — uses plural grammar.
+        let skipped_many = tpl
+            .render(context! {
+                class_name => "Angebot",
+                missing => vec!["anhaenge", "werte"],
+                fields => Vec::<minijinja::Value>::new(),
+            })
+            .unwrap();
+        assert!(skipped_many.contains("fields `anhaenge`, `werte` have no"));
     }
 
     #[cfg(feature = "rust-crate")]
