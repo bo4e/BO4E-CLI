@@ -9,12 +9,10 @@ use std::collections::BTreeSet;
 /// A registry of imports collected while rendering a single module file.
 /// `render()` produces the deterministic import block.
 #[derive(Debug, Default)]
-#[allow(dead_code)] // Consumed by Task 8 (template renderer).
 pub struct ImportBlock {
     items: BTreeSet<Import>,
 }
 
-#[allow(dead_code)] // Consumed by Task 8 (template renderer).
 impl ImportBlock {
     pub fn new() -> Self {
         Self::default()

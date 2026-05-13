@@ -4,7 +4,7 @@
 //! root `__init__.py`, `__version__.py`, and one empty `__init__.py` per subpackage
 //! directory.
 //!
-//! ## Approach (Option A from Task 8 plan)
+//! ## Approach: build the vendored template context faithfully
 //!
 //! The vendored Jinja2 templates under `templates/python/pydantic/` are byte-identical
 //! to the upstream `data-model-code-generator` templates used by the Python implementation

@@ -283,7 +283,7 @@ fn is_simple_scalar(schema: &SchemaType) -> bool {
         | SchemaType::StrEnum(_) => true,
         // AnyOf with a non-scalar variant (reference, array, Any, …) is not a simple
         // scalar — it falls through to `None` in `simple_scalar_field`, where the
-        // caller deliberately skips it so Task 7 can pick it up.
+        // caller handles the structured cases (relationships, junctions) separately.
         SchemaType::AnyOf(a) => {
             a.any_of.iter().all(|t| matches!(t,
                 SchemaType::StringSchema(_)
