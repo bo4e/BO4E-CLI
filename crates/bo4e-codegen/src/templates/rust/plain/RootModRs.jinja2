@@ -2,10 +2,9 @@
 //!
 //! Querying the BO4E version at runtime: `crate::VERSION`.
 
-{%- for m in top_modules %}
+{% for m in top_modules -%}
 pub mod {{ m }};
-{%- endfor %}
-
+{% endfor %}
 pub const VERSION: &str = "{{ version }}";
 
 /// Default value for `_version` fields on generated models.
