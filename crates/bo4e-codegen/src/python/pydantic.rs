@@ -275,22 +275,6 @@ fn render_object(
             Some("None".into())
         };
 
-        // Special-case: `_version` carries the BO4E version of the schema; default it
-        // to the live module-level `__version__` constant so generated objects round-trip.
-        let is_version_field = prop_name == "_version";
-        let default_expr = if is_version_field {
-            Some("__version__".to_string())
-        } else {
-            default_expr
-        };
-
-        if is_version_field {
-            imports.extend([Import::Sibling {
-                module: vec!["__version__".into()],
-                name: "__version__".into(),
-            }]);
-        }
-
         let docstring = schema_base(prop_schema)
             .description
             .as_ref()
@@ -306,7 +290,7 @@ fn render_object(
             (Some(format!("Field({inner})")), String::new(), false)
         } else {
             let rep = default_expr.clone().unwrap_or_default();
-            (None, rep, is_required && !is_version_field)
+            (None, rep, is_required)
         };
 
         fields.push(PydanticField {
@@ -368,10 +352,13 @@ fn qualify_enum_default(
 ) -> Option<String> {
     let d = default?;
     // Only quoted string literals can be enum members; pass through anything else
-    // (`None`, `True`, integers, …) untouched.
-    let value = d.strip_prefix('"').and_then(|s| s.strip_suffix('"'))?;
+    // (`None`, `True`, integers, version strings, …) untouched rather than
+    // silently dropping the default.
+    let Some(value) = d.strip_prefix('"').and_then(|s| s.strip_suffix('"')) else {
+        return Some(d);
+    };
 
-    let (enum_name, enum_module) = enum_ref_target(prop_schema).or_else(|| {
+    let Some((enum_name, enum_module)) = enum_ref_target(prop_schema).or_else(|| {
         // Fallback: special-case `_typ` for BO/COM modules where the schema is an
         // inline const string with no enum $ref (most BO models follow this shape).
         if prop_name != "_typ" {
@@ -382,7 +369,10 @@ fn qualify_enum_default(
             Some("com") => Some(("ComTyp".to_string(), vec!["enum".into(), "ComTyp".into()])),
             _ => None,
         }
-    })?;
+    }) else {
+        // Quoted string default but no enum to qualify against — pass through.
+        return Some(d);
+    };
 
     imports.extend([Import::Sibling {
         module: enum_module,
