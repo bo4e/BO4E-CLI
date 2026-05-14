@@ -25,3 +25,9 @@ pub struct {{ class_name }} {
 {% if default_impl %}
 {{ default_impl }}
 {% endif -%}
+{%- for h in helpers %}
+
+fn {{ h.name }}() -> {{ h.return_type }} {
+    {{ h.body }}
+}
+{%- endfor %}

@@ -171,6 +171,25 @@ pub fn literal_default_rust(schema: &SchemaType) -> Option<String> {
         })
 }
 
+/// If `schema` is a `$ref` to an enum (directly or via `anyOf:[$ref, null]`)
+/// AND carries a string `default`, render that default as the variant
+/// reference `<inner_type>::<Sanitised>`. Otherwise returns `None`, leaving
+/// the caller to fall back to [`literal_default_rust`].
+///
+/// `inner_type` is the rendered Rust type name **without** any `Option<>`
+/// wrapper (e.g. `"Typ"` for both `Typ` and `Option<Typ>` fields). The
+/// caller re-wraps in `Some(...)` afterwards as the matrix demands.
+pub fn enum_variant_default_rust(schema: &SchemaType, inner_type: &str) -> Option<String> {
+    use crate::naming::{sanitize_member_name, to_pascal_case};
+
+    let PrimitiveValue::String(s) = crate::refs::schema_base(schema).default.as_ref()? else {
+        return None;
+    };
+    crate::refs::enum_ref_target(schema)?;
+    let variant = to_pascal_case(&sanitize_member_name(s));
+    Some(format!("{inner_type}::{variant}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

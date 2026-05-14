@@ -47,16 +47,38 @@ fn angebot_has_struct_and_sibling_use() {
         body.contains("use super::super::com::adresse::Adresse;"),
         "got:\n{body}"
     );
-    assert!(body.contains("pub enum AngebotTyp"), "got:\n{body}");
-    assert!(body.contains("impl Default for Angebot"), "got:\n{body}");
-    // After the strict-schema rework, `_version` is treated like any other
-    // optional+nullable field: the schema's `default: "v…"` literal drives
-    // the Default impl. The previous `default_version()` helper indirection
-    // is gone, so no special `use super::…default_version;` line should
-    // appear and no `fn default_version()` should be defined per-file.
+    // After the strict matrix rework, `_typ` (schema is
+    // `anyOf:[$ref to Typ, null] + default "ANGEBOT"`) is no longer
+    // narrowed to a synthetic single-variant enum — it uses the full
+    // referenced `Typ` enum with a per-field default helper.
     assert!(
-        !body.contains("default_version"),
-        "no default_version helper should appear; schema literal drives the default, got:\n{body}"
+        !body.contains("pub enum AngebotTyp"),
+        "no synthetic discriminator narrowing for $ref-to-enum fields, got:\n{body}"
+    );
+    assert!(
+        body.contains("use super::super::enums::typ::Typ;"),
+        "expected Typ enum import, got:\n{body}"
+    );
+    assert!(
+        body.contains("pub typ: Option<Typ>"),
+        "expected `Option<Typ>` for the _typ field, got:\n{body}"
+    );
+    // `impl Default for Angebot` is emitted because every field has a
+    // schema-declared default (validator-enforced invariant).
+    assert!(body.contains("impl Default for Angebot"), "got:\n{body}");
+    // Per-field helpers exist for fields whose default isn't what bare
+    // `#[serde(default)]` would produce (rows 3 and 5 of the matrix).
+    // `_version` (Option<String> with literal default "v…") is one such
+    // field — its helper is `default_version`, named after the Rust
+    // field ident, with no special-casing.
+    assert!(
+        body.contains("fn default_version() -> Option<String>"),
+        "expected per-field helper for `_version`, got:\n{body}"
+    );
+    assert!(
+        !body.contains("pub(crate) fn default_version()")
+            && !body.contains("use super::super::default_version;"),
+        "no global default_version() helper or its use-import (the old design), got:\n{body}"
     );
 }
 

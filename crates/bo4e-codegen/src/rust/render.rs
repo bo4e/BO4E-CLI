@@ -8,9 +8,11 @@ use std::collections::BTreeSet;
 use crate::Error;
 use crate::imports::Import;
 use crate::naming::{sanitize_member_name, to_pascal_case};
-use crate::refs::{enum_ref_target, schema_base};
+use crate::refs::schema_base;
 use crate::rust::imports::UseBlock;
-use crate::rust::types::{UnsupportedShape, literal_default_rust, map_rust};
+use crate::rust::types::{
+    UnsupportedShape, enum_variant_default_rust, literal_default_rust, map_rust,
+};
 
 /// Render a docstring block as outer `///` lines. Empty input → empty string.
 /// Preserves embedded line breaks verbatim — Sphinx RST is not stripped.
@@ -79,6 +81,21 @@ struct RustField {
     /// Default expression for the field, used by `render_default_impl`.
     #[serde(skip)]
     pub default_expr: Option<String>,
+}
+
+/// A per-field serde-`default` helper, emitted alongside the struct it
+/// belongs to. Required for any optional field whose schema default does
+/// not match what bare `#[serde(default)]` would produce — i.e. row 3
+/// (optional + non-nullable + literal) and row 5 (optional + nullable +
+/// non-null literal) of the strict default matrix.
+#[derive(Debug, Serialize)]
+struct HelperFn {
+    /// `default_<rust_field_name>`.
+    pub name: String,
+    /// Return type matches the field's `type_hint`.
+    pub return_type: String,
+    /// Body expression (`Some(Typ::Angebot)`, `42i64`, etc.).
+    pub body: String,
 }
 
 /// Outcome of rendering an object schema: the file body, ready to write.
@@ -154,6 +171,7 @@ pub(crate) fn render_object(
     let required: BTreeSet<&str> = obj.required.iter().map(|s| s.as_str()).collect();
     let mut fields: Vec<RustField> = Vec::new();
     let mut extra_enums: Vec<String> = Vec::new();
+    let mut helpers: Vec<HelperFn> = Vec::new();
 
     for (prop_name, prop_schema) in &obj.properties {
         let (rust_name, needs_rename) = crate::rust::rust_field_name(prop_name);
@@ -173,19 +191,25 @@ pub(crate) fn render_object(
                     &disc.wire_value,
                     schema_base(prop_schema).description.as_deref(),
                 )?);
-                // When the schema permits null we expose `Option<EnumName>` so
-                // schema-valid `null` payloads deserialize as `None` instead of
-                // erroring. The default still carries the single variant so
-                // that `Struct::default()` produces a fully-populated,
-                // idiomatic BO4E object.
-                if disc.nullable {
-                    (
-                        format!("Option<{enum_name}>"),
-                        Some(format!("Some({enum_name}::default())")),
-                    )
+                // Type follows the schema's nullability. Default expression
+                // follows the strict required/default invariant: emit one
+                // only when the schema declares a `default` (validated
+                // upstream — required ⇔ no default).
+                let type_hint = if disc.nullable {
+                    format!("Option<{enum_name}>")
                 } else {
-                    (enum_name.clone(), Some(format!("{enum_name}::default()")))
-                }
+                    enum_name.clone()
+                };
+                let default_expr = if schema_base(prop_schema).default.is_some() {
+                    if disc.nullable {
+                        Some(format!("Some({enum_name}::default())"))
+                    } else {
+                        Some(format!("{enum_name}::default()"))
+                    }
+                } else {
+                    None
+                };
+                (type_hint, default_expr)
             } else {
                 let mapped = map_rust(prop_schema).map_err(|UnsupportedShape(shape)| {
                     Error::UnsupportedSchemaShape {
@@ -196,40 +220,34 @@ pub(crate) fn render_object(
                 })?;
                 imports.extend(mapped.imports.iter().cloned());
 
-                let json_default = literal_default_rust(prop_schema);
-
-                // A field is `Option<T>` when either the JSON value can be null
-                // (`map_rust` returns `Option<T>` for `anyOf:[T, null]`) OR the JSON key
-                // can be absent (i.e. the field is not in `required`). No field-name
-                // special-cases: every override is driven by the schema's own shape so
-                // `bo4e edit` changes flow through to the generated code.
-                let schema_is_nullable = is_option_typed(&mapped.rendered);
-                let render_as_option = schema_is_nullable || !is_required;
-
-                // Strip any outer `Option<>` from the mapped type so we can re-wrap
-                // consistently below — `map_rust` only adds it for `anyOf:[T, null]`,
-                // never recursively, so this only touches the outermost layer.
+                // The Rust type follows the schema's nullability ONLY: no
+                // auto-wrapping in `Option<T>` based on `required`. The strict
+                // required/default invariant (validated in `crate::validate`)
+                // guarantees we never have an optional field without a
+                // default, so we don't need to invent `Option<T>` to express
+                // "may be absent".
                 let inner = mapped
                     .rendered
                     .strip_prefix("Option<")
                     .and_then(|s| s.strip_suffix('>'))
                     .unwrap_or(&mapped.rendered)
                     .to_string();
-                let type_hint = if render_as_option {
-                    format!("Option<{inner}>")
-                } else {
-                    inner
-                };
+                let type_hint = mapped.rendered.clone();
+                let is_option = is_option_typed(&type_hint);
 
-                // Per the validator: required ⇔ no schema default. So
-                // `json_default` is `Some` iff `!is_required`. When the
-                // field type is `Option<T>` and the schema's default is a
-                // non-null literal, the literal needs `Some(...)` wrapping
-                // so it matches the field type; a `null` default is
-                // already rendered as `"None"` by `literal_default_rust`
-                // and stays as-is.
-                let default_expr = json_default.map(|d| {
-                    if render_as_option && d != "None" {
+                // Pick the default expression:
+                //   - $ref-to-enum + string default → `EnumName::Variant`
+                //     (renders e.g. `Some(Typ::Angebot)` after wrapping).
+                //   - otherwise → the primitive literal from
+                //     `literal_default_rust` (already escaped).
+                let raw = enum_variant_default_rust(prop_schema, &inner)
+                    .or_else(|| literal_default_rust(prop_schema));
+
+                // Wrap in `Some(...)` for `Option<T>` non-null literal defaults
+                // so the expression's type matches the field. A `null` schema
+                // default is already rendered as `"None"` and stays as-is.
+                let default_expr = raw.map(|d| {
+                    if is_option && d != "None" {
                         format!("Some({d})")
                     } else {
                         d
@@ -239,13 +257,24 @@ pub(crate) fn render_object(
                 (type_hint, default_expr)
             };
 
-        let serde_attrs = build_serde_attrs(
+        let attrs_decision = decide_serde_attrs(
             prop_name,
+            &rust_name,
             needs_rename,
             &type_hint,
             default_expr.as_deref(),
             is_required,
         );
+        if attrs_decision.needs_helper
+            && let Some(body) = default_expr.as_deref()
+        {
+            helpers.push(HelperFn {
+                name: format!("default_{rust_name}"),
+                return_type: type_hint.clone(),
+                body: body.to_string(),
+            });
+        }
+        let serde_attrs = attrs_decision.attrs;
         let doc = render_doc_comment(schema_base(prop_schema).description.as_deref());
 
         fields.push(RustField {
@@ -284,6 +313,7 @@ pub(crate) fn render_object(
         class_name => class_name,
         fields => &fields,
         default_impl => default_impl,
+        helpers => &helpers,
     })?;
 
     Ok(RenderedObject { body, diagnostic })
@@ -302,45 +332,86 @@ fn is_option_typed(rendered: &str) -> bool {
     rendered.starts_with("Option<")
 }
 
-fn build_serde_attrs(
+struct SerdeAttrsDecision {
+    /// The comma-joined `serde(...)` argument list, e.g.
+    /// `rename = "_id", default, skip_serializing_if = "Option::is_none"`.
+    attrs: String,
+    /// Whether the field also needs a per-field `default_<name>()` helper
+    /// emitted alongside the struct. The helper is referenced by name from
+    /// the serde attrs above (`default = "default_<name>"`).
+    needs_helper: bool,
+}
+
+/// Pick the per-field serde attribute list for the strict required/default
+/// matrix, plus whether a `default_<field>()` helper is needed:
+///
+/// | required | nullable | default | attrs                              | helper |
+/// |----------|----------|---------|------------------------------------|--------|
+/// | ✓        | ✗        | ✗       | —                                  | no     |
+/// | ✓        | ✓        | ✗       | —  *(field always serialised)*     | no     |
+/// | ✗        | ✗        | literal | `default = "default_<field>"`      | yes    |
+/// | ✗        | ✓        | null    | `default, skip_serializing_if = …` | no     |
+/// | ✗        | ✓        | literal | `default = "default_<field>"`      | yes    |
+///
+/// "literal" includes both primitive literals (`"X"`, `42i64`, `true`) and
+/// `T::default()`-shaped expressions (the synthetic single-variant
+/// discriminator emits this — bare `#[serde(default)]` actually works for
+/// the non-Option case there since the field type's `Default::default()`
+/// matches the desired value, so no helper is emitted).
+fn decide_serde_attrs(
     prop_name: &str,
+    rust_name: &str,
     needs_rename: bool,
     type_hint: &str,
     default_expr: Option<&str>,
     is_required: bool,
-) -> String {
+) -> SerdeAttrsDecision {
     let mut parts = Vec::<String>::new();
     if needs_rename {
         parts.push(format!("rename = \"{prop_name}\""));
     }
     let is_option = is_option_typed(type_hint);
-    if is_option {
-        if is_required {
-            // Required + nullable: the JSON key must be present (no `default`), but the
-            // value may be null. We still skip emitting `null` on serialization — most
-            // BO4E consumers prefer absent over `null` for clean round-trips, and a
-            // future consumer who wants `null` explicitly can override the serde attr.
-            parts.push("skip_serializing_if = \"Option::is_none\"".to_string());
+    let mut needs_helper = false;
+
+    if let Some(d) = default_expr {
+        debug_assert!(
+            !is_required,
+            "validator should reject required+default; field `{prop_name}`",
+        );
+        // Decide whether bare `#[serde(default)]` already produces the
+        // schema's declared default. If so, emit bare `default` and skip
+        // the helper. Otherwise generate a `default_<name>` helper and
+        // reference it.
+        let bare_default_matches = if is_option {
+            // `Option::<T>::default()` is `None`, which only matches when
+            // the schema's literal default is itself null.
+            d == "None"
         } else {
+            // `T::default()` matches only the `::default()`-shaped expression
+            // produced by the synthetic single-variant discriminator branch.
+            d == "Default::default()" || d.ends_with("::default()")
+        };
+        if bare_default_matches {
             parts.push("default".to_string());
+        } else {
+            parts.push(format!("default = \"default_{rust_name}\""));
+            needs_helper = true;
+        }
+        // Skip-serializing-if is intentionally narrow: row 4 only. The
+        // language's `Option::is_none` matches the schema's null default,
+        // so serialised JSON omits the key when it's at its default —
+        // a clean round-trip. For all other rows we *always* serialise
+        // the field (required keys must be present; non-null literal
+        // defaults still get echoed back since serde has no built-in
+        // "skip if equals literal" predicate).
+        if is_option && d == "None" {
             parts.push("skip_serializing_if = \"Option::is_none\"".to_string());
         }
-    } else if let Some(d) = default_expr
-        && !is_required
-        && (d == "Default::default()" || d.ends_with("::default()"))
-    {
-        // Non-required + non-Option field with a `::default()`-shaped
-        // expression (e.g. a synthetic discriminator enum like
-        // `AngebotTyp::default()`): tell serde to use the field type's
-        // Default on a missing key. For *required* fields we intentionally
-        // omit this so a missing key fails to deserialize — matches the
-        // required + `Option<T>` branch above. The literal default still
-        // lives in `impl Default for Struct` (for `Struct::default()`
-        // callers). No `_version` special-case any more: the schema is
-        // the single source of truth, validated at generate time.
-        parts.push("default".to_string());
     }
-    parts.join(", ")
+    SerdeAttrsDecision {
+        attrs: parts.join(", "),
+        needs_helper,
+    }
 }
 
 fn render_default_impl(
@@ -382,8 +453,6 @@ struct DiscriminatorMatch {
 /// value and a flag indicating whether the schema's discriminator branch is
 /// nullable (`anyOf: […, null]`).
 fn single_variant_discriminator(prop_schema: &SchemaType) -> Option<DiscriminatorMatch> {
-    use bo4e_schemas::models::json_schema::PrimitiveValue;
-
     fn const_value(s: &SchemaType) -> Option<&str> {
         match s {
             SchemaType::ConstantSchema(c) => Some(c.constant.as_str()),
@@ -400,7 +469,13 @@ fn single_variant_discriminator(prop_schema: &SchemaType) -> Option<Discriminato
         });
     }
 
-    // anyOf: [const, null] OR anyOf: [$ref to enum, null] with TypeBase.default
+    // anyOf:[const, null] or anyOf:[single-element-StrEnum, null] — these are
+    // *true* single-value schemas: the type system literally permits only one
+    // wire value (plus null when nullable). The earlier `anyOf:[$ref to a
+    // multi-element enum, null] + default` arm has been removed — a default
+    // does not narrow the type, it just provides an absent-key fallback, so
+    // those fields should be rendered as `Option<RefedEnum>` (handled by the
+    // general map_rust path).
     if let SchemaType::AnyOf(a) = prop_schema {
         let nullable = a
             .any_of
@@ -411,21 +486,13 @@ fn single_variant_discriminator(prop_schema: &SchemaType) -> Option<Discriminato
             .iter()
             .filter(|t| !matches!(t, SchemaType::NullSchema(_)))
             .collect();
-        if non_null.len() == 1 {
-            if let Some(v) = const_value(non_null[0]) {
-                return Some(DiscriminatorMatch {
-                    wire_value: v.to_string(),
-                    nullable,
-                });
-            }
-            if let Some(PrimitiveValue::String(default_val)) = &schema_base(prop_schema).default
-                && enum_ref_target(non_null[0]).is_some()
-            {
-                return Some(DiscriminatorMatch {
-                    wire_value: default_val.clone(),
-                    nullable,
-                });
-            }
+        if non_null.len() == 1
+            && let Some(v) = const_value(non_null[0])
+        {
+            return Some(DiscriminatorMatch {
+                wire_value: v.to_string(),
+                nullable,
+            });
         }
     }
 
@@ -569,12 +636,13 @@ mod tests {
         assert!(r.body.contains("pub angebotsnummer: Option<String>"));
     }
 
-    /// `Lastgang.zeitIntervallLaenge`-style regression: the schema is
-    /// `anyOf:[$ref to Menge, null]` AND the field appears in `required`.
-    /// "Required" means the JSON key must be present, NOT that null is forbidden,
-    /// so the Rust type must stay `Option<Menge>`. The serde attrs drop `default`
-    /// (forcing presence on deserialization) but keep `skip_serializing_if` so
-    /// `None` round-trips as absent for ergonomic output.
+    /// Row 2 of the strict matrix: `required + nullable + no default`. The
+    /// `anyOf:[$ref to Menge, null]` field is in `required`, so the JSON key
+    /// must always be present (the value may be null). The Rust type stays
+    /// `Option<Menge>` and serde gets **no attributes at all** — neither
+    /// `default` (required keys must not have a missing-key fallback) nor
+    /// `skip_serializing_if` (the schema says the key is always present, so
+    /// serialised JSON must always include it, even when value is None).
     #[test]
     #[cfg(feature = "rust-plain")]
     fn render_object_required_nullable_ref_stays_option() {
@@ -605,72 +673,89 @@ mod tests {
             "required+nullable field must stay Option<T>, got:\n{}",
             r.body
         );
-        assert!(
-            !r.body.contains("pub zeit_intervall_laenge: Menge"),
-            "field must not have been stripped to bare `Menge`, got:\n{}",
-            r.body
-        );
-        // Required: no `default` attr (must be present in JSON).
-        assert!(
-            !r.body.contains("default,"),
-            "required+nullable field must not have `default` in its serde attrs, got:\n{}",
-            r.body
-        );
-        // But `skip_serializing_if` is fine for clean output.
-        assert!(
-            r.body.contains("skip_serializing_if = \"Option::is_none\""),
-            "expected skip_serializing_if, got:\n{}",
-            r.body
-        );
+        // Required → no `default` attr (missing key must error). Required
+        // → no `skip_serializing_if` either (key must always be present in
+        // serialised JSON). Look only at serde-attr lines; the
+        // "Default impl omitted" comment harmlessly mentions "default".
+        let serde_lines: Vec<&str> = r.body.lines().filter(|l| l.contains("#[serde(")).collect();
+        for line in &serde_lines {
+            assert!(
+                !line.contains("default"),
+                "required field must not have a `default` serde attr, got line:\n{line}",
+            );
+            assert!(
+                !line.contains("skip_serializing_if"),
+                "required field must not have skip_serializing_if, got line:\n{line}",
+            );
+        }
     }
 
-    /// Regression: a property that is *not* in `required` and is *not* nullable
-    /// (e.g. `type: "array"` without a `null` branch — `adressen` in BO4E's sql
-    /// fixture) must still be wrapped in `Option<T>` so deserialization survives
-    /// the JSON key being absent. Previously the renderer kept the raw type and
-    /// emitted no `default` attr, breaking serde on missing keys.
+    /// Row 3 of the strict matrix: `optional + non-nullable + literal
+    /// default`. The Rust type stays the underlying primitive (no
+    /// `Option<…>` wrap) and serde gets `default = "default_<field>"`
+    /// referencing a generated per-field helper. The helper function is
+    /// emitted alongside the struct.
     #[test]
     #[cfg(feature = "rust-plain")]
-    fn render_object_optional_non_nullable_array_is_option() {
-        use bo4e_schemas::models::json_schema::{ArraySchema, LiteralTypeArray, ReferenceSchema};
-
-        let array_of_adresse = SchemaType::Array(ArraySchema {
-            base: TypeBase::default(),
-            r#type: LiteralTypeArray::Array,
-            items: Box::new(SchemaType::ReferenceSchema(ReferenceSchema {
-                base: TypeBase::default(),
-                r#ref: "../com/Adresse.json".to_string(),
-            })),
-        });
-
+    fn render_object_optional_non_nullable_string_with_literal_default() {
         let env = make_env();
         let schema = obj_with_props(
-            vec![("adressen", array_of_adresse)],
-            vec![], // not required
-            Some("An offer."),
+            vec![("anrede", s_string_with_default(Some("Herr")))],
+            vec![], // not required, but has a default → row 3 (consistent)
+            Some("A salutation."),
         );
         let r = render_object(&env, "Angebot", &schema, 2).unwrap();
+        // Type stays `String` (schema is non-nullable, optionality is
+        // expressed via the serde `default` attribute, not the type).
         assert!(
-            r.body.contains("pub adressen: Option<Vec<Adresse>>"),
-            "optional non-nullable array must be Option<Vec<_>>, got:\n{}",
+            r.body.contains("pub anrede: String"),
+            "optional non-nullable string must stay `String` (no Option wrap), got:\n{}",
             r.body
         );
         assert!(
-            r.body.contains("default")
-                && r.body.contains("skip_serializing_if = \"Option::is_none\""),
-            "expected `default, skip_serializing_if = \"Option::is_none\"` on optional field, got:\n{}",
+            !r.body.contains("pub anrede: Option<"),
+            "must NOT wrap in Option, got:\n{}",
+            r.body
+        );
+        // Serde attrs reference the per-field helper.
+        assert!(
+            r.body.contains("default = \"default_anrede\""),
+            "expected `default = \"default_anrede\"`, got:\n{}",
+            r.body
+        );
+        // The helper itself is emitted.
+        assert!(
+            r.body.contains("fn default_anrede() -> String"),
+            "expected helper fn, got:\n{}",
+            r.body
+        );
+        assert!(
+            r.body.contains("\"Herr\".to_string()"),
+            "helper body should return the literal default, got:\n{}",
             r.body
         );
     }
 
-    /// Regression: a `_typ`-style discriminator whose schema permits null
-    /// (`anyOf:[$ref to enum, null]`) must be wrapped in `Option<EnumName>` so
-    /// schema-valid `null` payloads deserialize as `None` instead of erroring.
-    /// The default still seeds `Some(default)` so `Struct::default()` produces
-    /// a fully-populated, idiomatic BO4E object.
+    fn s_string_with_default(default_str: Option<&str>) -> SchemaType {
+        SchemaType::StringSchema(StringSchema {
+            base: TypeBase {
+                default: default_str.map(|s| PrimitiveValue::String(s.to_string())),
+                ..TypeBase::default()
+            },
+            r#type: LiteralTypeString::String,
+            format: None,
+        })
+    }
+
+    /// Row 5: an optional `$ref`-to-enum field with a string default no
+    /// longer triggers the synthetic-discriminator narrowing — schema says
+    /// `anyOf:[$ref to multi-element BoTyp, null]` so the value can be any
+    /// `BoTyp` variant at runtime. Renders as `Option<BoTyp>` with the
+    /// default literal qualified to `Some(BoTyp::Angebot)` via a per-field
+    /// helper.
     #[test]
     #[cfg(feature = "rust-plain")]
-    fn render_object_nullable_discriminator_is_option() {
+    fn render_object_optional_enum_ref_with_default_uses_full_enum_type() {
         use bo4e_schemas::models::json_schema::ReferenceSchema;
 
         let typ_schema = SchemaType::AnyOf(AnyOfSchema {
@@ -690,33 +775,48 @@ mod tests {
         let env = make_env();
         let schema = obj_with_props(vec![("_typ", typ_schema)], vec![], Some("An offer."));
         let r = render_object(&env, "Angebot", &schema, 2).unwrap();
+        // No synthetic AngebotTyp any more — the type is the referenced enum.
         assert!(
-            r.body.contains("pub enum AngebotTyp"),
-            "expected synthetic discriminator enum, got:\n{}",
+            !r.body.contains("pub enum AngebotTyp"),
+            "no synthetic single-variant enum for $ref-to-multi-element, got:\n{}",
             r.body
         );
         assert!(
-            r.body.contains("pub typ: Option<AngebotTyp>"),
-            "nullable discriminator must be Option<EnumName>, got:\n{}",
+            r.body.contains("pub typ: Option<BoTyp>"),
+            "expected `Option<BoTyp>`, got:\n{}",
+            r.body
+        );
+        // The default gets resolved to the enum variant via the helper.
+        assert!(
+            r.body.contains("fn default_typ() -> Option<BoTyp>"),
+            "expected default_typ helper, got:\n{}",
             r.body
         );
         assert!(
-            r.body.contains("typ: Some(AngebotTyp::default())"),
-            "Struct::default() must seed Some(EnumName::default()), got:\n{}",
+            r.body.contains("Some(BoTyp::Angebot)"),
+            "helper should return Some(BoTyp::Angebot), got:\n{}",
+            r.body
+        );
+        // serde attrs reference the helper.
+        assert!(
+            r.body.contains("default = \"default_typ\""),
+            "serde attrs should reference the helper, got:\n{}",
             r.body
         );
     }
 
-    /// A discriminator whose schema is a *direct* `const`/single-`StrEnum` (no
-    /// null branch) stays as a bare `EnumName` — only the nullable shape gets
-    /// the `Option<…>` wrap.
+    /// Row 1: required + non-nullable + no default. A `ConstantSchema` field
+    /// (which restricts the value to a single string at the type level) in
+    /// `required` produces the synthetic single-variant enum as the type but
+    /// emits **no** serde default attr — the JSON key must be present,
+    /// missing key must error.
     #[test]
     #[cfg(feature = "rust-plain")]
-    fn render_object_non_nullable_discriminator_is_bare() {
+    fn render_object_required_const_discriminator_has_no_default() {
         use bo4e_schemas::models::json_schema::ConstantSchema;
 
         let const_typ = SchemaType::ConstantSchema(ConstantSchema {
-            base: TypeBase::default(),
+            base: TypeBase::default(), // no schema-declared default
             r#type: LiteralTypeString::String,
             format: None,
             constant: "ANGEBOT".to_string(),
@@ -725,21 +825,19 @@ mod tests {
         let env = make_env();
         let schema = obj_with_props(vec![("_typ", const_typ)], vec!["_typ"], None);
         let r = render_object(&env, "Angebot", &schema, 2).unwrap();
+        // Synthetic enum is still emitted (the schema constrains the type
+        // to a single value).
+        assert!(
+            r.body.contains("pub enum AngebotTyp"),
+            "synthetic discriminator enum missing, got:\n{}",
+            r.body
+        );
         assert!(
             r.body.contains("pub typ: AngebotTyp"),
             "non-nullable discriminator must stay bare, got:\n{}",
             r.body
         );
-        assert!(
-            !r.body.contains("pub typ: Option<AngebotTyp>"),
-            "non-nullable discriminator must NOT be wrapped in Option, got:\n{}",
-            r.body
-        );
-        // Regression: required + non-Option fields must NOT carry a serde
-        // `default` attr — that would let a missing JSON key silently
-        // deserialize via `AngebotTyp::default()`, contradicting the
-        // schema's `required` contract. (`#[serde(rename = "_typ")]` is
-        // allowed; only the standalone `default` token is forbidden here.)
+        // Required + no-default → no `default` attr anywhere on the field.
         let body_lines: Vec<&str> = r.body.lines().collect();
         let typ_attr_line = body_lines
             .iter()
@@ -748,29 +846,39 @@ mod tests {
             .unwrap_or("");
         assert!(
             !typ_attr_line.contains("default"),
-            "required + non-Option discriminator must not emit a serde `default` attr, got line:\n{typ_attr_line}",
+            "required + non-Option without schema default must not emit `default`, got line:\n{typ_attr_line}",
+        );
+        // The Default impl for the struct is skipped because the field has
+        // no default expression (no `T::default()` fallback path).
+        assert!(
+            !r.body.contains("impl Default for Angebot"),
+            "Default impl must be skipped when a required field lacks any default, got:\n{}",
+            r.body
         );
     }
 
-    /// Optional + non-Option fields with a `::default()`-shaped default
-    /// expression (e.g. a synthetic single-variant enum on an optional
-    /// `_typ`) still get the bare `default` serde attr so missing JSON
-    /// keys fall back to `EnumName::default()`. This is the inverse of
-    /// the required case above.
+    /// Row 3 variant: an optional `ConstantSchema` field with a matching
+    /// schema-declared default. The synthetic enum is emitted; its
+    /// `EnumName::default()` matches the schema's literal, so bare
+    /// `#[serde(default)]` works and no `default_<field>` helper is
+    /// generated.
     #[test]
     #[cfg(feature = "rust-plain")]
-    fn render_object_optional_non_nullable_discriminator_keeps_serde_default() {
+    fn render_object_optional_const_discriminator_uses_bare_serde_default() {
         use bo4e_schemas::models::json_schema::ConstantSchema;
 
         let const_typ = SchemaType::ConstantSchema(ConstantSchema {
-            base: TypeBase::default(),
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("ANGEBOT".into())),
+                ..TypeBase::default()
+            },
             r#type: LiteralTypeString::String,
             format: None,
             constant: "ANGEBOT".to_string(),
         });
 
         let env = make_env();
-        // `_typ` is NOT in required.
+        // `_typ` is NOT in required → optional → must have default → ✓.
         let schema = obj_with_props(vec![("_typ", const_typ)], vec![], None);
         let r = render_object(&env, "Angebot", &schema, 2).unwrap();
         let body_lines: Vec<&str> = r.body.lines().collect();
@@ -779,9 +887,21 @@ mod tests {
             .find(|l| l.contains("#[serde(") && l.contains("rename = \"_typ\""))
             .copied()
             .unwrap_or("");
+        // Bare `default` is sufficient: T::default() on the synthetic
+        // single-variant enum returns the only variant.
         assert!(
             typ_attr_line.contains("default"),
-            "optional + non-Option discriminator should emit `default` so missing JSON keys fall back, got line:\n{typ_attr_line}",
+            "optional + non-Option discriminator should emit `default`, got line:\n{typ_attr_line}",
+        );
+        assert!(
+            !typ_attr_line.contains("default = \""),
+            "bare `default` is enough; no helper-fn reference expected, got line:\n{typ_attr_line}",
+        );
+        // And therefore no `fn default_typ()` helper is emitted.
+        assert!(
+            !r.body.contains("fn default_typ()"),
+            "no helper expected for the bare-default case, got:\n{}",
+            r.body
         );
     }
 }
