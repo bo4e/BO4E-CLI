@@ -4,6 +4,7 @@ pub mod imports;
 pub mod layout;
 pub mod naming;
 pub mod refs;
+mod validate;
 
 #[cfg(any(feature = "python-pydantic", feature = "python-sql-model",))]
 pub mod python;
@@ -102,6 +103,13 @@ where
         let (out_dir, file_name, depth) = layout::module_paths(output_dir, &module, ext);
         let parsed = schema.schema().map_err(Error::Schema)?.clone();
         drop(schema);
+
+        // Gate: object schemas must satisfy the strict required/default
+        // invariant before any renderer sees them. StrEnum top-levels carry
+        // no properties so they're trivially consistent.
+        if let bo4e_schemas::models::json_schema::SchemaRootType::Object(o) = &parsed {
+            validate::object_invariants(&class_name, &o.object)?;
+        }
 
         std::fs::create_dir_all(&out_dir)?;
         let ctx = SchemaCtx {

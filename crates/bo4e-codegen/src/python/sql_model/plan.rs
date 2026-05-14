@@ -178,6 +178,10 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
                 );
             }
             SchemaRootType::Object(o) => {
+                // Same gate as `for_each_schema_file` — sql_model doesn't go
+                // through that helper (it builds an SqlPlan up-front), so
+                // enforce the strict required/default invariant here too.
+                crate::validate::object_invariants(&class_name, &o.object)?;
                 let id_field = synth_id_field(&o.object);
                 let mut fields = vec![id_field];
                 let mut local_junctions: Vec<JunctionTable> = Vec::new();
@@ -1035,8 +1039,13 @@ mod tests {
         // `allOf` is outside the supported shape catalogue for SQL columns.
         // The plan must surface this as `Error::UnclassifiableProperty` so the
         // user sees what went wrong instead of getting a silently incomplete table.
+        //
+        // `weird` is in `required` so the strict-schema invariant validator
+        // (required ⇔ no default) lets it through — failure must come from
+        // the plan builder's shape classification, not the validator.
         let body = r#"{
             "type":"object",
+            "required":["weird"],
             "properties":{
                 "weird":{"allOf":[{"type":"string"},{"type":"integer"}]}
             }
