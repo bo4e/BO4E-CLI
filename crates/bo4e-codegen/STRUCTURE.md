@@ -131,7 +131,21 @@ These functions are pure — no IO, no globals. Test them with plain assertions.
 
 ## Error handling
 
-`Error` is `thiserror`-derived (`Io`, `TemplateRender`, `TemplateNotFound`, `SchemaLookup`, `Schema`, `UnclassifiableProperty`, `UnsupportedSchemaShape`). Don't introduce `anyhow` here — the CLI does the final-line printing.
+`Error` is `thiserror`-derived (`Io`, `TemplateRender`, `TemplateNotFound`, `SchemaLookup`, `Schema`, `UnclassifiableProperty`, `UnsupportedSchemaShape`, `InconsistentSchema`). Don't introduce `anyhow` here — the CLI does the final-line printing.
+
+## Schema invariants (validated at generate time)
+
+`crate::validate::object_invariants` runs over every `ObjectSchema` before any renderer touches it. Two rules:
+
+1. **`required ⇔ no default`** (the strict required/default invariant). A property is in `required` *iff* it has no declared `default`. Both violations raise `Error::InconsistentSchema`:
+   - `required + default declared` — the default is unreachable.
+   - `optional + no default` — the runtime has no fallback when the JSON key is absent.
+
+2. **AllOf / AnyOf shape restrictions** (enforced inside `rust/types.rs::map_rust` and matched by the python mapper; both raise `Error::UnsupportedSchemaShape`):
+   - `allOf` must have **exactly one** element. Multi-element `allOf` (intersection) is rejected.
+   - `anyOf` must be the `Optional` pattern: **one** non-null branch plus **one** `null` branch. Real unions (multiple non-null branches) and `anyOf` without a `null` branch are rejected.
+
+No renderer special-cases field names. `_version`, `_typ`, `_id` are mapped purely from their schema shape; `bo4e edit` changes flow through to the generated output.
 
 ## Adding a new output type
 
