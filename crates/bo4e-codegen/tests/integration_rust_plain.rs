@@ -49,23 +49,33 @@ fn angebot_has_struct_and_sibling_use() {
     );
     assert!(body.contains("pub enum AngebotTyp"), "got:\n{body}");
     assert!(body.contains("impl Default for Angebot"), "got:\n{body}");
+    // After the strict-schema rework, `_version` is treated like any other
+    // optional+nullable field: the schema's `default: "v…"` literal drives
+    // the Default impl. The previous `default_version()` helper indirection
+    // is gone, so no special `use super::…default_version;` line should
+    // appear and no `fn default_version()` should be defined per-file.
     assert!(
-        body.contains("use super::super::default_version;"),
-        "expected use line for centralized default_version, got:\n{body}"
-    );
-    assert!(
-        !body.contains("fn default_version()"),
-        "default_version fn should not be defined per-file anymore, got:\n{body}"
+        !body.contains("default_version"),
+        "no default_version helper should appear; schema literal drives the default, got:\n{body}"
     );
 }
 
 #[test]
-fn root_mod_rs_defines_default_version_fn() {
+fn root_mod_rs_carries_version_const_only() {
     let tmp = generate_into_tmp();
     let body = std::fs::read_to_string(tmp.path().join("mod.rs")).unwrap();
+    // The root module exposes the public `VERSION: &str` constant for
+    // downstream consumers, but no longer defines the `default_version()`
+    // helper — `_version` fields take their default straight from the
+    // schema's `default` literal (validated by the strict required/default
+    // invariant in `crate::validate`).
     assert!(
-        body.contains("pub(crate) fn default_version() -> String"),
-        "expected default_version fn at root, got:\n{body}"
+        body.contains("pub const VERSION: &str ="),
+        "expected VERSION const at root, got:\n{body}"
+    );
+    assert!(
+        !body.contains("default_version"),
+        "default_version helper should be gone after the _version strip, got:\n{body}"
     );
 }
 
