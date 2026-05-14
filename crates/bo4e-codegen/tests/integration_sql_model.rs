@@ -72,8 +72,12 @@ fn generated_angebot_contains_all_field_kinds_and_imports() {
         "adresse_id: uuid_pkg.UUID | None = Field(default=None, foreign_key=\"adresse.id\""
     ));
     assert!(body.contains("adresse: Adresse | None = Relationship("));
+    // After the strict-schema fixture update, `adressen` is `anyOf:[array, null]`
+    // with `default: null`, so the rendered relationship is nullable.
     assert!(
-        body.contains("adressen: list[Adresse] = Relationship(link_model=AngebotAdressenLink)")
+        body.contains(
+            "adressen: list[Adresse] | None = Relationship(link_model=AngebotAdressenLink)"
+        )
     );
     assert!(body.contains("typ: Typ | None = Field(alias=\"_typ\","));
     assert!(body.contains("werte: list[Decimal] = Field(sa_column=Column(ARRAY(Numeric)))"));
