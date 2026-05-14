@@ -85,9 +85,7 @@ pub fn generate(
             SchemaRootType::StrEnum(e) => {
                 render_enum(&env, &ctx.class_name, &e.str_enum.enum_values)
             }
-            SchemaRootType::Object(o) => {
-                render_object(&env, &ctx.class_name, &ctx.module, &o.object, ctx.depth)
-            }
+            SchemaRootType::Object(o) => render_object(&env, &ctx.class_name, &o.object, ctx.depth),
         },
     )?);
 
@@ -173,7 +171,6 @@ fn render_enum(
 fn render_object(
     env: &Environment<'static>,
     class_name: &str,
-    parent_module: &[String],
     obj: &bo4e_schemas::models::json_schema::ObjectSchema,
     depth: usize,
 ) -> Result<String, Error> {
@@ -198,42 +195,7 @@ fn render_object(
     let required: BTreeSet<&str> = obj.required.iter().map(|s| s.as_str()).collect();
 
     for (prop_name, prop_schema) in &obj.properties {
-        let mut mapped = map_pydantic(prop_schema);
-        // BO4E `_typ` discriminators carry exactly one allowed value (either as
-        // `const: "X"` or as a one-entry `enum: ["X"]` — both shapes appear in the
-        // schemas). Tighten the type to `Literal[BoTyp.<MEMBER>]` (or
-        // `Literal[ComTyp.<MEMBER>]`) so the type system reflects the single-value
-        // constraint instead of the loose `str` fallback from `map_pydantic`.
-        if prop_name == "_typ" {
-            use bo4e_schemas::models::json_schema::SchemaType;
-            let const_value: Option<&str> = match prop_schema {
-                SchemaType::ConstantSchema(c) => Some(c.constant.as_str()),
-                SchemaType::StrEnum(s) if s.enum_values.len() == 1 => {
-                    Some(s.enum_values[0].as_str())
-                }
-                _ => None,
-            };
-            if let Some(value) = const_value {
-                let typing_enum = match parent_module.first().map(|s| s.as_str()) {
-                    Some("bo") => Some(("BoTyp", vec!["enum".to_string(), "BoTyp".to_string()])),
-                    Some("com") => Some(("ComTyp", vec!["enum".to_string(), "ComTyp".to_string()])),
-                    _ => None,
-                };
-                if let Some((enum_name, enum_module)) = typing_enum {
-                    let member = sanitize_member_name(value);
-                    mapped.rendered = format!("Literal[{enum_name}.{member}]");
-                    mapped.imports.clear();
-                    mapped.imports.insert(Import::Named {
-                        module: "typing".into(),
-                        name: "Literal".into(),
-                    });
-                    mapped.imports.insert(Import::Sibling {
-                        module: enum_module,
-                        name: enum_name.into(),
-                    });
-                }
-            }
-        }
+        let mapped = map_pydantic(prop_schema);
         imports.extend(mapped.imports.iter().cloned());
 
         let is_required = required.contains(prop_name.as_str());
@@ -260,13 +222,7 @@ fn render_object(
         // String defaults that originate from an enum are qualified as `EnumName.MEMBER`
         // instead of bare string literals — see qualify_enum_default.
         let schema_default = literal_default(prop_schema);
-        let schema_default = qualify_enum_default(
-            schema_default,
-            prop_schema,
-            prop_name,
-            parent_module,
-            &mut imports,
-        );
+        let schema_default = qualify_enum_default(schema_default, prop_schema, &mut imports);
         let default_expr: Option<String> = if let Some(d) = schema_default {
             Some(d)
         } else if is_required {
@@ -331,46 +287,24 @@ fn render_object(
     Ok(stitch(class_name, &imports, depth, &rendered))
 }
 
-/// If `default` is a quoted string literal (`"VALUE"`) AND the property's type is an
-/// enum, promote the literal to `EnumName.<sanitized_member>` and add the matching
-/// import to `imports`. Otherwise return `default` unchanged.
-///
-/// Two enum-detection paths:
-/// 1. The schema directly references (or `anyOf:[$ref, null]`-wraps) an `enum/<Name>`
-///    schema — e.g. `Adresse.landescode` (default `"DE"` → `Landescode.DE`),
-///    `Bilanzierung._typ` (default `"BILANZIERUNG"` → `BoTyp.BILANZIERUNG`).
-/// 2. The field is named `_typ` and the parent schema lives in `bo/` or `com/` —
-///    even when the schema is an inline `const`/`enum` string with no `$ref`,
-///    BO4E convention says the value belongs to `BoTyp`/`ComTyp` respectively, so
-///    we promote `default="ANGEBOT"` to `default=BoTyp.ANGEBOT` and import `BoTyp`.
+/// If `default` is a quoted string literal (`"VALUE"`) AND the property's
+/// schema is (or `anyOf`-wraps) a `$ref` to an `enum/<Name>` schema,
+/// promote the literal to `EnumName.<sanitized_member>` and inject the
+/// matching sibling import. Anything else — non-string defaults, raw
+/// `None`, quoted strings whose schema isn't an enum ref — passes through
+/// untouched. Driven by schema shape only: no field-name special cases,
+/// so `bo4e edit` changes flow through.
 fn qualify_enum_default(
     default: Option<String>,
     prop_schema: &bo4e_schemas::models::json_schema::SchemaType,
-    prop_name: &str,
-    parent_module: &[String],
     imports: &mut ImportBlock,
 ) -> Option<String> {
     let d = default?;
-    // Only quoted string literals can be enum members; pass through anything else
-    // (`None`, `True`, integers, version strings, …) untouched rather than
-    // silently dropping the default.
     let Some(value) = d.strip_prefix('"').and_then(|s| s.strip_suffix('"')) else {
         return Some(d);
     };
 
-    let Some((enum_name, enum_module)) = enum_ref_target(prop_schema).or_else(|| {
-        // Fallback: special-case `_typ` for BO/COM modules where the schema is an
-        // inline const string with no enum $ref (most BO models follow this shape).
-        if prop_name != "_typ" {
-            return None;
-        }
-        match parent_module.first().map(|s| s.as_str()) {
-            Some("bo") => Some(("BoTyp".to_string(), vec!["enum".into(), "BoTyp".into()])),
-            Some("com") => Some(("ComTyp".to_string(), vec!["enum".into(), "ComTyp".into()])),
-            _ => None,
-        }
-    }) else {
-        // Quoted string default but no enum to qualify against — pass through.
+    let Some((enum_name, enum_module)) = enum_ref_target(prop_schema) else {
         return Some(d);
     };
 
