@@ -846,9 +846,12 @@ mod tests {
             .expect("adressen ManyRelationship present");
         assert_eq!(many.0, "Adresse");
         assert_eq!(many.1, "AngebotAdressenLink");
+        // After the strict-schema fixture update, `adressen` is now
+        // `anyOf:[array, null]` with `default: null`, so it lands as a
+        // nullable ManyRelationship.
         assert!(
-            !many.2,
-            "list[Reference] without Optional should not be nullable"
+            many.2,
+            "list[Reference] inside anyOf:[T, null] should be nullable"
         );
 
         let junction = plan

@@ -713,7 +713,9 @@ mod tests {
             "got:\n{body}"
         );
         assert!(
-            body.contains("adressen: list[Adresse] = Relationship(link_model=AngebotAdressenLink)"),
+            body.contains(
+                "adressen: list[Adresse] | None = Relationship(link_model=AngebotAdressenLink)"
+            ),
             "got:\n{body}"
         );
         assert!(
