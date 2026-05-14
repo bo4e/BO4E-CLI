@@ -1,0 +1,132 @@
+#![cfg(feature = "python-pydantic")]
+
+//! Round-trip integration test for the strict required/default matrix
+//! on the pydantic side. Mirror of `roundtrip_rust_crate.rs`: generates
+//! the `bo4e_invariants` fixture, drops a Python pytest-style script
+//! that exercises every matrix row against the generated `Foo` class,
+//! and shells out to `python3` to run it.
+//!
+//! Skips gracefully if `python3` isn't on PATH (mirrors the existing
+//! parity_pydantic.rs behaviour). The script itself doesn't depend on
+//! pydantic being installed — it imports the generated module and
+//! attempts to instantiate / serialise `Foo`. If pydantic isn't
+//! present locally, the import fails and the test reports a clear
+//! skip-and-message rather than a misleading failure.
+
+use std::path::PathBuf;
+use std::process::Command;
+
+fn fixture_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bo4e_invariants")
+}
+
+fn python3_with_pydantic() -> Option<PathBuf> {
+    let py = std::env::var("PYTHON3").unwrap_or_else(|_| "python3".to_string());
+    let probe = Command::new(&py)
+        .arg("-c")
+        .arg("import pydantic")
+        .output()
+        .ok()?;
+    if probe.status.success() {
+        Some(PathBuf::from(py))
+    } else {
+        None
+    }
+}
+
+#[test]
+fn generated_pydantic_roundtrips_strict_matrix() {
+    let Some(py) = python3_with_pydantic() else {
+        eprintln!("python3 or pydantic not available; skipping roundtrip_pydantic test");
+        return;
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let out = bo4e_schemas::io::schemas::read_schemas(&fixture_dir()).expect("read_schemas");
+    bo4e_codegen::python::pydantic::generate(
+        &out.schemas,
+        tmp.path(),
+        &bo4e_codegen::Options {
+            clear_output: true,
+            templates_dir: None,
+        },
+    )
+    .expect("generate");
+
+    // Drop the test script into a sibling directory so we can `python3 -c`
+    // import the generated package by adding `tmp.path()`'s parent to
+    // `sys.path`.
+    let script_path = tmp.path().join("_roundtrip_test.py");
+    std::fs::write(&script_path, TEST_SCRIPT).unwrap();
+
+    let output = Command::new(&py)
+        .arg(&script_path)
+        .arg(tmp.path())
+        .output()
+        .expect("invoke python3");
+    assert!(
+        output.status.success(),
+        "pydantic roundtrip failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
+/// pytest-style assertions but driven by plain `assert` so we don't need
+/// pytest as a dependency. Argv[1] is the generated-package root.
+const TEST_SCRIPT: &str = r#"
+import sys, pathlib
+pkg_root = pathlib.Path(sys.argv[1])
+# Make the generated package importable by its directory name.
+sys.path.insert(0, str(pkg_root.parent))
+pkg_name = pkg_root.name
+
+# Import via importlib so the package can have any tempdir-generated name.
+import importlib
+foo_mod = importlib.import_module(f"{pkg_name}.bo.foo")
+color_mod = importlib.import_module(f"{pkg_name}.enum.color")
+Foo = foo_mod.Foo
+Color = color_mod.Color
+
+# 1. Missing-key path: every optional field falls back to schema default.
+f = Foo.model_validate({"_id": None, "req_str": "hi", "req_nullable_str": None})
+assert f.req_str == "hi"
+assert f.req_nullable_str is None
+assert f.opt_str_with_default == "hello"
+assert f.opt_int_with_default == 42
+assert f.opt_bool_with_default is True
+assert f.opt_nullable_str_null_default is None
+assert f.opt_nullable_str_literal_default == "world"
+assert f.opt_nullable_enum_with_default == Color.RED
+
+# 2. Explicit values: each one preserved.
+f = Foo.model_validate({
+    "req_str": "X",
+    "req_nullable_str": "Y",
+    "opt_str_with_default": "custom",
+    "opt_int_with_default": 7,
+    "opt_bool_with_default": False,
+    "opt_nullable_str_null_default": "non-null",
+    "opt_nullable_str_literal_default": "overridden",
+    "opt_nullable_enum_with_default": "BLUE",
+})
+assert f.req_str == "X"
+assert f.req_nullable_str == "Y"
+assert f.opt_str_with_default == "custom"
+assert f.opt_int_with_default == 7
+assert f.opt_bool_with_default is False
+assert f.opt_nullable_str_null_default == "non-null"
+assert f.opt_nullable_str_literal_default == "overridden"
+assert f.opt_nullable_enum_with_default == Color.BLUE
+
+# 3. Explicit null overrides literal default on a nullable field.
+f = Foo.model_validate({
+    "req_str": "X",
+    "req_nullable_str": None,
+    "opt_nullable_str_literal_default": None,
+    "opt_nullable_enum_with_default": None,
+})
+assert f.opt_nullable_str_literal_default is None
+assert f.opt_nullable_enum_with_default is None
+
+print("ok")
+"#;

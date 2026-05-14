@@ -66,7 +66,19 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
   - *required + default declared* — the default is unreachable because the JSON key is always present.
   - *optional + no default* — the JSON key may be absent and the runtime has no fallback; the generator refuses to invent one.
 
-  Schema-literal defaults (any `PrimitiveValue`: `null`, bool, integer, float, string) drive the generated field's default expression directly. Structural defaults that the target language *requires* to express optionality — `= None` for pydantic `Optional[T]`, `#[serde(default)]` for Rust `Option<T>` — are emitted on top of (not in place of) the schema literal. The renderer never invents the literal itself; if you want one, put it in the schema.
+- **Strict default-rendering matrix.** "Nullable" means the schema type is `null` or `anyOf:[…, null]`. The rendered type follows the schema's nullability **only** (no auto-`Option<T>` / `| None` widening for optional non-nullable fields). The default expression comes from the schema's `default` literal directly, with quoted-string defaults qualified to `EnumName.MEMBER` when the schema `$ref`s an enum.
+
+  | `required` | `nullable` | `default`  | Rust type   | Rust serde attrs                                       | Python type  | Python default              |
+  | ---------- | ---------- | ---------- | ----------- | ------------------------------------------------------ | ------------ | --------------------------- |
+  | ✓          | ✗          | ✗          | `T`         | —                                                      | `T`          | no default                  |
+  | ✓          | ✓          | ✗          | `Option<T>` | —                                                      | `T \| None`  | no default                  |
+  | ✗          | ✗          | literal `X`| `T`         | `default = "default_<field>"`                          | `T`          | `= X`                       |
+  | ✗          | ✓          | `null`     | `Option<T>` | `default, skip_serializing_if = "Option::is_none"`     | `T \| None`  | `= None`                    |
+  | ✗          | ✓          | literal `X`| `Option<T>` | `default = "default_<field>"`                          | `T \| None`  | `= X` (or `= EnumName.X`)   |
+
+  The Rust side generates **per-field `default_<field>()` helper functions** for rows 3 and 5: serde's `#[serde(default = "…")]` syntax accepts only function paths, not literal values, so a `default_anrede() -> String { "Herr".to_string() }` is emitted alongside the struct. Bare `#[serde(default)]` is used only where the language's `T::default()` already produces the schema's literal (row 4 for `Option<T>`-null, and `EnumName::default()` shapes on row 3 where the synthetic single-variant discriminator's Default matches). `skip_serializing_if = "Option::is_none"` is emitted on row 4 only — the schema's null default and serde's None coincide there, so serialised JSON cleanly omits the key. All other rows always serialise the field.
+
+  Python expresses the matrix inline (`Field(default=…)` / `= …`); no helper functions needed.
 
 - **Schemas are editable, no special-cased field names.** Every rendering decision is driven by the schema's *shape*, never by a field's name. `_version`, `_typ`, `_id` are not special — they're whatever the schema says they are. `bo4e edit` is free to add/remove/rename fields or flip their `required`/`default` shape, and the generated code follows. If a renderer ever needs a per-name carve-out, that's a sign the schema needs a more precise type, not the codegen needs a heuristic.
 
