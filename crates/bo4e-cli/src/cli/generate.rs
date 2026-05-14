@@ -53,8 +53,43 @@ pub enum GenerateFlavour {
 #[derive(Args)]
 pub struct RustCrateArgs {
     /// Cargo package name written into the generated Cargo.toml.
-    #[arg(long = "crate-name", default_value = "bo4e")]
+    #[arg(long = "crate-name", default_value = "bo4e", value_parser = parse_crate_name)]
     pub crate_name: String,
+}
+
+/// clap value-parser for `--crate-name`. Accepts the same shape that Cargo
+/// itself accepts as a `[package].name`: starts with an ASCII letter or
+/// underscore, followed by ASCII alphanumerics / underscores / hyphens.
+/// Length capped at 64 to keep generated `Cargo.toml` lines reasonable and
+/// to block pathological inputs. Rejecting at parse time prevents TOML
+/// injection through the Cargo.toml template (quotes, newlines, etc.).
+fn parse_crate_name(s: &str) -> Result<String, String> {
+    const MAX_LEN: usize = 64;
+    if s.is_empty() {
+        return Err("crate name cannot be empty".into());
+    }
+    if s.len() > MAX_LEN {
+        return Err(format!(
+            "crate name too long ({} chars); cap is {MAX_LEN}",
+            s.len()
+        ));
+    }
+    let mut chars = s.chars();
+    let first = chars.next().unwrap();
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return Err(format!(
+            "crate name `{s}` must start with an ASCII letter or `_`",
+        ));
+    }
+    for c in chars {
+        if !(c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            return Err(format!(
+                "crate name `{s}` contains invalid character `{c}`; \
+                 only ASCII alphanumerics, `_`, and `-` are allowed",
+            ));
+        }
+    }
+    Ok(s.to_string())
 }
 
 impl Executable for Generate {
@@ -135,5 +170,41 @@ fn dispatch(
         ),
         #[allow(unreachable_patterns)]
         _ => unreachable!("GenerateFlavour variant not handled"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_crate_name;
+
+    #[test]
+    fn parse_crate_name_accepts_typical_names() {
+        for ok in ["bo4e", "my_crate", "my-crate", "_leading", "a1", "A_B-c"] {
+            assert!(parse_crate_name(ok).is_ok(), "expected {ok:?} to be valid");
+        }
+    }
+
+    #[test]
+    fn parse_crate_name_rejects_empty_and_too_long() {
+        assert!(parse_crate_name("").is_err());
+        let too_long = "a".repeat(65);
+        assert!(parse_crate_name(&too_long).is_err());
+    }
+
+    #[test]
+    fn parse_crate_name_rejects_bad_first_char() {
+        for bad in ["1abc", "-abc", " abc"] {
+            assert!(parse_crate_name(bad).is_err(), "expected {bad:?} rejected");
+        }
+    }
+
+    #[test]
+    fn parse_crate_name_rejects_toml_injection_payloads() {
+        for evil in ["evil\"name", "a\nb", "a b", "a$b", "a.b", "a/b", "a\\b"] {
+            assert!(
+                parse_crate_name(evil).is_err(),
+                "expected {evil:?} rejected"
+            );
+        }
     }
 }

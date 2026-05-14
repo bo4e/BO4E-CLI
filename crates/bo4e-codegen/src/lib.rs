@@ -146,8 +146,11 @@ pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
 /// Rename `from` → `to` on disk and update any matching entries in `written` to
 /// point at the new path. Works for both a single file (exact-match) and a
 /// directory (any descendant path is relocated). No-op when `from` doesn't
-/// exist or `to` already does (the latter keeps repeat `--no-clear-output`
-/// runs idempotent rather than failing).
+/// exist (nothing to rename). When `to` already exists from a prior
+/// `--no-clear-output` run we **remove the stale target first** so the
+/// freshly-generated content under `from` wins: skipping the rename instead
+/// would leave a half-stale crate (old `lib.rs` + new `mod.rs` from this
+/// run's plain pass, or old `enums/` + new `enum/`).
 ///
 /// Used by:
 /// - `rust::plain::generate` to rename `<out>/enum/` → `<out>/enums/`
@@ -158,8 +161,18 @@ pub(crate) fn rename_in_written(
     to: &Path,
     written: &mut [PathBuf],
 ) -> std::io::Result<()> {
-    if !from.exists() || to.exists() {
+    if !from.exists() {
         return Ok(());
+    }
+    if to.exists() {
+        // Stale leftover from a previous --no-clear-output run. Wipe it so
+        // the fresh source content wins; treat dir-or-file generically.
+        let metadata = std::fs::metadata(to)?;
+        if metadata.is_dir() {
+            std::fs::remove_dir_all(to)?;
+        } else {
+            std::fs::remove_file(to)?;
+        }
     }
     std::fs::rename(from, to)?;
     for p in written.iter_mut() {
@@ -188,18 +201,38 @@ mod tests {
     }
 
     #[test]
-    fn rename_in_written_noop_when_target_already_exists() {
+    fn rename_in_written_overwrites_stale_target_file() {
+        // `--no-clear-output` rerun: a previous run left `dst`, this run
+        // freshly wrote `src`. The stale `dst` must be replaced by `src`'s
+        // content, not skipped over.
         let tmp = tempfile::tempdir().unwrap();
         let from = tmp.path().join("src");
         let to = tmp.path().join("dst");
-        std::fs::write(&from, "a").unwrap();
-        std::fs::write(&to, "b").unwrap();
+        std::fs::write(&from, "fresh").unwrap();
+        std::fs::write(&to, "stale").unwrap();
         let mut written = vec![from.clone()];
         rename_in_written(&from, &to, &mut written).unwrap();
-        // Both still exist; written unchanged because we skipped.
-        assert!(from.exists());
+        assert!(!from.exists());
         assert!(to.exists());
-        assert_eq!(written[0], from);
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "fresh");
+        assert_eq!(written[0], to);
+    }
+
+    #[test]
+    fn rename_in_written_overwrites_stale_target_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = tmp.path().join("enum");
+        let to = tmp.path().join("enums");
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::write(from.join("a.rs"), "fresh").unwrap();
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::write(to.join("old.rs"), "stale").unwrap();
+        let mut written = vec![from.join("a.rs")];
+        rename_in_written(&from, &to, &mut written).unwrap();
+        assert!(!from.exists());
+        assert!(to.join("a.rs").exists());
+        assert!(!to.join("old.rs").exists(), "stale entry survived");
+        assert_eq!(written[0], to.join("a.rs"));
     }
 
     #[test]

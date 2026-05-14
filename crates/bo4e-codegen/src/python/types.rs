@@ -204,9 +204,11 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
         SchemaType::Object(_) => with_import("Any", "typing", "Any"),
 
         // ── Constant ─────────────────────────────────────────────────────────
-        // Loose fallback. The pydantic per-field renderer narrows `_typ`
-        // (the one constant we see in real BO4E schemas) to
-        // `Literal[BoTyp.X]` itself; other inline constants are rare.
+        // Loose fallback. A stricter mapping would be `Literal["X"]` (with a
+        // `typing.Literal` import) since the schema actually constrains the
+        // value to that single string, but the per-field pydantic renderer
+        // no longer narrows constant defaults specially — they fall through
+        // here and inherit the value via `Field(default=…)` instead.
         SchemaType::ConstantSchema(_) => simple("str"),
     }
 }

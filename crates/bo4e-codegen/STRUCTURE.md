@@ -67,14 +67,19 @@ pub struct RustCrateOptions {
     pub crate_name: String,
 }
 
+pub struct GenerateOutput {
+    pub written: Vec<PathBuf>,
+    pub diagnostics: Vec<String>,
+}
+
 // Per-flavour entry points (each behind its Cargo feature):
-pub fn python::pydantic::generate(schemas, output_dir, &Options) -> Result<Vec<PathBuf>, Error>;
-pub fn python::sql_model::generate(schemas, output_dir, &Options) -> Result<Vec<PathBuf>, Error>;
-pub fn rust::plain::generate(schemas, output_dir, &Options) -> Result<Vec<PathBuf>, Error>;
-pub fn rust::crate_::generate(schemas, output_dir, &Options, &RustCrateOptions) -> Result<Vec<PathBuf>, Error>;
+pub fn python::pydantic::generate(schemas, output_dir, &Options) -> Result<GenerateOutput, Error>;
+pub fn python::sql_model::generate(schemas, output_dir, &Options) -> Result<GenerateOutput, Error>;
+pub fn rust::plain::generate(schemas, output_dir, &Options) -> Result<GenerateOutput, Error>;
+pub fn rust::crate_::generate(schemas, output_dir, &Options, &RustCrateOptions) -> Result<GenerateOutput, Error>;
 ```
 
-Each per-flavour `generate` clears or creates the output dir, builds a MiniJinja environment, and writes all files. The returned `Vec<PathBuf>` is every file written — the CLI uses this list for logging. The CLI's subcommand enum (`GenerateFlavour` in `cli/generate.rs`) is the only runtime dispatcher; the library has no equivalent.
+Each per-flavour `generate` clears or creates the output dir, builds a MiniJinja environment, and writes all files. The returned `GenerateOutput.written` is every file written — the CLI uses this list for logging; `diagnostics` carries info-level per-file decision strings surfaced via `--verbose`. The CLI's subcommand enum (`GenerateFlavour` in `cli/generate.rs`) is the only runtime dispatcher; the library has no equivalent.
 
 ## Shared orchestration helpers (`lib.rs`)
 
