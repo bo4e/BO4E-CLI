@@ -200,15 +200,11 @@ fn render_object(
 
         let is_required = required.contains(prop_name.as_str());
 
-        // pydantic dialect: optional fields render as `T | None` only when the
-        // mapper hasn't already produced that union (e.g. via anyOf with null).
-        // `Any` already covers None, so don't widen it.
-        let type_str =
-            if is_required || mapped.rendered == "Any" || mapped.rendered.contains("| None") {
-                mapped.rendered.clone()
-            } else {
-                format!("{} | None", mapped.rendered)
-            };
+        // Strict matrix: the rendered type follows the schema's nullability
+        // *only*. No `| None` auto-widening for optional fields — optionality
+        // is expressed by the field's default expression below, not by
+        // widening the type beyond what the schema declares.
+        let type_str = mapped.rendered.clone();
 
         let name_snake = to_snake_case(prop_name);
         let python_name = python_attr_name(&name_snake);
@@ -217,19 +213,14 @@ fn render_object(
         // (or otherwise diverges from to_camel's roundtrip).
         let needs_alias = python_name != *prop_name;
 
-        // Choose the default expression. The schema may carry a JSON `default`;
-        // otherwise optional fields default to None and required fields have no default.
-        // String defaults that originate from an enum are qualified as `EnumName.MEMBER`
-        // instead of bare string literals — see qualify_enum_default.
+        // Strict matrix: the field's default expression is the schema's
+        // literal `default` (when present), with enum-`$ref` strings rewritten
+        // to `EnumName.MEMBER`. The validator (`crate::validate`) enforces
+        // `required ⇔ no default`, so we don't have to invent a `= None`
+        // fallback for optional-without-default fields any more.
         let schema_default = literal_default(prop_schema);
         let schema_default = qualify_enum_default(schema_default, prop_schema, &mut imports);
-        let default_expr: Option<String> = if let Some(d) = schema_default {
-            Some(d)
-        } else if is_required {
-            None
-        } else {
-            Some("None".into())
-        };
+        let default_expr: Option<String> = schema_default;
 
         let docstring = schema_base(prop_schema)
             .description
