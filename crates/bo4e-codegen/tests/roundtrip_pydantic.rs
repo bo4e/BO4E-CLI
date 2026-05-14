@@ -41,10 +41,14 @@ fn generated_pydantic_roundtrips_strict_matrix() {
         return;
     };
     let tmp = tempfile::tempdir().unwrap();
+    // Generate into a Python-valid subdirectory name rather than the tempdir
+    // itself: `tempfile::tempdir()` uses prefix `.tmp` and Python rejects
+    // dotted basenames when used as a package name.
+    let pkg_root = tmp.path().join("bo4e_pkg");
     let out = bo4e_schemas::io::schemas::read_schemas(&fixture_dir()).expect("read_schemas");
     bo4e_codegen::python::pydantic::generate(
         &out.schemas,
-        tmp.path(),
+        &pkg_root,
         &bo4e_codegen::Options {
             clear_output: true,
             templates_dir: None,
@@ -52,15 +56,12 @@ fn generated_pydantic_roundtrips_strict_matrix() {
     )
     .expect("generate");
 
-    // Drop the test script into a sibling directory so we can `python3 -c`
-    // import the generated package by adding `tmp.path()`'s parent to
-    // `sys.path`.
     let script_path = tmp.path().join("_roundtrip_test.py");
     std::fs::write(&script_path, TEST_SCRIPT).unwrap();
 
     let output = Command::new(&py)
         .arg(&script_path)
-        .arg(tmp.path())
+        .arg(&pkg_root)
         .output()
         .expect("invoke python3");
     assert!(
