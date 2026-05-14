@@ -154,7 +154,6 @@ pub(crate) fn render_object(
     let required: BTreeSet<&str> = obj.required.iter().map(|s| s.as_str()).collect();
     let mut fields: Vec<RustField> = Vec::new();
     let mut extra_enums: Vec<String> = Vec::new();
-    let mut needs_default_version_fn = false;
 
     for (prop_name, prop_schema) in &obj.properties {
         let (rust_name, needs_rename) = crate::rust::rust_field_name(prop_name);
@@ -199,19 +198,13 @@ pub(crate) fn render_object(
 
                 let json_default = literal_default_rust(prop_schema);
 
-                // `_version` is always non-optional per design — it must hold a string
-                // value (typically the live BO4E version constant). This matters when
-                // bo4e edit marks `_version` as required, in which case `Option<String>`
-                // would defeat the contract.
-                let is_version_field = prop_name == "_version";
-
                 // A field is `Option<T>` when either the JSON value can be null
                 // (`map_rust` returns `Option<T>` for `anyOf:[T, null]`) OR the JSON key
-                // can be absent (i.e. the field is not in `required`). The only override
-                // is `_version`, which is kept as a plain `String` with a generated
-                // `default_version()` helper.
+                // can be absent (i.e. the field is not in `required`). No field-name
+                // special-cases: every override is driven by the schema's own shape so
+                // `bo4e edit` changes flow through to the generated code.
                 let schema_is_nullable = is_option_typed(&mapped.rendered);
-                let render_as_option = !is_version_field && (schema_is_nullable || !is_required);
+                let render_as_option = schema_is_nullable || !is_required;
 
                 // Strip any outer `Option<>` from the mapped type so we can re-wrap
                 // consistently below — `map_rust` only adds it for `anyOf:[T, null]`,
@@ -228,14 +221,20 @@ pub(crate) fn render_object(
                     inner
                 };
 
-                let default_expr = if is_version_field {
-                    needs_default_version_fn = true;
-                    Some("default_version()".to_string())
-                } else if render_as_option {
-                    Some("None".to_string())
-                } else {
-                    json_default
-                };
+                // Per the validator: required ⇔ no schema default. So
+                // `json_default` is `Some` iff `!is_required`. When the
+                // field type is `Option<T>` and the schema's default is a
+                // non-null literal, the literal needs `Some(...)` wrapping
+                // so it matches the field type; a `null` default is
+                // already rendered as `"None"` by `literal_default_rust`
+                // and stays as-is.
+                let default_expr = json_default.map(|d| {
+                    if render_as_option && d != "None" {
+                        format!("Some({d})")
+                    } else {
+                        d
+                    }
+                });
 
                 (type_hint, default_expr)
             };
@@ -258,20 +257,11 @@ pub(crate) fn render_object(
         });
     }
 
-    let mut uses = {
+    let uses = {
         let mut b = UseBlock::new();
         b.extend(imports.iter().cloned());
         b.render(depth)
     };
-    if needs_default_version_fn {
-        let supers = "super::".repeat(depth);
-        let extra_use = format!("use {supers}default_version;");
-        uses = if uses.is_empty() {
-            extra_use
-        } else {
-            format!("{uses}\n{extra_use}")
-        };
-    }
     let doc = render_doc_comment(obj.base.description.as_deref());
 
     let outcome = DefaultImplOutcome::from_fields(&fields);
@@ -335,27 +325,20 @@ fn build_serde_attrs(
             parts.push("default".to_string());
             parts.push("skip_serializing_if = \"Option::is_none\"".to_string());
         }
-    } else if let Some(d) = default_expr {
-        if prop_name == "_version" {
-            // `_version` is the only non-Option field that gets a serde-callable
-            // default *unconditionally* (even when the schema marks it as
-            // required): the root `default_version()` helper is generated in
-            // `RootModRs.jinja2` and pulled in via `use super::…default_version;`
-            // (see the `needs_default_version_fn` plumbing above). The contract is
-            // "version is always populated by the live BO4E version constant",
-            // schema `required` flag notwithstanding.
-            parts.push("default = \"default_version\"".to_string());
-        } else if !is_required && (d == "Default::default()" || d.ends_with("::default()")) {
-            // Non-required + has a `::default()`-shaped expression (e.g. a
-            // synthetic discriminator enum like `AngebotTyp::default()`):
-            // tell serde to use the field type's Default on a missing key.
-            // For *required* fields we intentionally omit this so a missing
-            // key fails to deserialize — matches the required + `Option<T>`
-            // branch above, and matches pydantic's strict-required semantics.
-            // The literal default still lives in `impl Default for Struct`
-            // (for `Struct::default()` callers).
-            parts.push("default".to_string());
-        }
+    } else if let Some(d) = default_expr
+        && !is_required
+        && (d == "Default::default()" || d.ends_with("::default()"))
+    {
+        // Non-required + non-Option field with a `::default()`-shaped
+        // expression (e.g. a synthetic discriminator enum like
+        // `AngebotTyp::default()`): tell serde to use the field type's
+        // Default on a missing key. For *required* fields we intentionally
+        // omit this so a missing key fails to deserialize — matches the
+        // required + `Option<T>` branch above. The literal default still
+        // lives in `impl Default for Struct` (for `Struct::default()`
+        // callers). No `_version` special-case any more: the schema is
+        // the single source of truth, validated at generate time.
+        parts.push("default".to_string());
     }
     parts.join(", ")
 }
