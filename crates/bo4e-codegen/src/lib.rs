@@ -4,7 +4,7 @@ pub mod imports;
 pub mod layout;
 pub mod naming;
 pub mod refs;
-mod validate;
+pub mod validate;
 
 #[cfg(any(feature = "python-pydantic", feature = "python-sql-model",))]
 pub mod python;
@@ -59,6 +59,10 @@ pub struct GenerateOutput {
 ))]
 pub(crate) struct SchemaCtx {
     pub class_name: String,
+    // `module` is only consumed by the rust-plain orchestrator (for
+    // diagnostics + file-relative path building); cfg-gated here so
+    // python-only builds don't get a dead-code warning.
+    #[cfg(feature = "rust-plain")]
     pub module: Vec<String>,
     pub parsed: bo4e_schemas::models::json_schema::SchemaRootType,
     pub depth: usize,
@@ -70,8 +74,10 @@ pub(crate) struct SchemaCtx {
 ///
 /// 1. Borrow the cell, snapshot `module` / `name` / parsed schema, drop the
 ///    borrow (so the closure can call back into anything without aliasing).
-/// 2. Compute the output path via [`crate::layout::module_paths`] with the
-///    flavour's file extension and create the parent directory.
+/// 2. Compute the output path via `path_for` (caller-supplied — Python
+///    uses [`crate::layout::module_paths`], Rust uses
+///    [`crate::rust::module_paths`] so the `enum/`→`enums/` rewrite
+///    happens at path-build time rather than as a post-write rename).
 /// 3. Call `render` for the file body.
 /// 4. Write the body and record the path.
 ///
@@ -86,13 +92,13 @@ pub(crate) struct SchemaCtx {
     feature = "python-sql-model",
     feature = "rust-plain",
 ))]
-pub(crate) fn for_each_schema_file<F>(
+pub(crate) fn for_each_schema_file<F, P>(
     schemas: &bo4e_schemas::Schemas,
-    output_dir: &Path,
-    ext: &str,
+    path_for: P,
     mut render: F,
 ) -> Result<Vec<PathBuf>, Error>
 where
+    P: Fn(&[String]) -> (PathBuf, String, usize),
     F: FnMut(&SchemaCtx) -> Result<String, Error>,
 {
     let mut written = Vec::new();
@@ -100,25 +106,27 @@ where
         let mut schema = schema_rc.borrow_mut();
         let module = schema.module().to_vec();
         let class_name = schema.name().to_string();
-        let (out_dir, file_name, depth) = layout::module_paths(output_dir, &module, ext);
+        let (out_dir, file_name, depth) = path_for(&module);
         let parsed = schema.schema().map_err(Error::Schema)?.clone();
         drop(schema);
 
-        // Gate: object schemas must satisfy the strict required/default
-        // invariant before any renderer sees them. StrEnum top-levels carry
-        // no properties so they're trivially consistent.
-        if let bo4e_schemas::models::json_schema::SchemaRootType::Object(o) = &parsed {
-            validate::object_invariants(&class_name, &o.object)?;
-        }
+        // Schema validation runs once up-front via
+        // `validate::all_schemas(schemas)` (called at the top of each
+        // `generate()`), so the file-writing loop can assume validity.
 
         std::fs::create_dir_all(&out_dir)?;
         let ctx = SchemaCtx {
             class_name,
+            #[cfg(feature = "rust-plain")]
             module,
             parsed,
             depth,
             file_name,
         };
+        // `module` is read only by rust-plain; pacify the unused-binding
+        // warning under other feature sets.
+        #[cfg(not(feature = "rust-plain"))]
+        let _ = module;
         let body = render(&ctx)?;
         let out_path = out_dir.join(&ctx.file_name);
         std::fs::write(&out_path, &body)?;
@@ -149,13 +157,13 @@ pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
 /// exist (nothing to rename). When `to` already exists from a prior
 /// `--no-clear-output` run we **remove the stale target first** so the
 /// freshly-generated content under `from` wins: skipping the rename instead
-/// would leave a half-stale crate (old `lib.rs` + new `mod.rs` from this
-/// run's plain pass, or old `enums/` + new `enum/`).
+/// would leave a half-stale crate.
 ///
-/// Used by:
-/// - `rust::plain::generate` to rename `<out>/enum/` → `<out>/enums/`
-///   (the JSON-schema dir name is a Rust keyword).
-/// - `rust::crate_::generate` to rename `<out>/src/mod.rs` → `<out>/src/lib.rs`.
+/// Used by `rust::crate_::generate` to rename `<out>/src/mod.rs` →
+/// `<out>/src/lib.rs`. (The `enum/` → `enums/` rewrite that previously
+/// also went through this helper is now done at path-build time via
+/// `rust::path_segments`.)
+#[cfg(feature = "rust-crate")]
 pub(crate) fn rename_in_written(
     from: &Path,
     to: &Path,
@@ -189,6 +197,7 @@ pub(crate) fn rename_in_written(
 mod tests {
     use super::*;
 
+    #[cfg(feature = "rust-crate")]
     #[test]
     fn rename_in_written_noop_when_source_missing() {
         let tmp = tempfile::tempdir().unwrap();
@@ -200,6 +209,7 @@ mod tests {
         assert_eq!(written[0], tmp.path().join("unrelated.txt"));
     }
 
+    #[cfg(feature = "rust-crate")]
     #[test]
     fn rename_in_written_overwrites_stale_target_file() {
         // `--no-clear-output` rerun: a previous run left `dst`, this run
@@ -218,6 +228,7 @@ mod tests {
         assert_eq!(written[0], to);
     }
 
+    #[cfg(feature = "rust-crate")]
     #[test]
     fn rename_in_written_overwrites_stale_target_directory() {
         let tmp = tempfile::tempdir().unwrap();
@@ -235,6 +246,7 @@ mod tests {
         assert_eq!(written[0], to.join("a.rs"));
     }
 
+    #[cfg(feature = "rust-crate")]
     #[test]
     fn rename_in_written_relocates_exact_file_path() {
         let tmp = tempfile::tempdir().unwrap();
@@ -249,6 +261,7 @@ mod tests {
         assert_eq!(written[1], tmp.path().join("other.rs"));
     }
 
+    #[cfg(feature = "rust-crate")]
     #[test]
     fn rename_in_written_relocates_directory_descendants() {
         let tmp = tempfile::tempdir().unwrap();
@@ -289,7 +302,8 @@ mod tests {
             .unwrap();
 
         let mut seen: Vec<String> = Vec::new();
-        let written = for_each_schema_file(&schemas, tmp.path(), "txt", |ctx| {
+        let path_for = |m: &[String]| layout::module_paths(tmp.path(), m, "txt");
+        let written = for_each_schema_file(&schemas, path_for, |ctx| {
             seen.push(ctx.class_name.clone());
             Ok(format!("// {}\n", ctx.class_name))
         })

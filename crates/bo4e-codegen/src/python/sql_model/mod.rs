@@ -20,6 +20,8 @@ pub fn generate(
     output_dir: &Path,
     opts: &crate::Options,
 ) -> Result<crate::GenerateOutput, Error> {
+    crate::validate::all_schemas(schemas)?;
+
     if opts.clear_output {
         crate::clear_dir_if_exists(output_dir)?;
     } else {

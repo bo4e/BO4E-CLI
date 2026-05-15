@@ -199,25 +199,16 @@ pub(crate) fn render_table(
                 docstring,
                 ..
             } => {
-                // Mirror the pydantic generator: `_version` defaults to the live
-                // module-level `__version__` so generated objects round-trip.
-                let (effective_default, version_field) = if name == "_version" {
-                    (Some("__version__".to_string()), true)
-                } else {
-                    (default.clone(), false)
-                };
-                let definition = match &effective_default {
+                // Schema-driven: the default comes from the property's
+                // declared `default` literal. No field-name special cases
+                // (the earlier `_version` → `__version__` import shortcut
+                // is gone — `_version` defaults like any other string
+                // field, taking its value from the schema literal).
+                let definition = match default {
                     Some(d) if d.starts_with("Field(") => d.clone(),
                     Some(d) => format!("Field(default={d})"),
                     None => "Field(...)".to_string(),
                 };
-                if version_field {
-                    raw_imports.insert(RawImport {
-                        from_: format!("{}__version__", ".".repeat(depth)),
-                        name: "__version__".into(),
-                        alias: None,
-                    });
-                }
                 insert_field(
                     &mut fields_map,
                     name,

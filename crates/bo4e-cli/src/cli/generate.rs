@@ -50,6 +50,7 @@ pub enum GenerateFlavour {
     RustCrate(RustCrateArgs),
 }
 
+#[cfg(feature = "rust-crate")]
 #[derive(Args)]
 pub struct RustCrateArgs {
     /// Cargo package name written into the generated Cargo.toml.
@@ -148,7 +149,7 @@ fn dispatch(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "rust-crate"))]
 mod tests {
     use super::parse_crate_name;
 

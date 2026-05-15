@@ -178,10 +178,9 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
                 );
             }
             SchemaRootType::Object(o) => {
-                // Same gate as `for_each_schema_file` — sql_model doesn't go
-                // through that helper (it builds an SqlPlan up-front), so
-                // enforce the strict required/default invariant here too.
-                crate::validate::object_invariants(&class_name, &o.object)?;
+                // Schema validation is done once up-front via
+                // `validate::all_schemas` (called at the top of the
+                // sql_model generator), so this loop can assume validity.
                 let id_field = synth_id_field(&o.object);
                 let mut fields = vec![id_field];
                 let mut local_junctions: Vec<JunctionTable> = Vec::new();
@@ -266,11 +265,12 @@ fn simple_scalar_field(
     })?;
     let nullable = mapped.rendered.contains("| None");
     let type_ = mapped.rendered.clone();
-    let default = if nullable {
-        Some(literal_default(schema).unwrap_or_else(|| "None".to_string()))
-    } else {
-        literal_default(schema)
-    };
+    // Schema-driven: the default expression comes purely from the
+    // property's declared `default` literal. The strict required ⇔
+    // no-default invariant (enforced by `validate::all_schemas`)
+    // guarantees we never see an optional field without a default, so
+    // there is no synthetic-`None` fallback for missing schema defaults.
+    let default = literal_default(schema);
     Ok(Some(SqlField::Scalar {
         name: to_snake_case(prop_name),
         type_,

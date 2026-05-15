@@ -10,6 +10,63 @@ pub(crate) mod imports;
 pub(crate) mod render;
 pub(crate) mod types;
 
+use std::path::{Path, PathBuf};
+
+/// Rewrite a schema module's path segments for Rust output.
+///
+/// Two transformations, applied to every segment:
+/// 1. Lowercase (BO4E PascalCase / mixed-case dir names map to
+///    snake-style on disk).
+/// 2. Replace `enum` with `enums` — `enum` is a Rust keyword, so
+///    `pub mod enum;` would not compile. The rewrite is recursive
+///    (applies to *every* `enum` segment at any depth, not just the
+///    top-level one).
+///
+/// Used everywhere a Rust output path or module identifier is
+/// computed: per-schema file path ([`module_paths`]), `pub mod X;`
+/// declarations in `mod.rs`, sibling `use` imports
+/// (`rust::types::map_rust`), and root `pub use leaf::Class;`
+/// re-exports. Centralising the rewrite means there's one site to
+/// update if the keyword set ever changes.
+pub fn path_segments(module: &[String]) -> Vec<String> {
+    module.iter().map(|s| rewrite_keyword_segment(s)).collect()
+}
+
+/// Single-segment version of [`path_segments`] — lowercases and
+/// rewrites Rust keywords. Used by call sites that already lowercase
+/// individually (e.g. tree-walk emitters that hand each segment in
+/// isolation).
+pub fn rewrite_keyword_segment(seg: &str) -> String {
+    let lower = seg.to_ascii_lowercase();
+    if lower == "enum" {
+        "enums".to_string()
+    } else {
+        lower
+    }
+}
+
+/// Compute the on-disk path, file name, and depth for a Rust schema
+/// module. Mirrors [`crate::layout::module_paths`] but applies
+/// [`path_segments`] so the keyword rewrite (`enum/` → `enums/`)
+/// happens at path-build time rather than as a post-write directory
+/// rename.
+pub fn module_paths(output_dir: &Path, module: &[String]) -> (PathBuf, String, usize) {
+    let segments = path_segments(module);
+    let dir_segments: Vec<&str> = segments
+        .iter()
+        .take(segments.len().saturating_sub(1))
+        .map(String::as_str)
+        .collect();
+    let mut out_dir = output_dir.to_path_buf();
+    for seg in &dir_segments {
+        out_dir.push(seg);
+    }
+    let file_stem = segments.last().map(String::as_str).unwrap_or_default();
+    let file_name = format!("{file_stem}.rs");
+    let depth = dir_segments.len() + 1;
+    (out_dir, file_name, depth)
+}
+
 /// Reserved Rust keywords (current + reserved-for-future) that a field name
 /// must not equal. Drives [`rust_field_name`]'s keyword-escape branch.
 pub(crate) const RUST_RESERVED: &[&str] = &[

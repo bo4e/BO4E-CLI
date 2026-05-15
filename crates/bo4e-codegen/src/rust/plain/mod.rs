@@ -1,19 +1,29 @@
 //! `rust-plain` orchestrator — generates a loose Rust module tree (no Cargo.toml).
+//!
+//! Path layout is fully resolved at path-build time via
+//! [`crate::rust::module_paths`] and [`crate::rust::path_segments`]:
+//! BO4E's `enum/` directory becomes `enums/` (a Rust keyword would
+//! otherwise produce uncompilable `pub mod enum;` declarations), and
+//! the rewrite applies recursively at any depth. There is no
+//! post-write disk walk to rename directories.
 
 use bo4e_schemas::Schemas;
 use bo4e_schemas::models::json_schema::SchemaRootType;
 use minijinja::context;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::Error;
 use crate::layout::ModuleTree;
 use crate::rust::render::{render_object, render_str_enum};
+use crate::rust::{module_paths, path_segments, rewrite_keyword_segment};
 
 pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
     opts: &crate::Options,
 ) -> Result<crate::GenerateOutput, Error> {
+    crate::validate::all_schemas(schemas)?;
+
     if opts.clear_output {
         crate::clear_dir_if_exists(output_dir)?;
     } else {
@@ -24,10 +34,12 @@ pub fn generate(
     let mut diagnostics: Vec<String> = Vec::new();
     let version_str = schemas.version.to_string();
 
-    let mut written = crate::for_each_schema_file(schemas, output_dir, "rs", |ctx| {
+    let path_for = |m: &[String]| module_paths(output_dir, m);
+    let mut written = crate::for_each_schema_file(schemas, path_for, |ctx| {
         let leaf = ctx.file_name.trim_end_matches(".rs");
         let file_rel = if ctx.module.len() > 1 {
-            format!("{}/{leaf}.rs", ctx.module[0].to_ascii_lowercase())
+            let dir = rewrite_keyword_segment(&ctx.module[0]);
+            format!("{dir}/{leaf}.rs")
         } else {
             format!("{leaf}.rs")
         };
@@ -59,28 +71,29 @@ pub fn generate(
         Ok(body)
     })?;
 
-    // Build a tree view of every directory in the output so we can emit
-    // `mod.rs` files at every level, including the root and arbitrary
-    // depth subdirectories.
+    // Walk the tree of directories implied by the schema set and emit
+    // a `mod.rs` at every level (root included). Each on-disk path is
+    // computed via `path_segments` so keyword rewrites are applied
+    // consistently with how the per-schema files were written above.
     let tree = ModuleTree::from_schemas(schemas);
 
     for (dir_path, node) in tree.iter() {
         let is_root = dir_path.is_empty();
-        let on_disk_dir = on_disk_dir_for(output_dir, dir_path);
+        let rust_dir_segments = path_segments(dir_path);
+        let on_disk_dir = output_dir.join(rust_dir_segments.iter().collect::<PathBuf>());
         std::fs::create_dir_all(&on_disk_dir)?;
 
-        // Direct child sub-modules (sorted, deduped, with `enum` → `enums`
-        // applied at every level — `pub mod enum;` would not compile).
+        // Direct child sub-modules: lowercased + keyword-rewritten.
         let mut sub_modules: Vec<String> = node
             .children
             .iter()
-            .map(|s| rewrite_enum_segment(s).to_string())
+            .map(|s| rewrite_keyword_segment(s))
             .collect();
         sub_modules.sort();
         sub_modules.dedup();
 
-        // Leaf files in this directory: `pub mod <leaf>;` declarations and
-        // `pub use <leaf>::<ClassName>;` re-exports.
+        // Leaf files in this directory: `pub mod <leaf>;` declarations
+        // and `pub use <leaf>::<ClassName>;` re-exports.
         let mut leaves = node.leaves.clone();
         leaves.sort_by(|a, b| a.leaf.cmp(&b.leaf));
         leaves.dedup_by(|a, b| a.leaf == b.leaf);
@@ -90,7 +103,7 @@ pub fn generate(
             .map(|l| context! { module => l.leaf, name => l.class_name })
             .collect();
 
-        let mod_body = if is_root {
+        let final_body = if is_root {
             let root_tpl = env.get_template("rust/plain/RootModRs.jinja2")?;
             root_tpl.render(context! {
                 top_modules => &sub_modules,
@@ -99,23 +112,18 @@ pub fn generate(
                 version => &version_str,
             })?
         } else {
+            // Non-root mod.rs: sub-modules and leaf files are both
+            // declared via `pub mod X;` from the parent's POV. Re-exports
+            // stay scoped to leaf files only.
+            let mut all_mods: Vec<&str> = sub_modules.iter().map(String::as_str).collect();
+            all_mods.extend(leaf_modules.iter().copied());
+            all_mods.sort();
+            all_mods.dedup();
             let tpl = env.get_template("rust/plain/ModRs.jinja2")?;
             tpl.render(context! {
-                modules => &leaf_modules,
+                modules => &all_mods,
                 reexports => &leaf_reexports,
-                // Children of non-root dirs are emitted via `modules` (they
-                // appear alongside the leaves; from the parent's POV both
-                // are `pub mod X;` declarations).
             })?
-        };
-
-        // Non-root mod.rs files don't currently distinguish sub-modules
-        // from leaf files in the template — they all live in `modules`.
-        // We expand the non-root rendering to include children too.
-        let final_body = if is_root {
-            mod_body
-        } else {
-            render_subdir_mod_rs(&env, &leaf_modules, &leaf_reexports, &sub_modules)?
         };
 
         let mod_path = on_disk_dir.join("mod.rs");
@@ -130,97 +138,15 @@ pub fn generate(
         } else {
             format!(
                 "{}/mod.rs: {} leaves, {} children",
-                dir_path_display(dir_path),
+                rust_dir_segments.join("/"),
                 leaves.len(),
                 sub_modules.len()
             )
         });
     }
 
-    // Rename any `enum/` directory (any depth) to `enums/` since `enum` is a
-    // Rust keyword. Walk top-down so parents are renamed before children
-    // (`rename_in_written` updates all matching paths in `written`).
-    rename_enum_dirs(output_dir, &mut written)?;
-
     Ok(crate::GenerateOutput {
         written,
         diagnostics,
     })
-}
-
-fn on_disk_dir_for(output_dir: &Path, dir_path: &[String]) -> std::path::PathBuf {
-    let mut p = output_dir.to_path_buf();
-    for seg in dir_path {
-        p.push(seg);
-    }
-    p
-}
-
-/// Rewrites the segment `"enum"` to `"enums"` since `enum` is a Rust keyword.
-/// Used when emitting `pub mod <X>;` declarations and re-exports.
-fn rewrite_enum_segment(seg: &str) -> &str {
-    if seg == "enum" { "enums" } else { seg }
-}
-
-/// Recursively rename any directory whose final segment is `enum` to `enums`.
-/// Operates on `output_dir` and applies the rename to entries in `written`.
-fn rename_enum_dirs(output_dir: &Path, written: &mut [std::path::PathBuf]) -> Result<(), Error> {
-    // Collect candidate paths (any directory named `enum` under output_dir)
-    // before renaming, to avoid iterator invalidation during the walk.
-    let mut to_rename: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
-    collect_enum_dirs(output_dir, &mut to_rename)?;
-    for (from, to) in to_rename {
-        crate::rename_in_written(&from, &to, written)?;
-    }
-    Ok(())
-}
-
-fn collect_enum_dirs(
-    dir: &Path,
-    out: &mut Vec<(std::path::PathBuf, std::path::PathBuf)>,
-) -> Result<(), Error> {
-    if !dir.is_dir() {
-        return Ok(());
-    }
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if entry.file_type()?.is_dir() {
-            if path.file_name().is_some_and(|n| n == "enum") {
-                let renamed = path.with_file_name("enums");
-                out.push((path.clone(), renamed));
-            }
-            collect_enum_dirs(&path, out)?;
-        }
-    }
-    Ok(())
-}
-
-fn dir_path_display(dir_path: &[String]) -> String {
-    if dir_path.is_empty() {
-        ".".to_string()
-    } else {
-        dir_path.join("/")
-    }
-}
-
-fn render_subdir_mod_rs(
-    env: &minijinja::Environment<'static>,
-    leaf_modules: &[&str],
-    leaf_reexports: &[minijinja::Value],
-    sub_modules: &[String],
-) -> Result<String, Error> {
-    // The existing ModRs.jinja2 expects `modules` + `reexports`. Sub-modules
-    // (child directories) ALSO need `pub mod X;` declarations. Merge them
-    // into `modules`. Re-exports stay scoped to leaf files only (we don't
-    // pull every nested class into every level).
-    let mut all_mods: Vec<&str> = sub_modules.iter().map(String::as_str).collect();
-    all_mods.extend(leaf_modules.iter().copied());
-    all_mods.sort();
-    all_mods.dedup();
-    let tpl = env.get_template("rust/plain/ModRs.jinja2")?;
-    Ok(tpl.render(context! {
-        modules => &all_mods,
-        reexports => leaf_reexports,
-    })?)
 }

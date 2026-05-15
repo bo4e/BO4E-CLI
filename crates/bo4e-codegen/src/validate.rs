@@ -1,29 +1,48 @@
 //! Schema-consistency invariants checked at generate-time.
 //!
-//! BO4E schemas pass through `bo4e edit` and any intermediate tooling, so
-//! the generator can't assume the upstream definitions are internally
-//! consistent. The checks here are the *gate* between "schema in" and
-//! "code out": if a property's `required` membership doesn't match its
-//! declared default, the generator refuses to produce code rather than
-//! silently picking a behaviour that may surprise the caller.
+//! Validation is decoupled from generation: the public entry point
+//! [`all_schemas`] runs once over the entire [`bo4e_schemas::Schemas`]
+//! collection, before any flavour-specific renderer touches a file.
+//! Each `generate()` calls it at the top so a failed schema can never
+//! produce a half-written output tree.
+//!
+//! The validator has access to the full schema set so cross-schema
+//! checks (e.g. `$ref` defaults must reference a real enum variant)
+//! happen here rather than being deferred to the renderer.
+//!
+//! All violations surface as [`Error::InconsistentSchema`] with the
+//! offending schema/property pair and a human-readable reason.
 
 use crate::Error;
-use bo4e_schemas::models::json_schema::ObjectSchema;
+use bo4e_schemas::Schemas;
+use bo4e_schemas::models::json_schema::{ObjectSchema, PrimitiveValue, SchemaRootType, SchemaType};
 
-/// Enforce the **required ⇔ no-default** invariant on every property of an
-/// object schema. The rule has two directions:
+/// Run every schema-consistency invariant against `schemas`. Should be
+/// called once at the top of each `generate()` so the file-writing
+/// phase can assume validity.
+pub fn all_schemas(schemas: &Schemas) -> Result<(), Error> {
+    for schema_rc in schemas {
+        let mut schema = schema_rc.borrow_mut();
+        let class_name = schema.name().to_string();
+        let parsed = schema.schema().map_err(Error::Schema)?.clone();
+        drop(schema);
+        if let SchemaRootType::Object(o) = &parsed {
+            object_invariants(&class_name, &o.object, schemas)?;
+        }
+    }
+    Ok(())
+}
+
+/// Enforce schema-consistency invariants on one object schema.
 ///
-/// - **required + default declared** is rejected: the default is
-///   structurally unreachable (the JSON key is always present, so the
-///   runtime never falls back to the default).
-/// - **optional + no default** is rejected: the JSON key may be absent and
-///   the runtime has nothing to fall back on, so the generated code would
-///   need to invent a default (and *which* default is a design call that
-///   only the schema can answer).
-///
-/// `schema_name` is used for error messages only (typically the class
-/// name).
-pub(crate) fn object_invariants(schema_name: &str, obj: &ObjectSchema) -> Result<(), Error> {
+/// `schemas` is used to resolve `$ref` defaults to their target
+/// schema so we can verify a string default actually names a real
+/// enum variant.
+pub(crate) fn object_invariants(
+    schema_name: &str,
+    obj: &ObjectSchema,
+    schemas: &Schemas,
+) -> Result<(), Error> {
     use std::collections::BTreeSet;
 
     let property_names: BTreeSet<&str> = obj.properties.keys().map(String::as_str).collect();
@@ -69,7 +88,7 @@ pub(crate) fn object_invariants(schema_name: &str, obj: &ObjectSchema) -> Result
             _ => {}
         }
 
-        default_matches_schema_type(schema_name, prop_name, prop_schema)?;
+        default_matches_schema_type(schema_name, prop_name, prop_schema, schemas)?;
     }
     Ok(())
 }
@@ -107,9 +126,8 @@ fn validate_property_name(schema_name: &str, prop_name: &str) -> Result<(), Erro
 fn reject_pure_null_property(
     schema_name: &str,
     prop_name: &str,
-    prop_schema: &bo4e_schemas::models::json_schema::SchemaType,
+    prop_schema: &SchemaType,
 ) -> Result<(), Error> {
-    use bo4e_schemas::models::json_schema::SchemaType;
     if matches!(prop_schema, SchemaType::NullSchema(_)) {
         return Err(Error::InconsistentSchema {
             schema: schema_name.to_string(),
@@ -123,21 +141,23 @@ fn reject_pure_null_property(
 }
 
 /// Reject defaults whose primitive kind does not match the property's
-/// declared schema type. The match is structural: e.g. a `string`-typed
-/// property may only declare a `String`-kind default; an `anyOf:[T, null]`
-/// property accepts the union of `T`'s allowed kinds plus `Null`.
+/// declared schema type. The match is structural and exhaustive: the
+/// validator either accepts a (schema, primitive) pair or rejects it —
+/// the renderer can rely on every accepted pair having an explicit
+/// rendering arm.
 ///
-/// For string-format properties (`date`, `date-time`, `time`, `uuid`)
-/// the default's literal is also parse-checked at generate time, so
-/// e.g. `{type: "string", format: "date", default: "not-a-date"}`
-/// is rejected before reaching the renderer.
+/// For typed string formats (`date`, `date-time`, `time`, `uuid`) the
+/// default literal is parse-checked at generate time. For
+/// `DecimalSchema` string defaults the string is parsed as a decimal.
+/// For `$ref` defaults the target is resolved via `schemas`; only
+/// `$ref` to a `StrEnum` is acceptable, and the default value must be
+/// one of the enum's declared members.
 fn default_matches_schema_type(
     schema_name: &str,
     prop_name: &str,
-    prop_schema: &bo4e_schemas::models::json_schema::SchemaType,
+    prop_schema: &SchemaType,
+    schemas: &Schemas,
 ) -> Result<(), Error> {
-    use bo4e_schemas::models::json_schema::PrimitiveValue;
-
     let Some(default) = crate::refs::schema_base(prop_schema).default.as_ref() else {
         return Ok(());
     };
@@ -168,15 +188,34 @@ fn default_matches_schema_type(
         });
     }
 
+    // Decimal string default: the renderer injects it into
+    // `rust_decimal_macros::dec!(...)`, which only accepts a valid
+    // decimal literal — parse-check it here.
+    if let PrimitiveValue::String(s) = default
+        && schema_targets_decimal(prop_schema)
+        && s.parse::<rust_decimal::Decimal>().is_err()
+    {
+        return Err(Error::InconsistentSchema {
+            schema: schema_name.to_string(),
+            property: prop_name.to_string(),
+            reason: format!("decimal string default `{s}` is not a parseable decimal literal"),
+        });
+    }
+
+    // `$ref` defaults: only `$ref` to a `StrEnum` is acceptable, and
+    // the default must be one of the enum's declared members.
+    if let Some(ref_module) = extract_ref_target_module(prop_schema) {
+        check_ref_default(schema_name, prop_name, default, &ref_module, schemas)?;
+    }
+
     Ok(())
 }
 
-/// The set of `PrimitiveValue` kinds a default may have, given a property's
-/// declared schema type. Used by [`default_matches_schema_type`].
-fn allowed_default_kinds(
-    schema: &bo4e_schemas::models::json_schema::SchemaType,
-) -> std::collections::BTreeSet<PrimitiveKind> {
-    use bo4e_schemas::models::json_schema::SchemaType;
+/// The set of `PrimitiveValue` kinds a default may have, given a
+/// property's declared schema type. Strict: arms that don't accept any
+/// default (e.g. `Array`) return an empty set so the type-compat check
+/// rejects every default value on those shapes.
+fn allowed_default_kinds(schema: &SchemaType) -> std::collections::BTreeSet<PrimitiveKind> {
     let mut out = std::collections::BTreeSet::new();
     match schema {
         SchemaType::StringSchema(_) => {
@@ -197,24 +236,27 @@ fn allowed_default_kinds(
         SchemaType::BooleanSchema(_) => {
             out.insert(PrimitiveKind::Bool);
         }
+        // `Any`/object fields: only `null` is sensible as a default
+        // (renders as `serde_json::Value::Null`); other primitive
+        // defaults would need bespoke `serde_json::json!(…)` rendering
+        // which BO4E does not use.
+        SchemaType::AnySchema(_) | SchemaType::Object(_) => {
+            out.insert(PrimitiveKind::Null);
+        }
+        // `null`-typed branch (only reached via `anyOf` recursion —
+        // pure-null properties are rejected upstream by
+        // `reject_pure_null_property`). Contributes the `Null` kind to
+        // any `anyOf` that includes a null branch.
         SchemaType::NullSchema(_) => {
             out.insert(PrimitiveKind::Null);
         }
-        SchemaType::AnySchema(_) | SchemaType::Object(_) => {
-            // Permissive: any primitive kind, including null.
-            out.insert(PrimitiveKind::Null);
-            out.insert(PrimitiveKind::Bool);
-            out.insert(PrimitiveKind::Integer);
-            out.insert(PrimitiveKind::Float);
-            out.insert(PrimitiveKind::String);
-        }
-        SchemaType::Array(_) => {
-            // Array defaults aren't supported; the validator's
-            // required ⇔ no-default rule and the schema_base default
-            // type means this path is hit only via a structural default
-            // that the renderer rejects elsewhere.
-            out.insert(PrimitiveKind::Null);
-        }
+        // Arrays have no representable default — `default: [1, 2]` and
+        // the like are not part of the BO4E schema dialect. Empty set
+        // rejects every default value on direct array properties.
+        SchemaType::Array(_) => {}
+        // `anyOf:[T, null]` accepts `T`'s kinds plus `Null` (the
+        // explicit null branch contributes Null). Real unions are
+        // rejected upstream by the type mappers.
         SchemaType::AnyOf(a) => {
             for branch in &a.any_of {
                 out.extend(allowed_default_kinds(branch));
@@ -225,10 +267,10 @@ fn allowed_default_kinds(
                 out.extend(allowed_default_kinds(only));
             }
         }
+        // `$ref` (or inline str-enum / const): default is a member
+        // name (string). Membership is checked separately via
+        // `check_ref_default`.
         SchemaType::ReferenceSchema(_) | SchemaType::StrEnum(_) | SchemaType::ConstantSchema(_) => {
-            // `$ref` to an enum or inline str-enum / const → default is a
-            // member name (string). The validator can't check membership
-            // without resolving the ref; the renderer enforces that.
             out.insert(PrimitiveKind::String);
         }
     }
@@ -237,11 +279,8 @@ fn allowed_default_kinds(
 
 /// Parse-check that a string default is well-formed for typed string formats.
 /// Returns `Some(reason)` when the default is not parseable.
-fn check_string_format(
-    schema: &bo4e_schemas::models::json_schema::SchemaType,
-    value: &str,
-) -> Option<String> {
-    use bo4e_schemas::models::json_schema::{SchemaType, StringSchemaFormat};
+fn check_string_format(schema: &SchemaType, value: &str) -> Option<String> {
+    use bo4e_schemas::models::json_schema::StringSchemaFormat;
     let format = match schema {
         SchemaType::StringSchema(s) => s.format.as_ref()?,
         SchemaType::AnyOf(a) => {
@@ -279,6 +318,130 @@ fn check_string_format(
     }
 }
 
+/// True iff `schema` is (or wraps in `anyOf:[…, null]` / single-element
+/// `allOf`) a `DecimalSchema`. Used to gate the decimal-string parse
+/// check.
+fn schema_targets_decimal(schema: &SchemaType) -> bool {
+    match schema {
+        SchemaType::DecimalSchema(_) => true,
+        SchemaType::AnyOf(a) => a.any_of.iter().any(schema_targets_decimal),
+        SchemaType::AllOf(a) => a.all_of.first().is_some_and(schema_targets_decimal),
+        _ => false,
+    }
+}
+
+/// If `schema` is (or wraps in `anyOf:[…, null]` / single-element
+/// `allOf`) a non-empty `$ref`, return the target's module path
+/// (segments including the class name). Otherwise `None`.
+fn extract_ref_target_module(schema: &SchemaType) -> Option<Vec<String>> {
+    let r = match schema {
+        SchemaType::ReferenceSchema(r) if !r.r#ref.is_empty() => r,
+        SchemaType::AnyOf(a) => {
+            let non_null: Vec<&SchemaType> = a
+                .any_of
+                .iter()
+                .filter(|t| !matches!(t, SchemaType::NullSchema(_)))
+                .collect();
+            if non_null.len() == 1 {
+                if let SchemaType::ReferenceSchema(r) = non_null[0] {
+                    if r.r#ref.is_empty() {
+                        return None;
+                    }
+                    r
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+        SchemaType::AllOf(a) => {
+            if let Some(SchemaType::ReferenceSchema(r)) = a.all_of.first() {
+                if r.r#ref.is_empty() {
+                    return None;
+                }
+                r
+            } else {
+                return None;
+            }
+        }
+        _ => return None,
+    };
+    let (module, _) = crate::refs::parse_ref(&r.r#ref);
+    Some(module)
+}
+
+/// Check a default value attached to a `$ref` property.
+///
+/// - `null` default → always accepted (signals "absent" regardless of
+///   the target's shape; renders as `None` / `Value::Null`).
+/// - `String` default → target must resolve to a `StrEnum`, and the
+///   string must be one of the declared members. `$ref` to an
+///   `Object` schema with a non-null default is rejected (the
+///   renderer has no way to emit one).
+/// - Any other primitive kind on a `$ref` → rejected by
+///   [`allowed_default_kinds`] before reaching this function.
+fn check_ref_default(
+    schema_name: &str,
+    prop_name: &str,
+    default: &PrimitiveValue,
+    ref_module: &[String],
+    schemas: &Schemas,
+) -> Result<(), Error> {
+    if matches!(default, PrimitiveValue::Null) {
+        return Ok(());
+    }
+    let Some(target_rc) = schemas.get_by_module(ref_module) else {
+        return Err(Error::InconsistentSchema {
+            schema: schema_name.to_string(),
+            property: prop_name.to_string(),
+            reason: format!(
+                "`$ref` default target `{}` not found in schemas",
+                ref_module.join("/")
+            ),
+        });
+    };
+    let mut target = target_rc.borrow_mut();
+    let parsed = target.schema().map_err(Error::Schema)?;
+    match parsed {
+        SchemaRootType::StrEnum(e) => {
+            let PrimitiveValue::String(s) = default else {
+                return Err(Error::InconsistentSchema {
+                    schema: schema_name.to_string(),
+                    property: prop_name.to_string(),
+                    reason: format!(
+                        "default for `$ref` to enum must be a string member name, \
+                         got primitive kind `{:?}`",
+                        primitive_kind(default)
+                    ),
+                });
+            };
+            if !e.str_enum.enum_values.contains(s) {
+                return Err(Error::InconsistentSchema {
+                    schema: schema_name.to_string(),
+                    property: prop_name.to_string(),
+                    reason: format!(
+                        "default `{s}` is not a member of enum `{}` \
+                         (declared members: {:?})",
+                        ref_module.last().map(String::as_str).unwrap_or("?"),
+                        e.str_enum.enum_values,
+                    ),
+                });
+            }
+            Ok(())
+        }
+        SchemaRootType::Object(_) => Err(Error::InconsistentSchema {
+            schema: schema_name.to_string(),
+            property: prop_name.to_string(),
+            reason: format!(
+                "`$ref` to object schema `{}` only accepts `null` as a default \
+                 value, got non-null",
+                ref_module.join("/")
+            ),
+        }),
+    }
+}
+
 /// The five `PrimitiveValue` variants reduced to comparable tags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum PrimitiveKind {
@@ -289,8 +452,7 @@ enum PrimitiveKind {
     String,
 }
 
-fn primitive_kind(v: &bo4e_schemas::models::json_schema::PrimitiveValue) -> PrimitiveKind {
-    use bo4e_schemas::models::json_schema::PrimitiveValue;
+fn primitive_kind(v: &PrimitiveValue) -> PrimitiveKind {
     match v {
         PrimitiveValue::Null => PrimitiveKind::Null,
         PrimitiveValue::Bool(_) => PrimitiveKind::Bool,
@@ -303,11 +465,14 @@ fn primitive_kind(v: &bo4e_schemas::models::json_schema::PrimitiveValue) -> Prim
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bo4e_schemas::Schema;
     use bo4e_schemas::models::json_schema::{
         AnyOfSchema, LiteralTypeObject, NullSchema, PrimitiveValue, SchemaType, StringSchema,
         TypeBase,
     };
+    use std::cell::RefCell;
     use std::collections::BTreeMap;
+    use std::rc::Rc;
 
     /// A `string`-typed schema with a default. The schema is *not* nullable —
     /// any `Null` default will be rejected by the type-compat check.
@@ -363,10 +528,29 @@ mod tests {
         }
     }
 
+    /// Empty `Schemas` (no target resolution available). Tests that
+    /// don't exercise `$ref` defaults can use this as a stub.
+    fn empty_schemas() -> Schemas {
+        Schemas::new("v202401.0.0".parse().unwrap())
+    }
+
+    /// Build a `Schemas` containing one `StrEnum` so `$ref` defaults
+    /// can resolve to it.
+    fn schemas_with_enum(name: &str, members: &[&str]) -> Schemas {
+        let mut schemas = Schemas::new("v202401.0.0".parse().unwrap());
+        let members_json = serde_json::to_string(members).unwrap();
+        let mut s = Schema::new(vec!["enum".into(), name.into()], None).unwrap();
+        s.load_schema(format!(
+            "{{\"type\":\"string\",\"title\":\"{name}\",\"enum\":{members_json}}}"
+        ));
+        schemas.add_schema(Rc::new(RefCell::new(s))).unwrap();
+        schemas
+    }
+
     #[test]
     fn required_without_default_is_valid() {
         let o = obj(&[("name", s_string_no_default())], &["name"]);
-        assert!(object_invariants("Foo", &o).is_ok());
+        assert!(object_invariants("Foo", &o, &empty_schemas()).is_ok());
     }
 
     #[test]
@@ -378,7 +562,7 @@ mod tests {
             )],
             &[],
         );
-        assert!(object_invariants("Foo", &o).is_ok());
+        assert!(object_invariants("Foo", &o, &empty_schemas()).is_ok());
     }
 
     #[test]
@@ -390,7 +574,7 @@ mod tests {
             )],
             &["name"],
         );
-        match object_invariants("Foo", &o) {
+        match object_invariants("Foo", &o, &empty_schemas()) {
             Err(Error::InconsistentSchema {
                 schema,
                 property,
@@ -407,7 +591,7 @@ mod tests {
     #[test]
     fn optional_without_default_is_rejected() {
         let o = obj(&[("name", s_string_no_default())], &[]);
-        match object_invariants("Foo", &o) {
+        match object_invariants("Foo", &o, &empty_schemas()) {
             Err(Error::InconsistentSchema {
                 schema,
                 property,
@@ -423,8 +607,6 @@ mod tests {
 
     #[test]
     fn null_default_counts_as_a_default() {
-        // The optional-with-default-null shape is the common BO4E pattern
-        // for "key may be absent or null".
         let o = obj(
             &[(
                 "name",
@@ -432,13 +614,13 @@ mod tests {
             )],
             &[],
         );
-        assert!(object_invariants("Foo", &o).is_ok());
+        assert!(object_invariants("Foo", &o, &empty_schemas()).is_ok());
     }
 
     #[test]
     fn required_name_missing_from_properties_is_rejected() {
         let o = obj(&[], &["ghost"]);
-        match object_invariants("Foo", &o) {
+        match object_invariants("Foo", &o, &empty_schemas()) {
             Err(Error::InconsistentSchema {
                 property, reason, ..
             }) => {
@@ -455,7 +637,7 @@ mod tests {
             &[("name", s_string_with_default(Some(PrimitiveValue::Null)))],
             &[],
         );
-        match object_invariants("Foo", &o) {
+        match object_invariants("Foo", &o, &empty_schemas()) {
             Err(Error::InconsistentSchema { reason, .. }) => {
                 assert!(reason.contains("kind"), "got: {reason}");
             }
@@ -469,7 +651,7 @@ mod tests {
             &[("name", SchemaType::NullSchema(NullSchema::default()))],
             &[],
         );
-        match object_invariants("Foo", &o) {
+        match object_invariants("Foo", &o, &empty_schemas()) {
             Err(Error::InconsistentSchema { reason, .. }) => {
                 assert!(reason.contains("pure"), "got: {reason}");
             }
@@ -480,7 +662,7 @@ mod tests {
     #[test]
     fn property_name_with_hyphen_is_rejected() {
         let o = obj(&[("foo-bar", s_string_no_default())], &["foo-bar"]);
-        match object_invariants("Foo", &o) {
+        match object_invariants("Foo", &o, &empty_schemas()) {
             Err(Error::InconsistentSchema { reason, .. }) => {
                 assert!(reason.contains("identifier"), "got: {reason}");
             }
@@ -500,9 +682,134 @@ mod tests {
             format: Some(StringSchemaFormat::Date),
         });
         let o = obj(&[("birthday", schema)], &[]);
-        match object_invariants("Foo", &o) {
+        match object_invariants("Foo", &o, &empty_schemas()) {
             Err(Error::InconsistentSchema { reason, .. }) => {
                 assert!(reason.contains("parseable"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn array_with_default_is_rejected() {
+        use bo4e_schemas::models::json_schema::{ArraySchema, LiteralTypeArray};
+        let schema = SchemaType::Array(ArraySchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::Null),
+                ..TypeBase::default()
+            },
+            r#type: LiteralTypeArray::Array,
+            items: Box::new(s_string_no_default()),
+        });
+        let o = obj(&[("xs", schema)], &[]);
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(reason.contains("kind"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn any_schema_only_accepts_null_default() {
+        use bo4e_schemas::models::json_schema::AnySchema;
+        // Valid: null default on AnySchema.
+        let any_null = SchemaType::AnySchema(AnySchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::Null),
+                ..TypeBase::default()
+            },
+        });
+        let o = obj(&[("extras", any_null)], &[]);
+        assert!(object_invariants("Foo", &o, &empty_schemas()).is_ok());
+
+        // Invalid: string default on AnySchema.
+        let any_str = SchemaType::AnySchema(AnySchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("oops".into())),
+                ..TypeBase::default()
+            },
+        });
+        let o = obj(&[("extras", any_str)], &[]);
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(reason.contains("kind"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decimal_unparseable_string_default_is_rejected() {
+        use bo4e_schemas::models::json_schema::{
+            DecimalSchema, LiteralFormatDecimal, LiteralTypeDecimal,
+        };
+        let schema = SchemaType::DecimalSchema(DecimalSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("not-a-decimal".into())),
+                ..TypeBase::default()
+            },
+            r#type: LiteralTypeDecimal::Number,
+            format: LiteralFormatDecimal::Decimal,
+        });
+        let o = obj(&[("price", schema)], &[]);
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(reason.contains("decimal"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn enum_ref_default_with_known_variant_is_valid() {
+        use bo4e_schemas::models::json_schema::ReferenceSchema;
+        let prop = SchemaType::ReferenceSchema(ReferenceSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("RED".into())),
+                ..TypeBase::default()
+            },
+            r#ref: "../enum/Color.json#".into(),
+        });
+        let o = obj(&[("color", prop)], &[]);
+        let schemas = schemas_with_enum("Color", &["RED", "GREEN", "BLUE"]);
+        assert!(object_invariants("Foo", &o, &schemas).is_ok());
+    }
+
+    #[test]
+    fn enum_ref_default_with_unknown_variant_is_rejected() {
+        use bo4e_schemas::models::json_schema::ReferenceSchema;
+        let prop = SchemaType::ReferenceSchema(ReferenceSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("MAGENTA".into())),
+                ..TypeBase::default()
+            },
+            r#ref: "../enum/Color.json#".into(),
+        });
+        let o = obj(&[("color", prop)], &[]);
+        let schemas = schemas_with_enum("Color", &["RED", "GREEN", "BLUE"]);
+        match object_invariants("Foo", &o, &schemas) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(reason.contains("not a member"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ref_default_to_missing_target_is_rejected() {
+        use bo4e_schemas::models::json_schema::ReferenceSchema;
+        let prop = SchemaType::ReferenceSchema(ReferenceSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("X".into())),
+                ..TypeBase::default()
+            },
+            r#ref: "../enum/Nonexistent.json#".into(),
+        });
+        let o = obj(&[("c", prop)], &[]);
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(reason.contains("not found"), "got: {reason}");
             }
             other => panic!("expected InconsistentSchema, got {other:?}"),
         }

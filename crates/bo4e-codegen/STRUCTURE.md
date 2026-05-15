@@ -140,21 +140,34 @@ These functions are pure — no IO, no globals. Test them with plain assertions.
 
 ## Schema invariants (validated at generate time)
 
-`crate::validate::object_invariants` runs over every `ObjectSchema` before any renderer touches it:
+Validation is decoupled from rendering. **`bo4e_codegen::validate::all_schemas(&Schemas)`** is the single public entry point: each per-flavour `generate()` calls it once at the top, before any file is written. The validator has access to the full `Schemas` collection so cross-schema checks (`$ref` resolution) happen here rather than being deferred to a renderer.
+
+Enforced invariants (every violation raises `Error::InconsistentSchema`):
 
 1. **`required` references `properties`.** Every name in `required` must have a matching entry in `properties` — otherwise the generated type omits the field silently, breaking the schema contract.
-2. **`required ⇔ no default`** (the strict required/default invariant). A property is in `required` *iff* it has no declared `default`. Both violations raise `Error::InconsistentSchema`:
+2. **`required ⇔ no default`** (the strict required/default invariant):
    - `required + default declared` — the default is unreachable.
    - `optional + no default` — the runtime has no fallback when the JSON key is absent.
-3. **Default value matches the schema type.** A `string` property only accepts a `String` default; an `integer` only `Integer`; a nullable `anyOf:[T, null]` accepts `T`'s kinds plus `Null`. Typed-format string defaults (`date`, `date-time`, `time`, `uuid`) are also parse-checked at generate time so the renderer can emit typed constructors (`chrono::NaiveDate::from_ymd_opt(…)`, `uuid::uuid!(…)`, etc.) without runtime parse failures.
-4. **Property name shape.** Names must be `[A-Za-z_][A-Za-z0-9_]*` (camelCase or snake_case identifier shape); anything else can't round-trip through `to_snake_case` → `rust_field_name` / `python_attr_name` without producing invalid identifiers in the generated code.
-5. **Pure `type: null` rejected.** A property whose schema *is* `NullSchema` (rather than appearing as a branch of `anyOf:[T, null]`) has no use in BO4E.
+3. **Default value matches the schema type.** A `string` property only accepts a `String` default; `integer` only `Integer`; `decimal` accepts `Integer`/`Float`/`String` (string must parse as a decimal); `boolean` only `Bool`; `Any`/`Object` only `Null`; `Array` accepts **no** default. A nullable `anyOf:[T, null]` accepts `T`'s kinds plus `Null`.
+4. **Typed-format defaults are parse-checked.** `date`, `date-time`, `time`, `uuid` string defaults must parse as that format at generate time, so the renderer can emit typed constructors (`chrono::NaiveDate::from_ymd_opt(…)`, `uuid::uuid!(…)`, etc.) whose `unwrap()` paths can never fail at runtime.
+5. **`$ref` defaults are resolved.** `null` defaults pass for any `$ref` target. Non-null defaults are only valid when the target resolves to a `StrEnum` and the string is one of the enum's declared members. `$ref` to an object schema with a non-null default is rejected.
+6. **Property name shape.** Names must be `[A-Za-z_][A-Za-z0-9_]*` (camelCase or snake_case identifier shape); anything else can't round-trip through `to_snake_case` → `rust_field_name` / `python_attr_name`.
+7. **Pure `type: null` rejected.** A property whose schema *is* `NullSchema` (rather than appearing as a branch of `anyOf:[T, null]`) has no use in BO4E.
 
-**AllOf / AnyOf shape restrictions** are enforced symmetrically in both `rust/types.rs::map_rust` *and* `python/types.rs::map_pydantic`. Both functions return `Result<MappedType, UnsupportedShape>` and the orchestrators convert the error to `Error::UnsupportedSchemaShape`:
+**AllOf / AnyOf shape restrictions** are enforced symmetrically in both `rust/types.rs::map_rust` *and* `python/types.rs::map_pydantic`. Both return `Result<MappedType, UnsupportedShape>` and the orchestrators convert the error to `Error::UnsupportedSchemaShape`:
 - `allOf` must have **exactly one** element. Multi-element `allOf` (intersection) is rejected.
 - `anyOf` must be the `Optional` pattern: **one** non-null branch plus **one** `null` branch. Real unions and `anyOf` without a `null` branch are rejected.
 
-No renderer special-cases field names. `_version`, `_typ`, `_id` are mapped purely from their schema shape; `bo4e edit` changes flow through to the generated output.
+No renderer special-cases field names. `_version`, `_typ`, `_id` are mapped purely from their schema shape across **all** flavours (pydantic, sql_model, rust-plain, rust-crate); `bo4e edit` changes flow through to the generated output.
+
+## Rust path layout
+
+All Rust output paths are computed up-front via **`bo4e_codegen::rust::path_segments(&[String])`** and **`bo4e_codegen::rust::module_paths(output_dir, module)`**:
+
+- Every segment is lowercased.
+- Every `enum` segment (at any depth) is rewritten to `enums` (`enum` is a Rust keyword and `pub mod enum;` would not compile).
+
+The rewrite is applied recursively, in a single place, so per-schema file paths, `pub mod X;` declarations in `mod.rs`, sibling `use` imports, and root re-exports all agree by construction — no post-write disk walk to rename directories, no risk of drift between the on-disk location and the import path.
 
 ## Layout: root + arbitrary depth
 

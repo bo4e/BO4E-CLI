@@ -88,16 +88,18 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 
   **BO4E does not use multi-branch `anyOf` / multi-element `allOf` and is not planned to.** Real unions and intersections would require sum-type emission with discriminators; the generator refuses early rather than producing surprising output. Earlier versions of the Python mapper rendered these shapes as `A | B` / `A & B` approximations — that path is gone.
 
-- **Layout: root + arbitrary depth.** Schemas live at any directory depth under the schema root. The root holds files like `ZusatzAttribut.json` (no subdirectory) plus subdirectory groupings like `bo/`, `com/`, `enum/`. The Rust generator emits a `mod.rs` at every directory level (including the output root, where it becomes `lib.rs` in the `rust-crate` flavour) so every schema is reachable. The pydantic generator writes an empty `__init__.py` at every nested directory and re-exports all classes from the root `__init__.py` — so `from <pkg> import <Class>` works for any depth. The `enum/` directory is renamed to `enums/` in Rust output because `enum` is a Rust keyword; this rename is recursive (any `enum` segment, at any depth, becomes `enums`).
+- **Layout: root + arbitrary depth.** Schemas live at any directory depth under the schema root. The root holds files like `ZusatzAttribut.json` (no subdirectory) plus subdirectory groupings like `bo/`, `com/`, `enum/`. The Rust generator emits a `mod.rs` at every directory level (including the output root, where it becomes `lib.rs` in the `rust-crate` flavour) so every schema is reachable. The pydantic generator writes an empty `__init__.py` at every nested directory and re-exports all classes from the root `__init__.py` — so `from <pkg> import <Class>` works for any depth. The `enum/` directory is renamed to `enums/` in Rust output because `enum` is a Rust keyword; the rewrite is recursive (any `enum` segment at any depth becomes `enums`) and is applied **at path-build time** via `bo4e_codegen::rust::path_segments` — there is no post-write disk walk to rename directories, so on-disk paths, `pub mod X;` declarations, and sibling `use` imports agree by construction.
 
-- **Schema validator runs at generate time.** `crate::validate::object_invariants` enforces, for every object schema:
+- **Validation is a decoupled phase.** `bo4e_codegen::validate::all_schemas(&Schemas)` runs once at the top of each `generate()` — before any file is written — over the entire schema set. The validator has access to the full collection so cross-schema checks (`$ref` defaults must reference a real enum variant) happen here rather than being deferred to a renderer. A failed schema cannot produce a half-written output tree.
+
+  Enforced invariants, each violation surfacing as `Error::InconsistentSchema { schema, property, reason }`:
   1. Every name in `required` is also declared in `properties`.
   2. Every property is in `required` iff it has *no* schema-declared default (the strict required/default matrix).
-  3. Every property's default value's primitive kind is compatible with its declared schema type (e.g. a `string`-typed property may only declare a `String`-kind default; an `anyOf:[T, null]` property accepts `T`'s kinds plus `Null`).
+  3. Every property's default value's primitive kind is compatible with its declared schema type (a `string` property accepts only `String`; `integer` only `Integer`; `decimal` accepts `Integer`/`Float`/`String` and parses the string as a decimal; `boolean` only `Bool`; `Any`/`Object` only `Null`; `Array` accepts no default at all; an `anyOf:[T, null]` property accepts `T`'s kinds plus `Null`).
   4. Typed-format string defaults (`date`, `date-time`, `time`, `uuid`) parse as that format at generate time.
-  5. Property names are legal identifier sources (`[A-Za-z_][A-Za-z0-9_]*`).
-  6. Pure `type: null` properties are rejected.
-  All violations surface as `Error::InconsistentSchema { schema, property, reason }` before any rendering happens.
+  5. `$ref` defaults: `null` is universally accepted; non-null defaults are only valid when the target resolves (through `Schemas`) to a `StrEnum` and the string is one of the enum's declared members.
+  6. Property names are legal identifier sources (`[A-Za-z_][A-Za-z0-9_]*`).
+  7. Pure `type: null` properties are rejected.
 
 - **Closure-based, object-safe `Visitable`** for schema tree traversal. Avoids `RefCell`-style runtime borrow checking; supports early termination via `ControlFlow`. Used by the `edit` transforms and by `diff` walkers.
 - **Console singleton with sentinel markup.** The CLI uses a `OnceLock<Console>` so every print site (including in libraries that the CLI calls into) renders through one highlighter. `--verbose` / `--quiet` filter by `Level`. Warnings/errors always go to stderr and are never suppressed (info goes to stdout).

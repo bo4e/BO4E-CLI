@@ -66,6 +66,8 @@ pub fn generate(
     output_dir: &Path,
     opts: &crate::Options,
 ) -> Result<crate::GenerateOutput, Error> {
+    crate::validate::all_schemas(schemas)?;
+
     if opts.clear_output {
         crate::clear_dir_if_exists(output_dir)?;
     } else {
@@ -77,10 +79,10 @@ pub fn generate(
     let version_str = schemas.version.to_string();
 
     // ── Per-schema files ───────────────────────────────────────────────────────
+    let path_for = |m: &[String]| crate::layout::module_paths(output_dir, m, "py");
     written.extend(crate::for_each_schema_file(
         schemas,
-        output_dir,
-        "py",
+        path_for,
         |ctx| match &ctx.parsed {
             SchemaRootType::StrEnum(e) => {
                 render_enum(&env, &ctx.class_name, &e.str_enum.enum_values)

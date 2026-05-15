@@ -136,13 +136,14 @@ pub fn map_rust(schema_type: &SchemaType) -> Result<MappedType, UnsupportedShape
     })
 }
 
-/// Rewrites the first segment `"enum"` of a `parse_ref` module to `"enums"` so
-/// Rust paths use the keyword-safe directory name.
-fn rewrite_enum_dir(mut module: Vec<String>) -> Vec<String> {
-    if module.first().map(String::as_str) == Some("enum") {
-        module[0] = "enums".to_string();
-    }
-    module
+/// Rewrites every `enum` segment of a `parse_ref` module to `enums`, at
+/// any depth, so Rust paths use the keyword-safe directory name.
+/// Delegates to [`crate::rust::path_segments`] — the single source of
+/// truth for Rust output path rewriting (used by per-file path
+/// computation in [`crate::rust::module_paths`], the `mod.rs` writer
+/// in `rust::plain`, and import-path building here).
+fn rewrite_enum_dir(module: Vec<String>) -> Vec<String> {
+    crate::rust::path_segments(&module)
 }
 
 /// Returned by [`map_rust`] when the schema has a shape BO4E declares unused.
@@ -163,9 +164,9 @@ impl std::fmt::Display for UnsupportedShape {
 /// constructor (`chrono::NaiveDate::from_ymd_opt`, `uuid::uuid!`, etc.).
 /// For `DecimalSchema`, the default is emitted via the
 /// `rust_decimal_macros::dec!` macro. The validator
-/// (`crate::validate::object_invariants`) guarantees the default's
-/// primitive kind matches the schema type and that typed-format strings
-/// parse — so the `unwrap()` paths here cannot fail at runtime.
+/// (`crate::validate::all_schemas`) guarantees the default's primitive
+/// kind matches the schema type and that typed-format strings parse —
+/// so the `unwrap()` paths here cannot fail at runtime.
 ///
 /// Returns `None` when the schema has no declared `default`.
 pub fn literal_default_rust(schema: &SchemaType) -> Option<String> {
@@ -173,40 +174,43 @@ pub fn literal_default_rust(schema: &SchemaType) -> Option<String> {
     Some(render_typed_default(schema, prim))
 }
 
-/// Render a primitive literal in the most permissive (type-unaware) way.
-/// Used as the fallback for schema shapes whose mapped Rust type matches
-/// the primitive directly (e.g. `bool`, `i64`, `f64`, plain `String`).
-fn render_primitive_default(prim: &PrimitiveValue) -> String {
-    match prim {
-        PrimitiveValue::Null => "None".into(),
-        PrimitiveValue::Bool(true) => "true".into(),
-        PrimitiveValue::Bool(false) => "false".into(),
-        PrimitiveValue::Integer(i) => format!("{i}i64"),
-        PrimitiveValue::Float(f) => format!("{f}f64"),
-        PrimitiveValue::String(s) => format!("{s:?}.to_string()"),
-    }
-}
-
-/// Type-aware default rendering. Dispatches on the schema variant (and
-/// `format` where relevant) to emit a Rust expression that's a value of
-/// the *mapped* Rust type, not just the JSON primitive.
+/// Type-aware default rendering. Dispatches strictly on the (schema,
+/// primitive) pair to emit a Rust expression that's a value of the
+/// *mapped* Rust type. No fallback: every accepted pair has an explicit
+/// arm; unmatched pairs are a validator bug and panic via
+/// `unreachable!`.
+///
+/// The [`crate::validate::all_schemas`] gate is the single source of
+/// truth for what's reachable here.
 fn render_typed_default(schema: &SchemaType, prim: &PrimitiveValue) -> String {
     use bo4e_schemas::models::json_schema::StringSchemaFormat;
 
-    // Null is the universal "absent" expression.
-    if matches!(prim, PrimitiveValue::Null) {
-        return "None".into();
-    }
-
     match (schema, prim) {
+        // ── Nullable wrappers: descend into the non-null branch (or
+        // emit `None` when the default itself is null and the mapped
+        // type is `Option<T>`). ────────────────────────────────────
+        (SchemaType::AnyOf(_), PrimitiveValue::Null) => "None".into(),
+        (SchemaType::AnyOf(a), p) => {
+            let non_null = a
+                .any_of
+                .iter()
+                .find(|t| !matches!(t, SchemaType::NullSchema(_)))
+                .expect("validator: anyOf with default must have a non-null branch");
+            render_typed_default(non_null, p)
+        }
+        (SchemaType::AllOf(a), p) => {
+            let only = a
+                .all_of
+                .first()
+                .expect("validator: allOf must have exactly one element");
+            render_typed_default(only, p)
+        }
+
+        // ── Bool / number / decimal primitives. ───────────────────
         (SchemaType::BooleanSchema(_), PrimitiveValue::Bool(b)) => b.to_string(),
         (SchemaType::IntegerSchema(_), PrimitiveValue::Integer(i)) => format!("{i}i64"),
         (SchemaType::NumberSchema(_), PrimitiveValue::Integer(i)) => format!("{i}_f64"),
         (SchemaType::NumberSchema(_), PrimitiveValue::Float(f)) => format!("{f}_f64"),
-
-        // Decimal: use the dec! macro for all numeric forms. dec!() accepts
-        // any literal token (integer, float, parsed string) — the validator
-        // has already proven the value is well-formed.
         (SchemaType::DecimalSchema(_), PrimitiveValue::Integer(i)) => {
             format!("rust_decimal_macros::dec!({i})")
         }
@@ -217,12 +221,10 @@ fn render_typed_default(schema: &SchemaType, prim: &PrimitiveValue) -> String {
             format!("rust_decimal_macros::dec!({s})")
         }
 
-        // Plain string (no format) — `String::to_string()` from the literal.
+        // ── String: plain and typed-format. ───────────────────────
         (SchemaType::StringSchema(s), PrimitiveValue::String(v)) if s.format.is_none() => {
             format!("{v:?}.to_string()")
         }
-
-        // Typed string formats. The validator has parse-checked the value.
         (SchemaType::StringSchema(s), PrimitiveValue::String(v)) => match &s.format {
             Some(StringSchemaFormat::Date) => render_date_default(v),
             Some(StringSchemaFormat::Time) => render_time_default(v),
@@ -231,36 +233,31 @@ fn render_typed_default(schema: &SchemaType, prim: &PrimitiveValue) -> String {
             _ => format!("{v:?}.to_string()"),
         },
 
-        // ConstantSchema / StrEnum / $ref-to-enum: the renderer's
-        // `enum_variant_default_rust` path is preferred. Fall back to a
-        // plain string literal for cases where the enum context isn't
-        // resolvable (e.g. inline const without a $ref).
-        (SchemaType::ConstantSchema(_), PrimitiveValue::String(v)) => format!("{v:?}.to_string()"),
-        (SchemaType::StrEnum(_), PrimitiveValue::String(v)) => format!("{v:?}.to_string()"),
-
-        // anyOf:[T, null] — descend into the non-null branch. We've already
-        // handled PrimitiveValue::Null above; here we know prim is non-null
-        // and at least one branch is non-null (validator enforces this).
-        (SchemaType::AnyOf(a), _) => {
-            if let Some(non_null) = a
-                .any_of
-                .iter()
-                .find(|t| !matches!(t, SchemaType::NullSchema(_)))
-            {
-                return render_typed_default(non_null, prim);
-            }
-            render_primitive_default(prim)
-        }
-        (SchemaType::AllOf(a), _) => {
-            if let Some(only) = a.all_of.first() {
-                return render_typed_default(only, prim);
-            }
-            render_primitive_default(prim)
+        // ── Enum / const / $ref string defaults. The enclosing
+        // renderer prefers `enum_variant_default_rust` for $ref-to-
+        // enum cases; this fallback covers inline `StrEnum` / `const`
+        // and is also reachable when `enum_variant_default_rust`
+        // declines (rare). ────────────────────────────────────────
+        (SchemaType::ConstantSchema(_), PrimitiveValue::String(v))
+        | (SchemaType::StrEnum(_), PrimitiveValue::String(v))
+        | (SchemaType::ReferenceSchema(_), PrimitiveValue::String(v)) => {
+            format!("{v:?}.to_string()")
         }
 
-        // Catch-all (Object, Array, AnySchema, ReferenceSchema, NullSchema):
-        // emit the primitive directly. Validator gates most of these out.
-        _ => render_primitive_default(prim),
+        // ── Any / Object: the validator only accepts `null` here
+        // (Any field types render as `serde_json::Value`, so the
+        // default expression is the JSON null variant). Non-null
+        // defaults are validator-rejected and never reach this arm.
+        (SchemaType::AnySchema(_), PrimitiveValue::Null)
+        | (SchemaType::Object(_), PrimitiveValue::Null) => "serde_json::Value::Null".into(),
+
+        // ── Unreachable per validator. Any pair landing here is a
+        // gap in `validate::all_schemas` that must be fixed there,
+        // not papered over with a primitive fallback. ─────────────
+        (schema, prim) => unreachable!(
+            "render_typed_default: validator should have rejected this pair \
+             before code generation. schema={schema:?} default={prim:?}"
+        ),
     }
 }
 
@@ -282,16 +279,19 @@ fn render_date_default(value: &str) -> String {
 }
 
 /// Render a `time` default. Validator accepts `%H:%M:%S` or `%H:%M:%S%.f`.
+/// Uses `from_hms_nano_opt` so fractional-second defaults
+/// (e.g. `"14:30:00.123"`) round-trip without nanoseconds being dropped.
 fn render_time_default(value: &str) -> String {
     use chrono::Timelike;
     let parsed = chrono::NaiveTime::parse_from_str(value, "%H:%M:%S")
         .or_else(|_| chrono::NaiveTime::parse_from_str(value, "%H:%M:%S%.f"));
     match parsed {
         Ok(t) => format!(
-            "chrono::NaiveTime::from_hms_opt({}, {}, {}).unwrap()",
+            "chrono::NaiveTime::from_hms_nano_opt({}, {}, {}, {}).unwrap()",
             t.hour(),
             t.minute(),
-            t.second()
+            t.second(),
+            t.nanosecond(),
         ),
         Err(_) => format!("chrono::NaiveTime::parse_from_str({value:?}, \"%H:%M:%S\").unwrap()"),
     }
@@ -437,8 +437,11 @@ mod tests {
         });
         let m = map_rust(&schema).unwrap();
         assert_eq!(m.rendered, "Adresse");
+        // `Import::Sibling::module` holds the lowercased, keyword-rewritten
+        // segments (single source of truth via `rust::path_segments`); the
+        // class name is preserved in PascalCase via `Import::Sibling::name`.
         assert!(m.imports.contains(&Import::Sibling {
-            module: vec!["com".into(), "Adresse".into()],
+            module: vec!["com".into(), "adresse".into()],
             name: "Adresse".into(),
         }));
     }
@@ -451,8 +454,25 @@ mod tests {
         });
         let m = map_rust(&schema).unwrap();
         assert!(m.imports.contains(&Import::Sibling {
-            module: vec!["enums".into(), "Typ".into()],
+            module: vec!["enums".into(), "typ".into()],
             name: "Typ".into(),
+        }));
+    }
+
+    /// Recursive enum-segment rewriting: an `enum` segment appearing at
+    /// non-first depth must also be rewritten to `enums`. Pin this with
+    /// a `$ref` like `../foo/enum/Color.json` — the import path must be
+    /// `foo::enums::color`.
+    #[test]
+    fn map_ref_with_nested_enum_segment_rewrites_at_any_depth() {
+        let schema = SchemaType::ReferenceSchema(ReferenceSchema {
+            base: TypeBase::default(),
+            r#ref: "../foo/enum/Color.json".into(),
+        });
+        let m = map_rust(&schema).unwrap();
+        assert!(m.imports.contains(&Import::Sibling {
+            module: vec!["foo".into(), "enums".into(), "color".into()],
+            name: "Color".into(),
         }));
     }
 
@@ -570,7 +590,26 @@ mod tests {
         });
         assert_eq!(
             literal_default_rust(&schema).unwrap(),
-            "chrono::NaiveTime::from_hms_opt(14, 30, 0).unwrap()"
+            "chrono::NaiveTime::from_hms_nano_opt(14, 30, 0, 0).unwrap()"
+        );
+    }
+
+    /// Fractional-second time defaults must round-trip: the renderer
+    /// uses `from_hms_nano_opt` so the parsed nanoseconds aren't dropped.
+    #[test]
+    fn literal_default_time_with_fractional_seconds_preserves_nanos() {
+        let schema = SchemaType::StringSchema(StringSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("14:30:00.123".into())),
+                ..Default::default()
+            },
+            r#type: LiteralTypeString::String,
+            format: Some(StringSchemaFormat::Time),
+        });
+        // 0.123 seconds = 123_000_000 nanoseconds.
+        assert_eq!(
+            literal_default_rust(&schema).unwrap(),
+            "chrono::NaiveTime::from_hms_nano_opt(14, 30, 0, 123000000).unwrap()"
         );
     }
 

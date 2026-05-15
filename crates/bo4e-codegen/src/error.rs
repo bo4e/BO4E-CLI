@@ -29,9 +29,12 @@ pub enum Error {
         shape: String,
     },
 
-    /// The schema violates the required/default invariant: a property must be
-    /// in `required` *iff* it has no schema-declared default. See
-    /// `crate::validate::object_invariants`.
+    /// One of the schema-consistency invariants enforced by
+    /// [`crate::validate::all_schemas`] is violated. Examples: a name in
+    /// `required` not declared in `properties`; a property in `required`
+    /// that also carries a `default`; a `default` whose primitive kind
+    /// doesn't match the schema type; a `$ref` default referencing a
+    /// non-existent enum variant.
     #[error("inconsistent schema {schema}::{property}: {reason}")]
     InconsistentSchema {
         schema: String,
