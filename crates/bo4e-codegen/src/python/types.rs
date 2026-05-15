@@ -65,13 +65,33 @@ pub(crate) fn literal_default(schema: &SchemaType) -> Option<String> {
 
 // ── Public mapping function ───────────────────────────────────────────────────
 
+/// Returned by [`map_pydantic`] when the schema has a shape BO4E declares
+/// unused (e.g. real `anyOf` unions, multi-element `allOf` intersections,
+/// pure `type: null`). Mirrors the Rust mapper's `UnsupportedShape` so both
+/// flavours reject the same set of shapes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsupportedShape(pub String);
+
+impl std::fmt::Display for UnsupportedShape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Map a JSON Schema fragment to its pydantic Python type expression.
 ///
 /// The returned [`MappedType::rendered`] is the type string that should appear inline in
 /// generated code.  [`MappedType::imports`] contains the import statements that `rendered`
 /// depends on.
-pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
-    match schema_type {
+///
+/// Returns `Err(UnsupportedShape)` for the same shapes the Rust mapper
+/// rejects:
+/// - `allOf` with more than one element (intersection)
+/// - `anyOf` with more than one non-null branch (real union)
+/// - `anyOf` with no `null` branch (real union)
+/// - pure `type: null` outside an `anyOf` branch
+pub fn map_pydantic(schema_type: &SchemaType) -> Result<MappedType, UnsupportedShape> {
+    Ok(match schema_type {
         // ── Scalar primitives ────────────────────────────────────────────────
         SchemaType::StringSchema(s) => match &s.format {
             None => simple("str"),
@@ -90,14 +110,22 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
         SchemaType::DecimalSchema(_) => with_import("Decimal", "decimal", "Decimal"),
 
         // ── Null ─────────────────────────────────────────────────────────────
-        SchemaType::NullSchema(_) => simple("None"),
+        // Pure `type: null` outside an `anyOf` branch has no use in BO4E.
+        // The validator rejects such properties up front, but the type mapper
+        // is also called from Array `items` and other nested positions, so
+        // mirror the rejection here.
+        SchemaType::NullSchema(_) => {
+            return Err(UnsupportedShape(
+                "pure `type: null` schema has no use".into(),
+            ));
+        }
 
         // ── Any ──────────────────────────────────────────────────────────────
         SchemaType::AnySchema(_) => with_import("Any", "typing", "Any"),
 
         // ── Array ────────────────────────────────────────────────────────────
         SchemaType::Array(a) => {
-            let inner = map_pydantic(&a.items);
+            let inner = map_pydantic(&a.items)?;
             let rendered = format!("list[{}]", inner.rendered);
             MappedType {
                 rendered,
@@ -105,73 +133,39 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
             }
         }
 
-        // ── AnyOf — optional or real union ───────────────────────────────────
+        // ── AnyOf — only the nullable pattern (one non-null + null) ─────────
         SchemaType::AnyOf(a) => {
-            // Partition branches into null and non-null.
             let (null_branches, non_null_branches): (Vec<_>, Vec<_>) = a
                 .any_of
                 .iter()
                 .partition(|t| matches!(t, SchemaType::NullSchema(_)));
 
-            let is_optional = !null_branches.is_empty();
-
-            // Map each non-null branch.
-            let mapped: Vec<MappedType> =
-                non_null_branches.iter().map(|t| map_pydantic(t)).collect();
-
-            let mut all_imports: BTreeSet<Import> = BTreeSet::new();
-            for m in &mapped {
-                all_imports.extend(m.imports.iter().cloned());
+            if null_branches.is_empty() {
+                return Err(UnsupportedShape(
+                    "anyOf without null branch (real union)".into(),
+                ));
+            }
+            if non_null_branches.len() != 1 {
+                return Err(UnsupportedShape(
+                    "anyOf with more than one non-null branch (real union)".into(),
+                ));
             }
 
-            // `Any` subsumes every other type (including None), so a union containing
-            // `Any` collapses to just `Any`.
-            if mapped.iter().any(|m| m.rendered == "Any") {
-                return MappedType {
-                    rendered: "Any".into(),
-                    imports: all_imports,
-                };
-            }
-
-            let inner_rendered: Vec<&str> = mapped.iter().map(|m| m.rendered.as_str()).collect();
-            let type_str = inner_rendered.join(" | ");
-
-            let rendered = if is_optional {
-                if type_str.is_empty() {
-                    "None".to_string()
-                } else {
-                    format!("{} | None", type_str)
-                }
-            } else {
-                type_str
-            };
-
+            let inner = map_pydantic(non_null_branches[0])?;
             MappedType {
-                rendered,
-                imports: all_imports,
+                rendered: format!("{} | None", inner.rendered),
+                imports: inner.imports,
             }
         }
 
-        // ── AllOf — treated as a single-item wrapper (pydantic inheritance) ──
+        // ── AllOf — one-element wrapper only ─────────────────────────────────
         SchemaType::AllOf(a) => {
             if a.all_of.len() == 1 {
-                map_pydantic(&a.all_of[0])
+                map_pydantic(&a.all_of[0])?
             } else {
-                // Multi-branch allOf is rare in BO4E; emit an intersection approximation.
-                let mapped: Vec<MappedType> = a.all_of.iter().map(map_pydantic).collect();
-                let mut all_imports: BTreeSet<Import> = BTreeSet::new();
-                for m in &mapped {
-                    all_imports.extend(m.imports.iter().cloned());
-                }
-                let rendered = mapped
-                    .iter()
-                    .map(|m| m.rendered.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" & ");
-                MappedType {
-                    rendered,
-                    imports: all_imports,
-                }
+                return Err(UnsupportedShape(
+                    "multi-element allOf (intersection)".into(),
+                ));
             }
         }
 
@@ -210,7 +204,7 @@ pub fn map_pydantic(schema_type: &SchemaType) -> MappedType {
         // no longer narrows constant defaults specially — they fall through
         // here and inherit the value via `Field(default=…)` instead.
         SchemaType::ConstantSchema(_) => simple("str"),
-    }
+    })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -232,7 +226,7 @@ mod tests {
             r#type: LiteralTypeString::String,
             format: None,
         });
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "str");
         assert!(result.imports.is_empty());
     }
@@ -241,7 +235,7 @@ mod tests {
     #[test]
     fn map_integer() {
         let schema = SchemaType::IntegerSchema(IntegerSchema::default());
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "int");
         assert!(result.imports.is_empty());
     }
@@ -250,7 +244,7 @@ mod tests {
     #[test]
     fn map_number() {
         let schema = SchemaType::NumberSchema(NumberSchema::default());
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "float");
         assert!(result.imports.is_empty());
     }
@@ -259,7 +253,7 @@ mod tests {
     #[test]
     fn map_boolean() {
         let schema = SchemaType::BooleanSchema(BooleanSchema::default());
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "bool");
         assert!(result.imports.is_empty());
     }
@@ -278,7 +272,7 @@ mod tests {
                 SchemaType::NullSchema(NullSchema::default()),
             ],
         });
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "str | None");
         assert!(result.imports.is_empty());
     }
@@ -295,7 +289,7 @@ mod tests {
                 format: None,
             })),
         });
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "list[str]");
         assert!(result.imports.is_empty());
     }
@@ -308,7 +302,7 @@ mod tests {
             r#type: LiteralTypeDecimal::Number,
             format: LiteralFormatDecimal::Decimal,
         });
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "Decimal");
         assert_eq!(result.imports.len(), 1);
         assert!(result.imports.contains(&Import::Named {
@@ -325,7 +319,7 @@ mod tests {
             r#type: LiteralTypeString::String,
             format: Some(StringSchemaFormat::DateTime),
         });
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "datetime");
         assert_eq!(result.imports.len(), 1);
         assert!(result.imports.contains(&Import::Named {
@@ -341,7 +335,7 @@ mod tests {
             base: TypeBase::default(),
             r#ref: "../bo/Geschaeftspartner.json".to_string(),
         });
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "Geschaeftspartner");
         assert_eq!(result.imports.len(), 1);
         assert!(result.imports.contains(&Import::Sibling {
@@ -357,7 +351,7 @@ mod tests {
             r#type: LiteralTypeString::String,
             format: Some(StringSchemaFormat::Uuid),
         });
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "UUID");
         assert!(result.imports.contains(&Import::Named {
             module: "uuid".to_string(),
@@ -377,7 +371,7 @@ mod tests {
                 SchemaType::NullSchema(NullSchema::default()),
             ],
         });
-        let result = map_pydantic(&schema);
+        let result = map_pydantic(&schema).unwrap();
         assert_eq!(result.rendered, "Adresse | None");
         assert!(result.imports.contains(&Import::Sibling {
             module: vec!["bo".to_string(), "Adresse".to_string()],
@@ -387,7 +381,7 @@ mod tests {
 
     #[test]
     fn map_any_includes_typing_import() {
-        let result = map_pydantic(&SchemaType::AnySchema(AnySchema::default()));
+        let result = map_pydantic(&SchemaType::AnySchema(AnySchema::default())).unwrap();
         assert_eq!(result.rendered, "Any");
         assert_eq!(result.imports.len(), 1);
         assert!(result.imports.contains(&Import::Named {
@@ -397,8 +391,10 @@ mod tests {
     }
 
     #[test]
-    fn map_anyof_any_with_null_collapses_to_any() {
-        // `anyOf: [Any, null]` → `Any` (not `Any | None`, since Any subsumes None).
+    fn map_anyof_any_with_null_renders_optional_any() {
+        // `anyOf: [Any, null]` is the nullable pattern; emit `Any | None`.
+        // (Python `Any` semantically subsumes None, but the schema asked for
+        // explicit nullability so we surface it in the type expression.)
         let schema = SchemaType::AnyOf(AnyOfSchema {
             base: TypeBase::default(),
             any_of: vec![
@@ -406,8 +402,8 @@ mod tests {
                 SchemaType::NullSchema(NullSchema::default()),
             ],
         });
-        let result = map_pydantic(&schema);
-        assert_eq!(result.rendered, "Any");
+        let result = map_pydantic(&schema).unwrap();
+        assert_eq!(result.rendered, "Any | None");
         assert!(result.imports.contains(&Import::Named {
             module: "typing".into(),
             name: "Any".into(),
@@ -415,8 +411,8 @@ mod tests {
     }
 
     #[test]
-    fn map_anyof_str_and_any_collapses_to_any() {
-        // `anyOf: [str, Any]` → `Any` (Any swallows the rest).
+    fn map_anyof_str_and_any_is_rejected_as_real_union() {
+        // `anyOf: [str, Any]` is a two-non-null-branch union — rejected.
         let schema = SchemaType::AnyOf(AnyOfSchema {
             base: TypeBase::default(),
             any_of: vec![
@@ -428,7 +424,48 @@ mod tests {
                 SchemaType::AnySchema(AnySchema::default()),
             ],
         });
-        let result = map_pydantic(&schema);
-        assert_eq!(result.rendered, "Any");
+        let err = map_pydantic(&schema).unwrap_err();
+        assert!(err.0.contains("real union"), "got: {}", err.0);
+    }
+
+    #[test]
+    fn map_anyof_without_null_is_rejected() {
+        let schema = SchemaType::AnyOf(AnyOfSchema {
+            base: TypeBase::default(),
+            any_of: vec![
+                SchemaType::StringSchema(StringSchema {
+                    base: TypeBase::default(),
+                    r#type: LiteralTypeString::String,
+                    format: None,
+                }),
+                SchemaType::IntegerSchema(IntegerSchema::default()),
+            ],
+        });
+        let err = map_pydantic(&schema).unwrap_err();
+        assert!(err.0.contains("null branch"), "got: {}", err.0);
+    }
+
+    #[test]
+    fn map_all_of_multi_is_rejected() {
+        use bo4e_schemas::models::json_schema::AllOfSchema;
+        let schema = SchemaType::AllOf(AllOfSchema {
+            base: TypeBase::default(),
+            all_of: vec![
+                SchemaType::StringSchema(StringSchema {
+                    base: TypeBase::default(),
+                    r#type: LiteralTypeString::String,
+                    format: None,
+                }),
+                SchemaType::IntegerSchema(IntegerSchema::default()),
+            ],
+        });
+        let err = map_pydantic(&schema).unwrap_err();
+        assert!(err.0.contains("allOf"), "got: {}", err.0);
+    }
+
+    #[test]
+    fn map_pure_null_is_rejected() {
+        let err = map_pydantic(&SchemaType::NullSchema(NullSchema::default())).unwrap_err();
+        assert!(err.0.contains("null"), "got: {}", err.0);
     }
 }

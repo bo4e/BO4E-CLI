@@ -74,6 +74,7 @@ fn generated_crate_roundtrips_strict_matrix() {
 /// Embedded as `tests/roundtrip.rs` inside the generated crate. Each
 /// `#[test]` exercises one row or column of the matrix.
 const TEST_FILE: &str = r##"
+use bo4e_invariants_roundtrip::Toplevel;
 use bo4e_invariants_roundtrip::bo::foo::Foo;
 use bo4e_invariants_roundtrip::enums::color::Color;
 
@@ -180,5 +181,18 @@ fn row4_uses_bare_serde_default() {
     let json = r#"{"req_str": "x", "req_nullable_str": null}"#;
     let f: Foo = serde_json::from_str(json).unwrap();
     assert!(f.opt_nullable_str_null_default.is_none());
+}
+
+/// Root-level schema wiring: `Toplevel` lives at the crate root (no
+/// parent directory). The generator must declare `pub mod toplevel;`
+/// and re-export it from `lib.rs` so it's reachable as
+/// `crate::Toplevel`. The `use` line at the top of this file proves the
+/// re-export exists; this test exercises deserialisation.
+#[test]
+fn root_level_toplevel_deserialises() {
+    let json = r#"{"name": "abc"}"#;
+    let t: Toplevel = serde_json::from_str(json).expect("deserialize Toplevel");
+    assert_eq!(t.name, "abc");
+    assert_eq!(t.tag, Some("default-tag".to_string()));
 }
 "##;

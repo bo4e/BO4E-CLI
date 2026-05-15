@@ -1,0 +1,18 @@
+{
+  "title": "Toplevel",
+  "description": "Root-level schema (no subdirectory). Mirrors BO4E's ZusatzAttribut shape — the generator must declare it in the root mod.rs/lib.rs / __init__.py and re-export it so callers can reach `crate::Toplevel` / `bo4e.Toplevel`.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["name"],
+  "properties": {
+    "name": {
+      "title": "A required string field.",
+      "type": "string"
+    },
+    "tag": {
+      "title": "An optional nullable string with a literal default.",
+      "default": "default-tag",
+      "anyOf": [{ "type": "string" }, { "type": "null" }]
+    }
+  }
+}

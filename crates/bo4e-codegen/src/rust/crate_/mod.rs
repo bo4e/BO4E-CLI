@@ -6,12 +6,56 @@ use std::path::Path;
 
 use crate::Error;
 
+/// Validate a Cargo package name. Same rules as the CLI's
+/// `--crate-name` parser: starts with ASCII letter or `_`; remaining
+/// characters are ASCII alphanumeric / `_` / `-`; length ≤ 64.
+///
+/// Lifted into the library API so callers building `RustCrateOptions`
+/// directly (without going through the CLI) can't generate a malformed
+/// `Cargo.toml`.
+pub fn validate_crate_name(s: &str) -> Result<(), Error> {
+    const MAX_LEN: usize = 64;
+    if s.is_empty() {
+        return Err(Error::InvalidOption {
+            what: "crate_name".into(),
+            reason: "must not be empty".into(),
+        });
+    }
+    if s.len() > MAX_LEN {
+        return Err(Error::InvalidOption {
+            what: "crate_name".into(),
+            reason: format!("too long ({} chars); cap is {MAX_LEN}", s.len()),
+        });
+    }
+    let mut chars = s.chars();
+    let first = chars.next().expect("non-empty checked above");
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return Err(Error::InvalidOption {
+            what: "crate_name".into(),
+            reason: format!("`{s}` must start with an ASCII letter or `_`"),
+        });
+    }
+    for c in chars {
+        if !(c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            return Err(Error::InvalidOption {
+                what: "crate_name".into(),
+                reason: format!(
+                    "`{s}` contains invalid character `{c}`; \
+                     only ASCII alphanumerics, `_`, and `-` are allowed"
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
 pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
     opts: &crate::Options,
     crate_opts: &crate::RustCrateOptions,
 ) -> Result<crate::GenerateOutput, Error> {
+    validate_crate_name(&crate_opts.crate_name)?;
     if opts.clear_output {
         crate::clear_dir_if_exists(output_dir)?;
     } else {

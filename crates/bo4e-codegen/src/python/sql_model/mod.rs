@@ -80,10 +80,9 @@ pub fn generate(
     std::fs::write(&version_path, renderer::render_version(&version_str))?;
     written.push(version_path);
 
-    // ── Empty __init__.py per first-level subdirectory ─────────────────────────
-    let subdirs =
-        crate::layout::first_level_subdirs(plan.tables.values().map(|t| t.module.as_slice()));
-    crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
+    // ── Empty __init__.py at every nested subdirectory ─────────────────────────
+    let tree = crate::layout::ModuleTree::from_schemas(schemas);
+    crate::python::write_empty_subdir_inits_recursive(output_dir, &tree, &mut written)?;
 
     Ok(crate::GenerateOutput {
         written,

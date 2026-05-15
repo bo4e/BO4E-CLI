@@ -39,8 +39,11 @@ fn with_imports(rendered: impl Into<String>, imports: Vec<Import>) -> MappedType
 
 /// Map a JSON Schema fragment to its Rust type expression.
 ///
-/// Returns the "non-optional" form. The struct renderer wraps in `Option<T>`
-/// when the owning property is not in `required`.
+/// Follows the schema's nullability directly: `anyOf:[T, null]` returns
+/// `Option<T>`. Non-nullable schemas return their plain Rust type. The
+/// struct renderer no longer auto-wraps fields based on `required` —
+/// optionality is expressed by the field's default expression (driven
+/// by the strict required/default invariant in `crate::validate`).
 pub fn map_rust(schema_type: &SchemaType) -> Result<MappedType, UnsupportedShape> {
     Ok(match schema_type {
         SchemaType::StringSchema(s) => match &s.format {
@@ -152,23 +155,154 @@ impl std::fmt::Display for UnsupportedShape {
     }
 }
 
-/// Render a JSON Schema `default` (when present, primitive) as a Rust literal expression.
+/// Render a JSON Schema `default` (when present) as a Rust expression
+/// matching the schema's mapped Rust type.
+///
+/// Type-aware: for typed string formats (`date`, `time`, `date-time`,
+/// `uuid`), the default is parsed at generate time and emitted as a typed
+/// constructor (`chrono::NaiveDate::from_ymd_opt`, `uuid::uuid!`, etc.).
+/// For `DecimalSchema`, the default is emitted via the
+/// `rust_decimal_macros::dec!` macro. The validator
+/// (`crate::validate::object_invariants`) guarantees the default's
+/// primitive kind matches the schema type and that typed-format strings
+/// parse — so the `unwrap()` paths here cannot fail at runtime.
+///
+/// Returns `None` when the schema has no declared `default`.
 pub fn literal_default_rust(schema: &SchemaType) -> Option<String> {
-    crate::refs::schema_base(schema)
-        .default
-        .as_ref()
-        .map(|v| match v {
-            PrimitiveValue::Null => "None".into(),
-            PrimitiveValue::Bool(true) => "true".into(),
-            PrimitiveValue::Bool(false) => "false".into(),
-            PrimitiveValue::Integer(i) => format!("{i}i64"),
-            PrimitiveValue::Float(f) => format!("{f}f64"),
-            // `{s:?}` formats `&str` via its `Debug` impl, which emits a
-            // syntactically valid Rust string literal with quotes, backslashes,
-            // newlines, etc. properly escaped. Plain interpolation would break
-            // on a default like `He said "hi"` (or any backslash / control char).
-            PrimitiveValue::String(s) => format!("{s:?}.to_string()"),
-        })
+    let prim = crate::refs::schema_base(schema).default.as_ref()?;
+    Some(render_typed_default(schema, prim))
+}
+
+/// Render a primitive literal in the most permissive (type-unaware) way.
+/// Used as the fallback for schema shapes whose mapped Rust type matches
+/// the primitive directly (e.g. `bool`, `i64`, `f64`, plain `String`).
+fn render_primitive_default(prim: &PrimitiveValue) -> String {
+    match prim {
+        PrimitiveValue::Null => "None".into(),
+        PrimitiveValue::Bool(true) => "true".into(),
+        PrimitiveValue::Bool(false) => "false".into(),
+        PrimitiveValue::Integer(i) => format!("{i}i64"),
+        PrimitiveValue::Float(f) => format!("{f}f64"),
+        PrimitiveValue::String(s) => format!("{s:?}.to_string()"),
+    }
+}
+
+/// Type-aware default rendering. Dispatches on the schema variant (and
+/// `format` where relevant) to emit a Rust expression that's a value of
+/// the *mapped* Rust type, not just the JSON primitive.
+fn render_typed_default(schema: &SchemaType, prim: &PrimitiveValue) -> String {
+    use bo4e_schemas::models::json_schema::StringSchemaFormat;
+
+    // Null is the universal "absent" expression.
+    if matches!(prim, PrimitiveValue::Null) {
+        return "None".into();
+    }
+
+    match (schema, prim) {
+        (SchemaType::BooleanSchema(_), PrimitiveValue::Bool(b)) => b.to_string(),
+        (SchemaType::IntegerSchema(_), PrimitiveValue::Integer(i)) => format!("{i}i64"),
+        (SchemaType::NumberSchema(_), PrimitiveValue::Integer(i)) => format!("{i}_f64"),
+        (SchemaType::NumberSchema(_), PrimitiveValue::Float(f)) => format!("{f}_f64"),
+
+        // Decimal: use the dec! macro for all numeric forms. dec!() accepts
+        // any literal token (integer, float, parsed string) — the validator
+        // has already proven the value is well-formed.
+        (SchemaType::DecimalSchema(_), PrimitiveValue::Integer(i)) => {
+            format!("rust_decimal_macros::dec!({i})")
+        }
+        (SchemaType::DecimalSchema(_), PrimitiveValue::Float(f)) => {
+            format!("rust_decimal_macros::dec!({f})")
+        }
+        (SchemaType::DecimalSchema(_), PrimitiveValue::String(s)) => {
+            format!("rust_decimal_macros::dec!({s})")
+        }
+
+        // Plain string (no format) — `String::to_string()` from the literal.
+        (SchemaType::StringSchema(s), PrimitiveValue::String(v)) if s.format.is_none() => {
+            format!("{v:?}.to_string()")
+        }
+
+        // Typed string formats. The validator has parse-checked the value.
+        (SchemaType::StringSchema(s), PrimitiveValue::String(v)) => match &s.format {
+            Some(StringSchemaFormat::Date) => render_date_default(v),
+            Some(StringSchemaFormat::Time) => render_time_default(v),
+            Some(StringSchemaFormat::DateTime) => render_datetime_default(v),
+            Some(StringSchemaFormat::Uuid) => format!("uuid::uuid!({v:?})"),
+            _ => format!("{v:?}.to_string()"),
+        },
+
+        // ConstantSchema / StrEnum / $ref-to-enum: the renderer's
+        // `enum_variant_default_rust` path is preferred. Fall back to a
+        // plain string literal for cases where the enum context isn't
+        // resolvable (e.g. inline const without a $ref).
+        (SchemaType::ConstantSchema(_), PrimitiveValue::String(v)) => format!("{v:?}.to_string()"),
+        (SchemaType::StrEnum(_), PrimitiveValue::String(v)) => format!("{v:?}.to_string()"),
+
+        // anyOf:[T, null] — descend into the non-null branch. We've already
+        // handled PrimitiveValue::Null above; here we know prim is non-null
+        // and at least one branch is non-null (validator enforces this).
+        (SchemaType::AnyOf(a), _) => {
+            if let Some(non_null) = a
+                .any_of
+                .iter()
+                .find(|t| !matches!(t, SchemaType::NullSchema(_)))
+            {
+                return render_typed_default(non_null, prim);
+            }
+            render_primitive_default(prim)
+        }
+        (SchemaType::AllOf(a), _) => {
+            if let Some(only) = a.all_of.first() {
+                return render_typed_default(only, prim);
+            }
+            render_primitive_default(prim)
+        }
+
+        // Catch-all (Object, Array, AnySchema, ReferenceSchema, NullSchema):
+        // emit the primitive directly. Validator gates most of these out.
+        _ => render_primitive_default(prim),
+    }
+}
+
+/// Render a `date` default as `chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap()`.
+/// The validator has confirmed `value` parses as `%Y-%m-%d`.
+fn render_date_default(value: &str) -> String {
+    use chrono::Datelike;
+    match chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        Ok(d) => format!(
+            "chrono::NaiveDate::from_ymd_opt({}, {}, {}).unwrap()",
+            d.year(),
+            d.month(),
+            d.day()
+        ),
+        // Validator failure — keep going with a runtime parse so the
+        // generator never panics on malformed input that slipped through.
+        Err(_) => format!("chrono::NaiveDate::parse_from_str({value:?}, \"%Y-%m-%d\").unwrap()"),
+    }
+}
+
+/// Render a `time` default. Validator accepts `%H:%M:%S` or `%H:%M:%S%.f`.
+fn render_time_default(value: &str) -> String {
+    use chrono::Timelike;
+    let parsed = chrono::NaiveTime::parse_from_str(value, "%H:%M:%S")
+        .or_else(|_| chrono::NaiveTime::parse_from_str(value, "%H:%M:%S%.f"));
+    match parsed {
+        Ok(t) => format!(
+            "chrono::NaiveTime::from_hms_opt({}, {}, {}).unwrap()",
+            t.hour(),
+            t.minute(),
+            t.second()
+        ),
+        Err(_) => format!("chrono::NaiveTime::parse_from_str({value:?}, \"%H:%M:%S\").unwrap()"),
+    }
+}
+
+/// Render a `date-time` default as a parsed RFC3339 expression in `Utc`.
+/// We keep this as a runtime parse expression rather than reconstructing
+/// from components: chrono has no const-fn constructor for `DateTime<Utc>`
+/// and the validator has confirmed the value is RFC3339-parseable.
+fn render_datetime_default(value: &str) -> String {
+    format!("chrono::DateTime::parse_from_rfc3339({value:?}).unwrap().with_timezone(&chrono::Utc)")
 }
 
 /// If `schema` is a `$ref` to an enum (directly or via `anyOf:[$ref, null]`)
@@ -406,5 +540,86 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(literal_default_rust(&schema).unwrap(), "7i64");
+    }
+
+    #[test]
+    fn literal_default_date_renders_typed_constructor() {
+        let schema = SchemaType::StringSchema(StringSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("2024-01-15".into())),
+                ..Default::default()
+            },
+            r#type: LiteralTypeString::String,
+            format: Some(StringSchemaFormat::Date),
+        });
+        assert_eq!(
+            literal_default_rust(&schema).unwrap(),
+            "chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()"
+        );
+    }
+
+    #[test]
+    fn literal_default_time_renders_typed_constructor() {
+        let schema = SchemaType::StringSchema(StringSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("14:30:00".into())),
+                ..Default::default()
+            },
+            r#type: LiteralTypeString::String,
+            format: Some(StringSchemaFormat::Time),
+        });
+        assert_eq!(
+            literal_default_rust(&schema).unwrap(),
+            "chrono::NaiveTime::from_hms_opt(14, 30, 0).unwrap()"
+        );
+    }
+
+    #[test]
+    fn literal_default_datetime_renders_parse_from_rfc3339() {
+        let schema = SchemaType::StringSchema(StringSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("2024-01-15T12:00:00Z".into())),
+                ..Default::default()
+            },
+            r#type: LiteralTypeString::String,
+            format: Some(StringSchemaFormat::DateTime),
+        });
+        let s = literal_default_rust(&schema).unwrap();
+        assert!(s.contains("parse_from_rfc3339"), "got: {s}");
+        assert!(s.contains("Utc"), "got: {s}");
+    }
+
+    #[test]
+    fn literal_default_uuid_renders_uuid_macro() {
+        let schema = SchemaType::StringSchema(StringSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String(
+                    "550e8400-e29b-41d4-a716-446655440000".into(),
+                )),
+                ..Default::default()
+            },
+            r#type: LiteralTypeString::String,
+            format: Some(StringSchemaFormat::Uuid),
+        });
+        assert_eq!(
+            literal_default_rust(&schema).unwrap(),
+            "uuid::uuid!(\"550e8400-e29b-41d4-a716-446655440000\")"
+        );
+    }
+
+    #[test]
+    fn literal_default_decimal_renders_dec_macro() {
+        let schema = SchemaType::DecimalSchema(DecimalSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::Float(1.23)),
+                ..Default::default()
+            },
+            r#type: LiteralTypeDecimal::Number,
+            format: LiteralFormatDecimal::Decimal,
+        });
+        assert_eq!(
+            literal_default_rust(&schema).unwrap(),
+            "rust_decimal_macros::dec!(1.23)"
+        );
     }
 }

@@ -124,9 +124,11 @@ pub fn generate(
     )?;
     written.push(init_path);
 
-    // ── Empty __init__.py per first-level subdirectory ─────────────────────────
-    let subdirs = crate::layout::first_level_subdirs_from_schemas(schemas);
-    crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
+    // ── Empty __init__.py at every nested subdirectory ─────────────────────────
+    // Build the module tree so nested depths (e.g. `foo/bar/Baz.json`) get
+    // an __init__.py at every intermediate level, not just `foo/`.
+    let tree = crate::layout::ModuleTree::from_schemas(schemas);
+    crate::python::write_empty_subdir_inits_recursive(output_dir, &tree, &mut written)?;
 
     Ok(crate::GenerateOutput {
         written,
@@ -195,7 +197,11 @@ fn render_object(
     let required: BTreeSet<&str> = obj.required.iter().map(|s| s.as_str()).collect();
 
     for (prop_name, prop_schema) in &obj.properties {
-        let mapped = map_pydantic(prop_schema);
+        let mapped = map_pydantic(prop_schema).map_err(|e| Error::UnsupportedSchemaShape {
+            schema_name: class_name.to_string(),
+            property: prop_name.clone(),
+            shape: e.0,
+        })?;
         imports.extend(mapped.imports.iter().cloned());
 
         let is_required = required.contains(prop_name.as_str());

@@ -190,7 +190,9 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
                         continue;
                     }
                     if is_simple_scalar(prop_schema) {
-                        if let Some(field) = simple_scalar_field(prop_name, prop_schema) {
+                        if let Some(field) =
+                            simple_scalar_field(&class_name, prop_name, prop_schema)?
+                        {
                             fields.push(field);
                         }
                         continue;
@@ -249,11 +251,19 @@ fn synth_id_field(obj: &ObjectSchema) -> SqlField {
     }
 }
 
-fn simple_scalar_field(prop_name: &str, schema: &SchemaType) -> Option<SqlField> {
+fn simple_scalar_field(
+    owner_class: &str,
+    prop_name: &str,
+    schema: &SchemaType,
+) -> Result<Option<SqlField>, Error> {
     if !is_simple_scalar(schema) {
-        return None;
+        return Ok(None);
     }
-    let mapped = map_pydantic(schema);
+    let mapped = map_pydantic(schema).map_err(|e| Error::UnsupportedSchemaShape {
+        schema_name: owner_class.to_string(),
+        property: prop_name.to_string(),
+        shape: e.0,
+    })?;
     let nullable = mapped.rendered.contains("| None");
     let type_ = mapped.rendered.clone();
     let default = if nullable {
@@ -261,14 +271,14 @@ fn simple_scalar_field(prop_name: &str, schema: &SchemaType) -> Option<SqlField>
     } else {
         literal_default(schema)
     };
-    Some(SqlField::Scalar {
+    Ok(Some(SqlField::Scalar {
         name: to_snake_case(prop_name),
         type_,
         nullable,
         default,
         title: literal_title(schema),
         docstring: literal_description(schema),
-    })
+    }))
 }
 
 fn is_simple_scalar(schema: &SchemaType) -> bool {

@@ -136,21 +136,33 @@ These functions are pure — no IO, no globals. Test them with plain assertions.
 
 ## Error handling
 
-`Error` is `thiserror`-derived (`Io`, `TemplateRender`, `TemplateNotFound`, `SchemaLookup`, `Schema`, `UnclassifiableProperty`, `UnsupportedSchemaShape`, `InconsistentSchema`). Don't introduce `anyhow` here — the CLI does the final-line printing.
+`Error` is `thiserror`-derived (`Io`, `TemplateRender`, `TemplateNotFound`, `SchemaLookup`, `Schema`, `UnclassifiableProperty`, `UnsupportedSchemaShape`, `InconsistentSchema`, `InvalidOption`). Don't introduce `anyhow` here — the CLI does the final-line printing.
 
 ## Schema invariants (validated at generate time)
 
-`crate::validate::object_invariants` runs over every `ObjectSchema` before any renderer touches it. Two rules:
+`crate::validate::object_invariants` runs over every `ObjectSchema` before any renderer touches it:
 
-1. **`required ⇔ no default`** (the strict required/default invariant). A property is in `required` *iff* it has no declared `default`. Both violations raise `Error::InconsistentSchema`:
+1. **`required` references `properties`.** Every name in `required` must have a matching entry in `properties` — otherwise the generated type omits the field silently, breaking the schema contract.
+2. **`required ⇔ no default`** (the strict required/default invariant). A property is in `required` *iff* it has no declared `default`. Both violations raise `Error::InconsistentSchema`:
    - `required + default declared` — the default is unreachable.
    - `optional + no default` — the runtime has no fallback when the JSON key is absent.
+3. **Default value matches the schema type.** A `string` property only accepts a `String` default; an `integer` only `Integer`; a nullable `anyOf:[T, null]` accepts `T`'s kinds plus `Null`. Typed-format string defaults (`date`, `date-time`, `time`, `uuid`) are also parse-checked at generate time so the renderer can emit typed constructors (`chrono::NaiveDate::from_ymd_opt(…)`, `uuid::uuid!(…)`, etc.) without runtime parse failures.
+4. **Property name shape.** Names must be `[A-Za-z_][A-Za-z0-9_]*` (camelCase or snake_case identifier shape); anything else can't round-trip through `to_snake_case` → `rust_field_name` / `python_attr_name` without producing invalid identifiers in the generated code.
+5. **Pure `type: null` rejected.** A property whose schema *is* `NullSchema` (rather than appearing as a branch of `anyOf:[T, null]`) has no use in BO4E.
 
-2. **AllOf / AnyOf shape restrictions** (enforced inside `rust/types.rs::map_rust` and matched by the python mapper; both raise `Error::UnsupportedSchemaShape`):
-   - `allOf` must have **exactly one** element. Multi-element `allOf` (intersection) is rejected.
-   - `anyOf` must be the `Optional` pattern: **one** non-null branch plus **one** `null` branch. Real unions (multiple non-null branches) and `anyOf` without a `null` branch are rejected.
+**AllOf / AnyOf shape restrictions** are enforced symmetrically in both `rust/types.rs::map_rust` *and* `python/types.rs::map_pydantic`. Both functions return `Result<MappedType, UnsupportedShape>` and the orchestrators convert the error to `Error::UnsupportedSchemaShape`:
+- `allOf` must have **exactly one** element. Multi-element `allOf` (intersection) is rejected.
+- `anyOf` must be the `Optional` pattern: **one** non-null branch plus **one** `null` branch. Real unions and `anyOf` without a `null` branch are rejected.
 
 No renderer special-cases field names. `_version`, `_typ`, `_id` are mapped purely from their schema shape; `bo4e edit` changes flow through to the generated output.
+
+## Layout: root + arbitrary depth
+
+`crate::layout::ModuleTree::from_schemas(schemas)` builds a tree view of where every schema lives in the output. Each tree node carries its direct leaves and its child sub-directory names; orchestrators walk the tree to emit `mod.rs` / `__init__.py` at every level.
+
+- **Root-level schemas** (e.g. BO4E's `ZusatzAttribut.json`) live at the output root. The root `mod.rs` (or `lib.rs` in `rust-crate`) declares them via `pub mod <leaf>;` and re-exports them via `pub use <leaf>::<Class>;`. The pydantic root `__init__.py` re-exports them via `from .<leaf> import <Class>`.
+- **Arbitrary depth** is supported: `foo/bar/Baz.json` produces a `mod.rs` / `__init__.py` at every intermediate level, with each level declaring its immediate children.
+- The `enum/` directory is renamed to `enums/` in Rust output (`enum` is a keyword); the rename applies recursively to any `enum` segment at any depth. Python keeps `enum/` as-is since it's not a Python keyword.
 
 ## Adding a new output type
 

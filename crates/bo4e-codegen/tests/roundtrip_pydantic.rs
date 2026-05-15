@@ -85,8 +85,19 @@ pkg_name = pkg_root.name
 import importlib
 foo_mod = importlib.import_module(f"{pkg_name}.bo.foo")
 color_mod = importlib.import_module(f"{pkg_name}.enum.color")
+toplevel_mod = importlib.import_module(f"{pkg_name}.toplevel")
 Foo = foo_mod.Foo
 Color = color_mod.Color
+Toplevel = toplevel_mod.Toplevel
+
+# Root-level schema wiring: `Toplevel` lives at the package root
+# (no subdirectory) and must be importable both via its module path
+# and via the package's `__init__.py` re-export.
+t = Toplevel.model_validate({"name": "abc"})
+assert t.name == "abc"
+assert t.tag == "default-tag"
+pkg_mod = importlib.import_module(pkg_name)
+assert hasattr(pkg_mod, "Toplevel"), "Toplevel must be re-exported from root __init__"
 
 # 1. Missing-key path: every optional field falls back to schema default.
 f = Foo.model_validate({"_id": None, "req_str": "hi", "req_nullable_str": None})

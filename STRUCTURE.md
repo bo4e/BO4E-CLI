@@ -82,11 +82,22 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 
 - **Schemas are editable, no special-cased field names.** Every rendering decision is driven by the schema's *shape*, never by a field's name. `_version`, `_typ`, `_id` are not special — they're whatever the schema says they are. `bo4e edit` is free to add/remove/rename fields or flip their `required`/`default` shape, and the generated code follows. If a renderer ever needs a per-name carve-out, that's a sign the schema needs a more precise type, not the codegen needs a heuristic.
 
-- **AllOf and AnyOf are restricted.** The type mappers accept only:
+- **AllOf and AnyOf are restricted (Rust *and* Python).** Both type mappers (`rust::types::map_rust`, `python::types::map_pydantic`) accept only:
   - `allOf` with **exactly one** element (used as a single-item wrapper). Multi-element `allOf` (intersection) is rejected as `UnsupportedSchemaShape`.
   - `anyOf` with **one** non-null branch and **one** `null` branch — the Optional/nullable pattern. Anything else (real unions, multiple non-null branches, missing null branch) is rejected.
 
-  Real unions and intersections would require sum-type emission with discriminators; until BO4E uses them, the generator refuses early rather than producing surprising output.
+  **BO4E does not use multi-branch `anyOf` / multi-element `allOf` and is not planned to.** Real unions and intersections would require sum-type emission with discriminators; the generator refuses early rather than producing surprising output. Earlier versions of the Python mapper rendered these shapes as `A | B` / `A & B` approximations — that path is gone.
+
+- **Layout: root + arbitrary depth.** Schemas live at any directory depth under the schema root. The root holds files like `ZusatzAttribut.json` (no subdirectory) plus subdirectory groupings like `bo/`, `com/`, `enum/`. The Rust generator emits a `mod.rs` at every directory level (including the output root, where it becomes `lib.rs` in the `rust-crate` flavour) so every schema is reachable. The pydantic generator writes an empty `__init__.py` at every nested directory and re-exports all classes from the root `__init__.py` — so `from <pkg> import <Class>` works for any depth. The `enum/` directory is renamed to `enums/` in Rust output because `enum` is a Rust keyword; this rename is recursive (any `enum` segment, at any depth, becomes `enums`).
+
+- **Schema validator runs at generate time.** `crate::validate::object_invariants` enforces, for every object schema:
+  1. Every name in `required` is also declared in `properties`.
+  2. Every property is in `required` iff it has *no* schema-declared default (the strict required/default matrix).
+  3. Every property's default value's primitive kind is compatible with its declared schema type (e.g. a `string`-typed property may only declare a `String`-kind default; an `anyOf:[T, null]` property accepts `T`'s kinds plus `Null`).
+  4. Typed-format string defaults (`date`, `date-time`, `time`, `uuid`) parse as that format at generate time.
+  5. Property names are legal identifier sources (`[A-Za-z_][A-Za-z0-9_]*`).
+  6. Pure `type: null` properties are rejected.
+  All violations surface as `Error::InconsistentSchema { schema, property, reason }` before any rendering happens.
 
 - **Closure-based, object-safe `Visitable`** for schema tree traversal. Avoids `RefCell`-style runtime borrow checking; supports early termination via `ControlFlow`. Used by the `edit` transforms and by `diff` walkers.
 - **Console singleton with sentinel markup.** The CLI uses a `OnceLock<Console>` so every print site (including in libraries that the CLI calls into) renders through one highlighter. `--verbose` / `--quiet` filter by `Level`. Warnings/errors always go to stderr and are never suppressed (info goes to stdout).

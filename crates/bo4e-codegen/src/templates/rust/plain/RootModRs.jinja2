@@ -2,7 +2,14 @@
 //!
 //! Querying the BO4E version at runtime: `crate::VERSION`.
 
-{% for m in top_modules -%}
+{%- for m in top_modules %}
 pub mod {{ m }};
-{% endfor %}
+{%- endfor %}
+{%- for m in modules %}
+pub mod {{ m }};
+{%- endfor %}
+{%- for r in reexports %}
+pub use {{ r.module }}::{{ r.name }};
+{%- endfor %}
+
 pub const VERSION: &str = "{{ version }}";

@@ -31,11 +31,16 @@ pub enum Error {
 
     /// The schema violates the required/default invariant: a property must be
     /// in `required` *iff* it has no schema-declared default. See
-    /// [`crate::validate::object_invariants`].
+    /// `crate::validate::object_invariants`.
     #[error("inconsistent schema {schema}::{property}: {reason}")]
     InconsistentSchema {
         schema: String,
         property: String,
         reason: String,
     },
+
+    /// A caller-supplied option (e.g. `RustCrateOptions::crate_name`) is
+    /// malformed and cannot be rendered safely.
+    #[error("invalid {what}: {reason}")]
+    InvalidOption { what: String, reason: String },
 }

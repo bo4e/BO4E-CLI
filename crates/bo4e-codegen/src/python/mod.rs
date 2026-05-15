@@ -1,5 +1,4 @@
 use crate::error::Error;
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 pub(crate) mod imports;
@@ -54,18 +53,30 @@ pub(crate) fn python_attr_name(snake: &str) -> String {
     }
 }
 
-/// Write an empty `__init__.py` to each first-level subdirectory listed in `subdirs`,
-/// skipping any that already exist. Pushes resulting paths onto `written`.
-pub(crate) fn write_empty_subdir_inits(
+/// Write an empty `__init__.py` to every non-root directory in the
+/// supplied [`crate::layout::ModuleTree`], skipping any that already
+/// exist. Supports arbitrarily nested module trees (e.g. `foo/bar/Baz`
+/// gets `__init__.py` at `foo/` and `foo/bar/`). Pushes resulting paths
+/// onto `written`.
+#[cfg(any(feature = "python-pydantic", feature = "python-sql-model"))]
+pub(crate) fn write_empty_subdir_inits_recursive(
     output_dir: &Path,
-    subdirs: &BTreeSet<String>,
+    tree: &crate::layout::ModuleTree,
     written: &mut Vec<PathBuf>,
 ) -> Result<(), Error> {
-    for sub in subdirs {
-        let p = output_dir.join(sub).join("__init__.py");
-        if !p.exists() {
-            std::fs::write(&p, "")?;
-            written.push(p);
+    for (dir_path, _) in tree.iter() {
+        if dir_path.is_empty() {
+            continue; // root __init__.py is written separately with re-exports
+        }
+        let mut p = output_dir.to_path_buf();
+        for seg in dir_path {
+            p.push(seg);
+        }
+        let init = p.join("__init__.py");
+        if !init.exists() {
+            std::fs::create_dir_all(&p)?;
+            std::fs::write(&init, "")?;
+            written.push(init);
         }
     }
     Ok(())

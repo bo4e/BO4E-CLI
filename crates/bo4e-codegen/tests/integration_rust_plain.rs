@@ -159,3 +159,106 @@ fn mod_rs_reexport_preserves_internal_camel_case() {
         "expected reexport of the real PascalCase class name, got:\n{bo_mod}",
     );
 }
+
+/// Regression: root-level schemas (no parent directory, e.g.
+/// `ZusatzAttribut.json`) must be declared as `pub mod <leaf>;` in the
+/// root `mod.rs` and re-exported via `pub use`, so callers can reach
+/// `crate::ZusatzAttribut`. Before this fix the file landed on disk but
+/// was inaccessible from the generated crate.
+#[test]
+fn root_level_schema_is_declared_and_reexported() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut schemas = bo4e_schemas::Schemas::new("v202401.0.0".parse().unwrap());
+
+    let mut s = bo4e_schemas::Schema::new(vec!["ZusatzAttribut".into()], None).unwrap();
+    s.load_schema(
+        r#"{"type":"object","title":"ZusatzAttribut","properties":{"name":{"type":"string"}},"required":["name"]}"#
+            .into(),
+    );
+    schemas
+        .add_schema(std::rc::Rc::new(std::cell::RefCell::new(s)))
+        .unwrap();
+
+    bo4e_codegen::rust::plain::generate(
+        &schemas,
+        tmp.path(),
+        &bo4e_codegen::Options {
+            clear_output: false,
+            templates_dir: None,
+        },
+    )
+    .expect("generate");
+
+    // The leaf file lives at the output root.
+    assert!(
+        tmp.path().join("zusatzattribut.rs").exists(),
+        "root-level schema file missing"
+    );
+
+    let root_mod = std::fs::read_to_string(tmp.path().join("mod.rs")).unwrap();
+    assert!(
+        root_mod.contains("pub mod zusatzattribut;"),
+        "root mod.rs must declare the root-level module, got:\n{root_mod}"
+    );
+    assert!(
+        root_mod.contains("pub use zusatzattribut::ZusatzAttribut;"),
+        "root mod.rs must re-export the root-level class, got:\n{root_mod}"
+    );
+}
+
+/// Arbitrary-depth nesting: a schema at `foo/bar/Baz.json` must generate
+/// `foo/mod.rs` (declaring `pub mod bar;`), `foo/bar/mod.rs` (declaring
+/// `pub mod baz;` + re-exporting `Baz`), and the root `mod.rs` must
+/// declare `pub mod foo;`.
+#[test]
+fn deeply_nested_schema_emits_mod_rs_at_every_level() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut schemas = bo4e_schemas::Schemas::new("v202401.0.0".parse().unwrap());
+
+    let mut s =
+        bo4e_schemas::Schema::new(vec!["foo".into(), "bar".into(), "Baz".into()], None).unwrap();
+    s.load_schema(
+        r#"{"type":"object","title":"Baz","properties":{"name":{"type":"string"}},"required":["name"]}"#
+            .into(),
+    );
+    schemas
+        .add_schema(std::rc::Rc::new(std::cell::RefCell::new(s)))
+        .unwrap();
+
+    bo4e_codegen::rust::plain::generate(
+        &schemas,
+        tmp.path(),
+        &bo4e_codegen::Options {
+            clear_output: false,
+            templates_dir: None,
+        },
+    )
+    .expect("generate");
+
+    let root_mod = std::fs::read_to_string(tmp.path().join("mod.rs")).unwrap();
+    assert!(
+        root_mod.contains("pub mod foo;"),
+        "root must declare `pub mod foo;`, got:\n{root_mod}"
+    );
+
+    let foo_mod = std::fs::read_to_string(tmp.path().join("foo/mod.rs")).unwrap();
+    assert!(
+        foo_mod.contains("pub mod bar;"),
+        "foo/mod.rs must declare `pub mod bar;`, got:\n{foo_mod}"
+    );
+
+    let bar_mod = std::fs::read_to_string(tmp.path().join("foo/bar/mod.rs")).unwrap();
+    assert!(
+        bar_mod.contains("pub mod baz;"),
+        "foo/bar/mod.rs must declare `pub mod baz;`, got:\n{bar_mod}"
+    );
+    assert!(
+        bar_mod.contains("pub use baz::Baz;"),
+        "foo/bar/mod.rs must re-export Baz, got:\n{bar_mod}"
+    );
+
+    assert!(
+        tmp.path().join("foo/bar/baz.rs").exists(),
+        "leaf file missing at foo/bar/baz.rs"
+    );
+}

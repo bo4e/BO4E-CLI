@@ -57,38 +57,13 @@ pub struct RustCrateArgs {
     pub crate_name: String,
 }
 
-/// clap value-parser for `--crate-name`. Accepts the same shape that Cargo
-/// itself accepts as a `[package].name`: starts with an ASCII letter or
-/// underscore, followed by ASCII alphanumerics / underscores / hyphens.
-/// Length capped at 64 to keep generated `Cargo.toml` lines reasonable and
-/// to block pathological inputs. Rejecting at parse time prevents TOML
-/// injection through the Cargo.toml template (quotes, newlines, etc.).
+/// clap value-parser for `--crate-name`. Delegates to the library's
+/// `bo4e_codegen::rust::crate_::validate_crate_name` so the CLI and the
+/// library API share one source of truth for what's a legal Cargo
+/// package name.
+#[cfg(feature = "rust-crate")]
 fn parse_crate_name(s: &str) -> Result<String, String> {
-    const MAX_LEN: usize = 64;
-    if s.is_empty() {
-        return Err("crate name cannot be empty".into());
-    }
-    if s.len() > MAX_LEN {
-        return Err(format!(
-            "crate name too long ({} chars); cap is {MAX_LEN}",
-            s.len()
-        ));
-    }
-    let mut chars = s.chars();
-    let first = chars.next().unwrap();
-    if !(first.is_ascii_alphabetic() || first == '_') {
-        return Err(format!(
-            "crate name `{s}` must start with an ASCII letter or `_`",
-        ));
-    }
-    for c in chars {
-        if !(c.is_ascii_alphanumeric() || c == '_' || c == '-') {
-            return Err(format!(
-                "crate name `{s}` contains invalid character `{c}`; \
-                 only ASCII alphanumerics, `_`, and `-` are allowed",
-            ));
-        }
-    }
+    bo4e_codegen::rust::crate_::validate_crate_name(s).map_err(|e| e.to_string())?;
     Ok(s.to_string())
 }
 
