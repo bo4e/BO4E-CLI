@@ -51,16 +51,153 @@ fn with_import(rendered: impl Into<String>, module: &str, name: &str) -> MappedT
     }
 }
 
-/// Render a JSON Schema `default` (when present, primitive) as a Python literal expression.
+/// Render a JSON Schema `default` (when present) as a Python expression of
+/// the schema's *mapped* Python type — symmetric with Rust's
+/// `literal_default_rust`.
+///
+/// Typed-format string defaults emit immutable typed constructors:
+/// - `format: date` → `date(y, m, d)`
+/// - `format: time` → `time(h, m, s, microsecond=N)`
+/// - `format: date-time` → `datetime.fromisoformat("…")`
+/// - `format: uuid` → `UUID("…")`
+/// - `DecimalSchema` → `Decimal("…")` (always string form, even for
+///   numeric primitive defaults — preserves precision)
+///
+/// All five constructors return immutable values, so passing them as
+/// `Field(default=…)` is safe (mutable defaults shared across pydantic
+/// instances would be a bug; these aren't). For all other primitives
+/// we fall through to the raw Python literal — pydantic v2's automatic
+/// coercion handles any remaining type mapping.
+///
+/// The constructors reuse types already imported by [`map_pydantic`]
+/// for the field's *type* annotation; no extra imports are needed
+/// beyond what the type mapper already collects.
 pub(crate) fn literal_default(schema: &SchemaType) -> Option<String> {
-    schema_base(schema).default.as_ref().map(|v| match v {
-        PrimitiveValue::Null => "None".into(),
-        PrimitiveValue::Bool(true) => "True".into(),
-        PrimitiveValue::Bool(false) => "False".into(),
-        PrimitiveValue::Integer(i) => i.to_string(),
-        PrimitiveValue::Float(f) => f.to_string(),
-        PrimitiveValue::String(s) => format!("\"{s}\""),
-    })
+    let prim = schema_base(schema).default.as_ref()?;
+    Some(render_typed_default(schema, prim))
+}
+
+/// Dispatches strictly on the `(schema, primitive)` pair. Mirrors the
+/// Rust side's strict matching; unmatched pairs are validator gaps
+/// and panic via `unreachable!`. The validator
+/// (`crate::validate::all_schemas`) is the single source of truth for
+/// what's reachable here.
+fn render_typed_default(schema: &SchemaType, prim: &PrimitiveValue) -> String {
+    match (schema, prim) {
+        // ── Null at any level renders as Python `None`. ───────────
+        (_, PrimitiveValue::Null) => "None".into(),
+
+        // ── Nullable wrappers: descend into the non-null branch. ──
+        (SchemaType::AnyOf(a), p) => {
+            let non_null = a
+                .any_of
+                .iter()
+                .find(|t| !matches!(t, SchemaType::NullSchema(_)))
+                .expect("validator: anyOf with default must have a non-null branch");
+            render_typed_default(non_null, p)
+        }
+        (SchemaType::AllOf(a), p) => {
+            let only = a
+                .all_of
+                .first()
+                .expect("validator: allOf must have exactly one element");
+            render_typed_default(only, p)
+        }
+
+        // ── Bool / number primitives (no type widening needed). ───
+        (SchemaType::BooleanSchema(_), PrimitiveValue::Bool(true)) => "True".into(),
+        (SchemaType::BooleanSchema(_), PrimitiveValue::Bool(false)) => "False".into(),
+        (SchemaType::IntegerSchema(_), PrimitiveValue::Integer(i)) => i.to_string(),
+        (SchemaType::NumberSchema(_), PrimitiveValue::Integer(i)) => format!("{i}.0"),
+        (SchemaType::NumberSchema(_), PrimitiveValue::Float(f)) => f.to_string(),
+
+        // ── Decimal: always string form for precision. ────────────
+        (SchemaType::DecimalSchema(_), PrimitiveValue::Integer(i)) => format!("Decimal(\"{i}\")"),
+        (SchemaType::DecimalSchema(_), PrimitiveValue::Float(f)) => format!("Decimal(\"{f}\")"),
+        (SchemaType::DecimalSchema(_), PrimitiveValue::String(s)) => format!("Decimal(\"{s}\")"),
+
+        // ── String: plain and typed-format. ───────────────────────
+        (SchemaType::StringSchema(s), PrimitiveValue::String(v)) if s.format.is_none() => {
+            format!("\"{v}\"")
+        }
+        (SchemaType::StringSchema(s), PrimitiveValue::String(v)) => match &s.format {
+            Some(StringSchemaFormat::Date) => render_python_date(v),
+            Some(StringSchemaFormat::Time) => render_python_time(v),
+            Some(StringSchemaFormat::DateTime) => render_python_datetime(v),
+            Some(StringSchemaFormat::Uuid) => format!("UUID(\"{v}\")"),
+            _ => format!("\"{v}\""),
+        },
+
+        // ── Enum / const / $ref string defaults. The pydantic
+        // generator's `qualify_enum_default` wraps a quoted-string
+        // default to `EnumName.<member>` when the schema $refs an
+        // enum; this base rendering covers the inline cases. ─────
+        (SchemaType::ConstantSchema(_), PrimitiveValue::String(v))
+        | (SchemaType::StrEnum(_), PrimitiveValue::String(v))
+        | (SchemaType::ReferenceSchema(_), PrimitiveValue::String(v)) => format!("\"{v}\""),
+
+        // ── Any / Object: validator only accepts Null here; the
+        // PrimitiveValue::Null arm at the top already handles it. ─
+        (SchemaType::AnySchema(_), _) | (SchemaType::Object(_), _) => "None".into(),
+
+        // ── Unreachable per validator. Any pair landing here is a
+        // gap in `validate::all_schemas`. ─────────────────────────
+        (schema, prim) => unreachable!(
+            "literal_default: validator should have rejected this pair before code generation. \
+             schema={schema:?} default={prim:?}"
+        ),
+    }
+}
+
+/// Render a `date` default as `date(y, m, d)`. Validator confirms the
+/// value parses as `%Y-%m-%d`.
+fn render_python_date(value: &str) -> String {
+    use chrono::Datelike;
+    match chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        Ok(d) => format!("date({}, {}, {})", d.year(), d.month(), d.day()),
+        Err(_) => format!("date.fromisoformat(\"{value}\")"),
+    }
+}
+
+/// Render a `time` default as `time(h, m, s, microsecond=N)` (Python
+/// time has microsecond resolution, not nanosecond — chrono nanoseconds
+/// are truncated to microseconds, which matches what Python could
+/// round-trip anyway).
+fn render_python_time(value: &str) -> String {
+    use chrono::Timelike;
+    let parsed = chrono::NaiveTime::parse_from_str(value, "%H:%M:%S")
+        .or_else(|_| chrono::NaiveTime::parse_from_str(value, "%H:%M:%S%.f"));
+    match parsed {
+        Ok(t) => {
+            let micro = t.nanosecond() / 1_000;
+            if micro == 0 {
+                format!("time({}, {}, {})", t.hour(), t.minute(), t.second())
+            } else {
+                format!(
+                    "time({}, {}, {}, microsecond={micro})",
+                    t.hour(),
+                    t.minute(),
+                    t.second()
+                )
+            }
+        }
+        Err(_) => format!("time.fromisoformat(\"{value}\")"),
+    }
+}
+
+/// Render a `date-time` default. We use `datetime.fromisoformat(…)`
+/// because the constructor form would need an extra `from datetime
+/// import timezone` import that the type mapper doesn't otherwise
+/// add, and the parse method returns an immutable `datetime` — so the
+/// "no mutable defaults" rule is still satisfied. Normalises the
+/// trailing `Z` to `+00:00` so the call works on pre-3.11 Pythons.
+fn render_python_datetime(value: &str) -> String {
+    let normalised = if let Some(stripped) = value.strip_suffix('Z') {
+        format!("{stripped}+00:00")
+    } else {
+        value.to_string()
+    };
+    format!("datetime.fromisoformat(\"{normalised}\")")
 }
 
 // ── Public mapping function ───────────────────────────────────────────────────
@@ -188,23 +325,44 @@ pub fn map_pydantic(schema_type: &SchemaType) -> Result<MappedType, UnsupportedS
             }
         }
 
-        // ── Inline enum (string enum as a schema-type fragment) ──────────────
-        // A StrEnum used as a field type is always accessed via $ref; meeting it
-        // inline here is unusual but we map it to `str` as a conservative fallback.
+        // ── Single-variant inline string enum ────────────────────────────────
+        // Schema-shape narrowing: a `StrEnum` with exactly one declared
+        // member constrains the value to that one literal, so emit
+        // `Literal["X"]` instead of bare `str` — symmetric with Rust's
+        // synthetic single-variant enum narrowing in
+        // `rust::render::single_variant_discriminator`. Multi-member
+        // enums stay as the loose `str` fallback (they're accessed via
+        // `$ref` to an enum module, which the ReferenceSchema arm
+        // above handles).
+        SchemaType::StrEnum(e) if e.enum_values.len() == 1 => literal_str_type(&e.enum_values[0]),
         SchemaType::StrEnum(_) => simple("str"),
 
         // ── Inline object ────────────────────────────────────────────────────
         // Inline object definitions inside another schema are rare; map to Any.
         SchemaType::Object(_) => with_import("Any", "typing", "Any"),
 
-        // ── Constant ─────────────────────────────────────────────────────────
-        // Loose fallback. A stricter mapping would be `Literal["X"]` (with a
-        // `typing.Literal` import) since the schema actually constrains the
-        // value to that single string, but the per-field pydantic renderer
-        // no longer narrows constant defaults specially — they fall through
-        // here and inherit the value via `Field(default=…)` instead.
-        SchemaType::ConstantSchema(_) => simple("str"),
+        // ── Constant: single-value `Literal["X"]` narrowing. ─────────────────
+        // Mirrors the Rust single_variant_discriminator path. Multi-member
+        // schemas (e.g. an unconstrained $ref to an enum) are handled by the
+        // ReferenceSchema arm above; this arm covers inline `const` values.
+        SchemaType::ConstantSchema(c) => literal_str_type(&c.constant),
     })
+}
+
+/// Build a `Literal["X"]` type expression with the matching
+/// `from typing import Literal` import. Used by the
+/// single-variant-discriminator narrowing path so the generated
+/// Python types reflect the schema's single-value constraint.
+fn literal_str_type(value: &str) -> MappedType {
+    let mut imports = BTreeSet::new();
+    imports.insert(Import::Named {
+        module: "typing".to_string(),
+        name: "Literal".to_string(),
+    });
+    MappedType {
+        rendered: format!("Literal[\"{value}\"]"),
+        imports,
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -467,5 +625,149 @@ mod tests {
     fn map_pure_null_is_rejected() {
         let err = map_pydantic(&SchemaType::NullSchema(NullSchema::default())).unwrap_err();
         assert!(err.0.contains("null"), "got: {}", err.0);
+    }
+
+    // ── Single-variant Literal narrowing (mirror of Rust side) ───────────────
+    #[test]
+    fn map_constant_narrows_to_literal() {
+        use bo4e_schemas::models::json_schema::ConstantSchema;
+        let schema = SchemaType::ConstantSchema(ConstantSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "ANGEBOT".to_string(),
+        });
+        let m = map_pydantic(&schema).unwrap();
+        assert_eq!(m.rendered, "Literal[\"ANGEBOT\"]");
+        assert!(m.imports.contains(&Import::Named {
+            module: "typing".into(),
+            name: "Literal".into(),
+        }));
+    }
+
+    #[test]
+    fn map_single_member_strenum_narrows_to_literal() {
+        use bo4e_schemas::models::json_schema::StrEnumSchema;
+        let schema = SchemaType::StrEnum(StrEnumSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            enum_values: vec!["ANGEBOT".into()],
+        });
+        let m = map_pydantic(&schema).unwrap();
+        assert_eq!(m.rendered, "Literal[\"ANGEBOT\"]");
+        assert!(m.imports.contains(&Import::Named {
+            module: "typing".into(),
+            name: "Literal".into(),
+        }));
+    }
+
+    #[test]
+    fn map_multi_member_strenum_stays_str() {
+        use bo4e_schemas::models::json_schema::StrEnumSchema;
+        let schema = SchemaType::StrEnum(StrEnumSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            enum_values: vec!["A".into(), "B".into()],
+        });
+        let m = map_pydantic(&schema).unwrap();
+        assert_eq!(m.rendered, "str");
+    }
+
+    #[test]
+    fn anyof_const_and_null_renders_optional_literal() {
+        use bo4e_schemas::models::json_schema::ConstantSchema;
+        let schema = SchemaType::AnyOf(AnyOfSchema {
+            base: TypeBase::default(),
+            any_of: vec![
+                SchemaType::ConstantSchema(ConstantSchema {
+                    base: TypeBase::default(),
+                    r#type: LiteralTypeString::String,
+                    format: None,
+                    constant: "ANGEBOT".to_string(),
+                }),
+                SchemaType::NullSchema(NullSchema::default()),
+            ],
+        });
+        let m = map_pydantic(&schema).unwrap();
+        assert_eq!(m.rendered, "Literal[\"ANGEBOT\"] | None");
+    }
+
+    // ── Typed-format defaults: immutable constructors ────────────────────────
+    fn s_string(format: Option<StringSchemaFormat>, default: &str) -> SchemaType {
+        SchemaType::StringSchema(StringSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String(default.to_string())),
+                ..TypeBase::default()
+            },
+            r#type: LiteralTypeString::String,
+            format,
+        })
+    }
+
+    #[test]
+    fn literal_default_date_emits_constructor() {
+        let s = s_string(Some(StringSchemaFormat::Date), "2024-01-15");
+        assert_eq!(literal_default(&s).unwrap(), "date(2024, 1, 15)");
+    }
+
+    #[test]
+    fn literal_default_time_no_fractional() {
+        let s = s_string(Some(StringSchemaFormat::Time), "14:30:00");
+        assert_eq!(literal_default(&s).unwrap(), "time(14, 30, 0)");
+    }
+
+    #[test]
+    fn literal_default_time_with_microseconds() {
+        let s = s_string(Some(StringSchemaFormat::Time), "14:30:00.123");
+        assert_eq!(
+            literal_default(&s).unwrap(),
+            "time(14, 30, 0, microsecond=123000)"
+        );
+    }
+
+    #[test]
+    fn literal_default_datetime_normalises_z_suffix() {
+        let s = s_string(Some(StringSchemaFormat::DateTime), "2024-01-15T12:00:00Z");
+        assert_eq!(
+            literal_default(&s).unwrap(),
+            "datetime.fromisoformat(\"2024-01-15T12:00:00+00:00\")"
+        );
+    }
+
+    #[test]
+    fn literal_default_datetime_keeps_explicit_offset() {
+        let s = s_string(
+            Some(StringSchemaFormat::DateTime),
+            "2024-01-15T12:00:00+02:00",
+        );
+        assert_eq!(
+            literal_default(&s).unwrap(),
+            "datetime.fromisoformat(\"2024-01-15T12:00:00+02:00\")"
+        );
+    }
+
+    #[test]
+    fn literal_default_uuid_emits_constructor() {
+        let s = s_string(
+            Some(StringSchemaFormat::Uuid),
+            "550e8400-e29b-41d4-a716-446655440000",
+        );
+        assert_eq!(
+            literal_default(&s).unwrap(),
+            "UUID(\"550e8400-e29b-41d4-a716-446655440000\")"
+        );
+    }
+
+    #[test]
+    fn literal_default_decimal_string_form_for_precision() {
+        let schema = SchemaType::DecimalSchema(DecimalSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::Float(1.23)),
+                ..TypeBase::default()
+            },
+            r#type: LiteralTypeDecimal::Number,
+            format: LiteralFormatDecimal::Decimal,
+        });
+        assert_eq!(literal_default(&schema).unwrap(), "Decimal(\"1.23\")");
     }
 }

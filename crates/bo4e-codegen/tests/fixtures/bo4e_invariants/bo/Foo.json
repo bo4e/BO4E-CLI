@@ -42,6 +42,24 @@
       "title": "Optional, nullable, enum-ref default (row 5, enum)",
       "default": "RED",
       "anyOf": [{ "$ref": "../enum/Color.json#" }, { "type": "null" }]
+    },
+    "opt_date_with_default": {
+      "title": "Optional, typed-format `date` default — exercises chrono::NaiveDate::from_ymd_opt / Python date(y,m,d).",
+      "type": "string",
+      "format": "date",
+      "default": "2024-01-15"
+    },
+    "opt_uuid_with_default": {
+      "title": "Optional, typed-format `uuid` default — exercises uuid::uuid! / Python UUID(...).",
+      "type": "string",
+      "format": "uuid",
+      "default": "550e8400-e29b-41d4-a716-446655440000"
+    },
+    "opt_decimal_with_default": {
+      "title": "Optional, `decimal`-typed default with String form — exercises rust_decimal_macros::dec! / Python Decimal(\"...\").",
+      "type": "string",
+      "format": "decimal",
+      "default": "1.23"
     }
   }
 }

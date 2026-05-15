@@ -140,5 +140,24 @@ f = Foo.model_validate({
 assert f.opt_nullable_str_literal_default is None
 assert f.opt_nullable_enum_with_default is None
 
+# 4. Typed-format defaults: missing keys produce *typed* values,
+# not raw strings. date/uuid/Decimal constructors are generated
+# at render time (immutable types, no mutable-default trap).
+from datetime import date
+from decimal import Decimal
+from uuid import UUID
+f = Foo.model_validate({"req_str": "x", "req_nullable_str": None})
+# Matrix row 3 (non-nullable + literal default): pydantic returns
+# the typed value directly, not Optional. The default is a real
+# `date(2024, 1, 15)` / `UUID(...)` / `Decimal("1.23")` instance,
+# not a string that pydantic coerces — proves the immutable typed
+# constructors in literal_default.
+assert isinstance(f.opt_date_with_default, date), type(f.opt_date_with_default)
+assert f.opt_date_with_default == date(2024, 1, 15)
+assert isinstance(f.opt_uuid_with_default, UUID), type(f.opt_uuid_with_default)
+assert f.opt_uuid_with_default == UUID("550e8400-e29b-41d4-a716-446655440000")
+assert isinstance(f.opt_decimal_with_default, Decimal), type(f.opt_decimal_with_default)
+assert f.opt_decimal_with_default == Decimal("1.23")
+
 print("ok")
 "#;

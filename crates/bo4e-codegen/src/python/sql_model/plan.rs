@@ -978,11 +978,13 @@ mod tests {
     }
 
     #[test]
-    fn inline_strenum_const_typ_field_emits_string_scalar() {
+    fn inline_strenum_const_typ_field_narrows_to_literal() {
         // Mirrors the real BO4E `_typ` shape: {const, type:string, enum:[X]}.
         // Serde untagged dispatches this to StrEnumSchema before ConstantSchema,
         // so the SQL plan must accept StrEnum as a simple scalar or the field
-        // is silently dropped.
+        // is silently dropped. Single-member StrEnum narrows to
+        // `Literal["X"]` (symmetric with the Rust side's synthetic
+        // single-variant enum).
         let body = r#"{
             "type":"object",
             "properties":{
@@ -1007,7 +1009,7 @@ mod tests {
                 _ => None,
             })
             .expect("_typ Scalar present");
-        assert_eq!(typ.0, "str");
+        assert_eq!(typ.0, "Literal[\"ANGEBOT\"]");
         assert_eq!(typ.1.as_deref(), Some("\"ANGEBOT\""));
     }
 

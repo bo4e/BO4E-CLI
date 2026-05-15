@@ -13,35 +13,53 @@ Generates source code from a `bo4e_schemas::Schemas` collection. Output families
 ```
 src/
 ├── lib.rs           # `Options`, `RustCrateOptions`, `GenerateOutput`,
-│                    #   `clear_dir_if_exists`, `rename_in_written`,
-│                    #   `for_each_schema_file` + `SchemaCtx` (shared per-flavour iteration)
+│                    #   `clear_dir_if_exists`, `rename_in_written` (rust-crate only),
+│                    #   `for_each_schema_file` + `SchemaCtx` (shared per-flavour iteration,
+│                    #   takes a caller-supplied `path_for` closure)
 ├── env.rs           # MiniJinja Environment builder; embedded + disk template loaders
-├── error.rs         # `Error` (thiserror) — includes `UnsupportedSchemaShape`
+├── error.rs         # `Error` (thiserror) — `Io`, `TemplateRender`, `TemplateNotFound`,
+│                    #   `SchemaLookup`, `Schema`, `UnclassifiableProperty`,
+│                    #   `UnsupportedSchemaShape`, `InconsistentSchema`, `InvalidOption`
+├── validate.rs      # `pub fn all_schemas(&Schemas)` — single up-front validation pass;
+│                    #   schema-consistency invariants + cross-schema $ref resolution
 ├── naming.rs        # Pure naming helpers: to_snake_case, to_pascal_case, sanitize_member_name
-├── layout.rs        # Output-tree layout helpers: module_file_name, module_paths,
-│                    #   first_level_subdirs, first_level_subdirs_from_schemas
+├── layout.rs        # Output-tree layout: module_file_name, module_paths,
+│                    #   first_level_subdirs / _from_schemas, `ModuleTree::from_schemas`
+│                    #   (root + arbitrary-depth tree view for mod.rs / __init__.py walk)
 ├── refs.rs          # JSON-Schema $ref helpers: parse_ref, schema_base, enum_ref_target
 ├── imports.rs       # Shared `Import` enum (Named / Sibling) + language-neutral
 │                    #   helpers: `group_named_by_module`, `stitch_nonempty_blocks`
 ├── python/
 │   ├── mod.rs       # Python-specific helpers (PYTHON_RESERVED, python_attr_name,
-│   │                #   root_init_module_docstring, write_empty_subdir_inits)
+│   │                #   root_init_module_docstring,
+│   │                #   write_empty_subdir_inits_recursive)
 │   ├── imports.rs   # ImportBlock — renders the per-file `from … import …` header
-│   ├── types.rs     # JSON-Schema → Python type-hint mapping (`map_pydantic`), default formatting
+│   ├── types.rs     # JSON-Schema → Python type mapping (`map_pydantic`), type-aware
+│   │                #   defaults (`literal_default` emits date(), UUID(), Decimal(...),
+│   │                #   datetime.fromisoformat()), Literal["X"] narrowing for
+│   │                #   ConstantSchema / single-member StrEnum
 │   ├── pydantic.rs  # `pub fn generate` — pydantic flavour (per-class context + Jinja render)
 │   └── sql_model/
 │       ├── mod.rs      # `pub fn generate` — sql-model flavour orchestrator
 │       ├── plan.rs     # Pure two-phase planner: schemas → `SqlPlan { tables, junctions }`
 │       └── renderer.rs # Consumes `SqlPlan`, renders tables, many.py, __init__
 ├── rust/
-│   ├── mod.rs       # RUST_RESERVED keyword list, rust_field_name helper
+│   ├── mod.rs       # RUST_RESERVED keywords, `rust_field_name`, **`path_segments`**
+│   │                #   (lowercase + `enum`→`enums`) and **`module_paths`** — single
+│   │                #   source of truth for Rust output paths
 │   ├── imports.rs   # UseBlock — renders the per-file `use ...;` header
-│   ├── types.rs     # JSON-Schema → Rust type mapping (`map_rust`, `literal_default_rust`), `UnsupportedShape`
-│   ├── render.rs    # `render_object` orchestration (discriminator detection,
-│   │                #   field rendering, serde attrs) + `DefaultImplOutcome`.
-│   │                #   Calls per-shape Jinja templates for struct / enum / Default-impl bodies.
-│   ├── plain/mod.rs # `pub fn generate` — rust-plain flavour
-│   └── crate_/mod.rs # `pub fn generate` — rust-crate flavour (wraps plain output with Cargo.toml + lib.rs)
+│   ├── types.rs     # JSON-Schema → Rust type mapping (`map_rust`), type-aware
+│   │                #   `literal_default_rust` (chrono::NaiveDate::from_ymd_opt,
+│   │                #   uuid::uuid!, rust_decimal_macros::dec!), `enum_variant_default_rust`,
+│   │                #   `UnsupportedShape`
+│   ├── render.rs    # `render_object` orchestration (single-variant discriminator
+│   │                #   detection, per-field serde attrs, `default_<field>()` helper fn
+│   │                #   generation) + `DefaultImplOutcome`. Calls per-shape Jinja
+│   │                #   templates for struct / enum / Default-impl bodies.
+│   ├── plain/mod.rs # `pub fn generate` — rust-plain flavour (walks `ModuleTree` to
+│   │                #   emit `mod.rs` at every directory level)
+│   └── crate_/mod.rs # `pub fn generate` — rust-crate flavour (wraps plain output with
+│                    #   Cargo.toml + lib.rs); exposes `validate_crate_name`
 └── templates/
     ├── python/
     │   ├── pydantic/  # BaseModel, Enum, __init__ (vendored from data-model-code-generator)
@@ -52,7 +70,15 @@ src/
         └── crate_/   # CargoToml
 ```
 
-Tests live in `tests/` (integration: `integration_pydantic.rs`, `integration_sql_model.rs`, `parity_*.rs`, `skeleton.rs`) and inline in each module.
+Tests live in `tests/` and inline in each module. Integration tests:
+`integration_pydantic.rs`, `integration_sql_model.rs`,
+`integration_rust_plain.rs`, `integration_rust_crate.rs`, plus
+`parity_pydantic.rs`, `parity_sql_model.rs` (golden compares).
+End-to-end round-trip tests `roundtrip_rust_crate.rs` and
+`roundtrip_pydantic.rs` generate against the `bo4e_invariants` fixture
+and execute the generated code against handcrafted JSON payloads.
+`compile_rust_crate.rs` shells out to `cargo build` against the
+generated crate. `skeleton.rs` smoke-checks the shared scaffolding.
 
 ## Public API
 
@@ -83,10 +109,10 @@ Each per-flavour `generate` clears or creates the output dir, builds a MiniJinja
 
 ## Shared orchestration helpers (`lib.rs`)
 
-The per-schema iterate-render-write skeleton lives in `lib.rs` so every flavour shares the borrow lifecycle and path computation:
+The per-schema iterate-render-write skeleton lives in `lib.rs` so every flavour shares the borrow lifecycle:
 
-- `for_each_schema_file(schemas, output_dir, ext, render_fn)` — borrows each `Rc<RefCell<Schema>>`, snapshots `module` + `class_name`, computes `(out_dir, file_name, depth)` via `layout::module_paths`, drops the borrow, calls `render_fn(&SchemaCtx) -> Result<String, Error>`, writes the body, and returns every path written. Flavours that need extra per-file state (diagnostics, mod.rs reexport maps, …) capture it in the closure. Currently used by `python::pydantic::generate` and `rust::plain::generate`; `sql_model` iterates `plan.tables` instead and doesn't fit this shape.
-- `rename_in_written(from, to, &mut written)` — renames `from` → `to` on disk and patches any matching entries in `written`. Works for both single-file (exact match) and directory (prefix-match) renames; no-ops idempotently when the source is missing or the target already exists. Used by `rust::plain::generate` (`enum/` → `enums/`) and `rust::crate_::generate` (`mod.rs` → `lib.rs`).
+- `for_each_schema_file(schemas, path_for, render_fn)` — borrows each `Rc<RefCell<Schema>>`, snapshots `module` + `class_name`, calls the caller-supplied `path_for: Fn(&[String]) -> (PathBuf, String, usize)` closure for the on-disk path (Python passes `layout::module_paths`, Rust passes `rust::module_paths` so the `enum`/`enums` rewrite happens at path-build time), drops the borrow, calls `render_fn(&SchemaCtx) -> Result<String, Error>`, writes the body, and returns every path written. Flavours that need extra per-file state capture it in the closure. Used by `python::pydantic::generate` and `rust::plain::generate`; `sql_model` iterates `plan.tables` instead.
+- `rename_in_written(from, to, &mut written)` *(rust-crate only)* — renames `<out>/src/mod.rs` to `<out>/src/lib.rs` after `rust::plain::generate` writes the module tree. Patches any matching entries in `written`. (The `enum/` → `enums/` rewrite that previously also went through this helper now happens at path-build time via `rust::path_segments`.)
 - `clear_dir_if_exists(dir)` — drives `Options::clear_output`.
 
 ## Feature flags
@@ -106,11 +132,12 @@ Per-flavour `generate` functions and template `include_str!` calls are `#[cfg(fe
 
 ## How a generator runs (pydantic example)
 
-1. `python::pydantic::generate` clears the output dir and iterates over `schemas`. For each schema:
-   - Compute `(out_dir, file_name, depth)` via `layout::module_paths`.
+1. `python::pydantic::generate` calls **`crate::validate::all_schemas(schemas)`** first — validation is decoupled from rendering, so a failed schema can never produce a half-written tree.
+2. Clears the output dir (per `Options::clear_output`) and iterates over `schemas`. For each schema:
+   - Compute `(out_dir, file_name, depth)` via the caller-supplied `path_for` closure (here: `layout::module_paths` with `"py"` extension).
    - Build a per-class context struct (`PydanticField` / `EnumMember`) that mirrors the vendored `BaseModel.jinja2` / `Enum.jinja2` shape.
    - Render with MiniJinja; prepend an `ImportBlock` (the vendored template doesn't emit a pydantic import header — see the file-level docstring in `python/pydantic.rs` for the deliberate workarounds).
-3. Emit a root `__init__.py` (with `root_init_module_docstring`), `__version__.py`, and one empty `__init__.py` per first-level subpackage directory.
+3. Emit a root `__init__.py` (with `root_init_module_docstring`) re-exporting every schema class (including root-level ones), `__version__.py`, and an empty `__init__.py` at every nested subdirectory (via `python::write_empty_subdir_inits_recursive` walking the `ModuleTree`).
 
 `python::sql_model::generate` follows the same skeleton but with a **two-phase plan**:
 

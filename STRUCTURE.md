@@ -55,7 +55,7 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 
 ## Key architectural decisions
 
-- **Shared, language-neutral helpers** live at the top of `bo4e-codegen/src/` (`naming.rs`, `layout.rs`, `refs.rs`, `imports.rs`). Per-language modules (`python/`, future `rust/`) own only the bits that actually differ — type-string mapping, import-block rendering, language-specific reserved words.
+- **Shared, language-neutral helpers** live at the top of `bo4e-codegen/src/` (`naming.rs`, `layout.rs`, `refs.rs`, `imports.rs`, `validate.rs`). Per-language modules (`python/`, `rust/`) own only the bits that actually differ — type-string mapping, import-block rendering, default-expression rendering, language-specific reserved words and path conventions.
 - **Schemas are the source of truth.** Everything downstream (edit, diff, generate) operates on a `Schemas` collection loaded from disk. The schema directory carries a `.version` file that captures the upstream BO4E version (plain or "dirty").
 - **Per-flavour `pub fn generate`.** `bo4e-codegen` exposes one public function per flavour
   under language-named modules (`python::pydantic`, `python::sql_model`, `rust::plain`,
@@ -66,7 +66,7 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
   - *required + default declared* — the default is unreachable because the JSON key is always present.
   - *optional + no default* — the JSON key may be absent and the runtime has no fallback; the generator refuses to invent one.
 
-- **Strict default-rendering matrix.** "Nullable" means the schema type is `null` or `anyOf:[…, null]`. The rendered type follows the schema's nullability **only** (no auto-`Option<T>` / `| None` widening for optional non-nullable fields). The default expression comes from the schema's `default` literal directly, with quoted-string defaults qualified to `EnumName.MEMBER` when the schema `$ref`s an enum.
+- **Strict default-rendering matrix.** "Nullable" means the schema type is `null` or `anyOf:[…, null]`. The rendered type follows the schema's nullability **only** (no auto-`Option<T>` / `| None` widening for optional non-nullable fields). The default expression comes from the schema's `default` literal, **type-precisely** rendered: typed-format string defaults (`date`, `date-time`, `time`, `uuid`) and `Decimal` defaults emit typed constructors on both sides, not raw strings.
 
   | `required` | `nullable` | `default`  | Rust type   | Rust serde attrs                                       | Python type  | Python default              |
   | ---------- | ---------- | ---------- | ----------- | ------------------------------------------------------ | ------------ | --------------------------- |
@@ -76,9 +76,11 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
   | ✗          | ✓          | `null`     | `Option<T>` | `default, skip_serializing_if = "Option::is_none"`     | `T \| None`  | `= None`                    |
   | ✗          | ✓          | literal `X`| `Option<T>` | `default = "default_<field>"`                          | `T \| None`  | `= X` (or `= EnumName.X`)   |
 
-  The Rust side generates **per-field `default_<field>()` helper functions** for rows 3 and 5: serde's `#[serde(default = "…")]` syntax accepts only function paths, not literal values, so a `default_anrede() -> String { "Herr".to_string() }` is emitted alongside the struct. Bare `#[serde(default)]` is used only where the language's `T::default()` already produces the schema's literal (row 4 for `Option<T>`-null, and `EnumName::default()` shapes on row 3 where the synthetic single-variant discriminator's Default matches). `skip_serializing_if = "Option::is_none"` is emitted on row 4 only — the schema's null default and serde's None coincide there, so serialised JSON cleanly omits the key. All other rows always serialise the field.
+  The Rust side generates **per-field `default_<field>()` helper functions** for rows 3 and 5: serde's `#[serde(default = "…")]` syntax accepts only function paths, not literal values. The helper bodies use typed constructors keyed off the schema variant + format: `chrono::NaiveDate::from_ymd_opt(…)`, `chrono::NaiveTime::from_hms_nano_opt(…)`, `chrono::DateTime::parse_from_rfc3339(…)`, `uuid::uuid!(…)`, `rust_decimal_macros::dec!(…)`. The validator parse-checks the value at generate time, so `unwrap()` paths can never fail at runtime. Bare `#[serde(default)]` is used only where the language's `T::default()` already produces the schema's literal (row 4 for `Option<T>`-null, and `EnumName::default()` shapes on row 3 where the synthetic single-variant discriminator's Default matches). `skip_serializing_if = "Option::is_none"` is emitted on row 4 only — the schema's null default and serde's None coincide there, so serialised JSON cleanly omits the key. All other rows always serialise the field.
 
-  Python expresses the matrix inline (`Field(default=…)` / `= …`); no helper functions needed.
+  The Python side expresses the matrix inline (`Field(default=…)` / `= …`) with the **same type precision**: `date(2024, 1, 15)`, `time(14, 30, 0, microsecond=N)`, `datetime.fromisoformat("…")`, `UUID("…")`, `Decimal("…")`. All five constructors return immutable values, so passing them as field defaults doesn't hit pydantic's mutable-default trap. No helper functions needed.
+
+  **Single-variant discriminator narrowing** is symmetric too: when a property's schema is `ConstantSchema` or a single-member `StrEnum` (e.g. `_typ` with `{const: "ANGEBOT", type: "string", enum: ["ANGEBOT"]}`), Rust emits a synthetic single-variant enum (`pub enum FooTyp { Angebot }`) and Python emits `Literal["ANGEBOT"]`. Multi-member enum `$ref`s are not narrowed.
 
 - **Schemas are editable, no special-cased field names.** Every rendering decision is driven by the schema's *shape*, never by a field's name. `_version`, `_typ`, `_id` are not special — they're whatever the schema says they are. `bo4e edit` is free to add/remove/rename fields or flip their `required`/`default` shape, and the generated code follows. If a renderer ever needs a per-name carve-out, that's a sign the schema needs a more precise type, not the codegen needs a heuristic.
 

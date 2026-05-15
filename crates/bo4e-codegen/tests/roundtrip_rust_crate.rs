@@ -195,4 +195,33 @@ fn root_level_toplevel_deserialises() {
     assert_eq!(t.name, "abc");
     assert_eq!(t.tag, Some("default-tag".to_string()));
 }
+
+/// Typed-format defaults: missing keys fall back through the
+/// per-field `default_<name>()` helpers, which emit *typed*
+/// constructors (chrono::NaiveDate::from_ymd_opt, uuid::uuid!,
+/// rust_decimal_macros::dec!). The helpers must produce values of
+/// the correct Rust type and the literal must match the schema's
+/// declared default exactly. (These are matrix row 3 — non-nullable
+/// + literal default — so the fields are `T`, not `Option<T>`.)
+#[test]
+fn typed_format_defaults_apply_on_missing_keys() {
+    use chrono::Datelike;
+    let json = r#"{"req_str": "x", "req_nullable_str": null}"#;
+    let f: Foo = serde_json::from_str(json).expect("deserialize minimal");
+
+    assert_eq!(f.opt_date_with_default.year(), 2024);
+    assert_eq!(f.opt_date_with_default.month(), 1);
+    assert_eq!(f.opt_date_with_default.day(), 15);
+
+    assert_eq!(
+        f.opt_uuid_with_default.to_string(),
+        "550e8400-e29b-41d4-a716-446655440000"
+    );
+
+    assert_eq!(
+        f.opt_decimal_with_default,
+        rust_decimal_macros::dec!(1.23),
+        "decimal default must equal `dec!(1.23)` exactly"
+    );
+}
 "##;
