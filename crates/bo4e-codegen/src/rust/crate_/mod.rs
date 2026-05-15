@@ -55,35 +55,23 @@ pub fn generate(
     opts: &crate::Options,
     crate_opts: &crate::RustCrateOptions,
 ) -> Result<crate::GenerateOutput, Error> {
+    // ── Phase 1: validate + render (no destructive IO) ─────────────────────────
     validate_crate_name(&crate_opts.crate_name)?;
-    if opts.clear_output {
-        crate::clear_dir_if_exists(output_dir)?;
-    } else {
-        std::fs::create_dir_all(output_dir)?;
-    }
 
-    // Plain output goes under `<output_dir>/src/`.
     let src_dir = output_dir.join("src");
     let inner_opts = crate::Options {
-        clear_output: false, // we already cleared
+        clear_output: false, // commit phase below owns the clear
         templates_dir: opts.templates_dir,
     };
-    let crate::GenerateOutput {
-        mut written,
-        mut diagnostics,
-    } = crate::rust::plain::generate(schemas, &src_dir, &inner_opts)?;
+    let (mut files, mut diagnostics) = crate::rust::plain::prepare(schemas, &src_dir, &inner_opts)?;
 
-    // Rename `<src>/mod.rs` → `<src>/lib.rs`.
+    // Rename `<src>/mod.rs` → `<src>/lib.rs` in the buffer (no disk IO yet).
     let mod_rs = src_dir.join("mod.rs");
     let lib_rs = src_dir.join("lib.rs");
-    crate::rename_in_written(&mod_rs, &lib_rs, &mut written)?;
-    if lib_rs.exists() {
-        diagnostics.push("renamed mod.rs → lib.rs".to_string());
-    }
+    crate::rename_in_prepared(&mod_rs, &lib_rs, &mut files);
+    diagnostics.push("renamed mod.rs → lib.rs".to_string());
 
-    // Emit Cargo.toml. We build a fresh env here rather than threading the
-    // plain orchestrator's env through, because `crate_` only needs this one
-    // template — the cost of re-loading the embedded set is negligible.
+    // Stage Cargo.toml.
     let env = crate::env::make_environment(opts.templates_dir)?;
     let version_str = schemas.version.to_string();
     let semver = to_cargo_semver(&version_str);
@@ -93,18 +81,14 @@ pub fn generate(
         semver => &semver,
         bo4e_version => &version_str,
     })?;
-    let cargo_path = output_dir.join("Cargo.toml");
-    std::fs::write(&cargo_path, cargo_toml)?;
-    written.push(cargo_path);
+    files.push((output_dir.join("Cargo.toml"), cargo_toml));
     diagnostics.push(format!(
         "Cargo.toml: name={}, version={}",
         crate_opts.crate_name, semver
     ));
 
-    Ok(crate::GenerateOutput {
-        written,
-        diagnostics,
-    })
+    // ── Phase 2: commit (clear + write) ────────────────────────────────────────
+    crate::write_prepared(output_dir, opts.clear_output, files, diagnostics)
 }
 
 /// Convert a BO4E version string (as produced by `Version`/`DirtyVersion::Display`) into

@@ -99,23 +99,27 @@ CI runs `fmt`, `clippy`, `doc`, and `test` (on macOS + Windows). Match it locall
 
 Output generators are gated by Cargo features. Existing flags (defined in both `bo4e-cli/Cargo.toml` and `bo4e-codegen/Cargo.toml`):
 
-| Feature             | Effect                                                  |
-| ------------------- | ------------------------------------------------------- |
-| `python-pydantic`   | Compile in the Pydantic-v2 generator and its templates. |
-| `python-sql-model`  | Compile in the SQLModel generator and its templates.    |
-| `python`            | Umbrella feature — both of the above.                   |
-| `default`           | All Python generators.                                  |
+| Feature             | Effect                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| `python-pydantic`   | Compile in the Pydantic-v2 generator and its templates.                |
+| `python-sql-model`  | Compile in the SQLModel generator and its templates.                   |
+| `python`            | Umbrella feature — both Python flavours.                               |
+| `rust-plain`        | Compile in the loose `rust-plain` generator (module tree, no manifest).|
+| `rust-crate`        | Compile in the `rust-crate` generator (wraps rust-plain in a Cargo crate, depends on `rust-plain`). |
+| `rust`              | Umbrella feature — both Rust flavours.                                 |
+| `default`           | All Python + Rust generators.                                          |
 
-`OutputType` (in `bo4e-codegen`) has its variants gated by these features, so clap's `--output-type` only accepts compiled-in values.
+`GenerateFlavour` (in `bo4e-cli::cli::generate`) has its variants gated by these features, so clap's `bo4e generate <flavour>` subcommand list only contains compiled-in values. The library side (`bo4e-codegen`) exposes one `pub fn generate` per flavour under `python::pydantic`, `python::sql_model`, `rust::plain`, and `rust::crate_`.
 
 **When asked to add a new output type:**
 
-1. Generalize first. Find code shared with existing generators (`naming.rs`, `python/mod.rs` helpers, the MiniJinja environment, root-`__init__.py` / `__version__.py` plumbing) and lift it to a shared layer if a clean abstraction emerges. Be willing to redesign existing generators when it lets you reuse code — copy-paste is not acceptable.
+1. Generalize first. Find code shared with existing generators (`naming.rs`, `layout.rs`, `validate.rs`, `python/mod.rs` helpers, the MiniJinja environment, root-`__init__.py` / `__version__.py` plumbing for Python, `rust/path_segments` for Rust paths) and lift it to a shared layer if a clean abstraction emerges. Be willing to redesign existing generators when it lets you reuse code — copy-paste is not acceptable.
 2. Add a Cargo feature in `bo4e-codegen` (and re-export it from `bo4e-cli`).
-3. Add a variant to `OutputType` gated by that feature.
+3. Add a variant to `GenerateFlavour` in `bo4e-cli::cli::generate`, gated by the feature, and dispatch it inside the `Executable` impl.
 4. Add embedded templates under `crates/bo4e-codegen/src/templates/<lang>/<flavour>/` and wire them up in `env.rs::load_embedded`.
 5. Cover the new generator with at least one integration test under `crates/bo4e-codegen/tests/` and a smoke test under `crates/bo4e-cli/tests/`.
-6. Update the relevant STRUCTURE.md files and the README feature list.
+6. Follow the **two-phase render** pattern: validate → render to `Vec<PreparedFile>` → commit via `write_prepared`. Destructive IO must happen only after all renders succeed.
+7. Update the relevant STRUCTURE.md files and the README feature list.
 
 ## 8. Design / plan workflow
 

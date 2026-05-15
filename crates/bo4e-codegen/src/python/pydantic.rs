@@ -34,7 +34,7 @@ use bo4e_schemas::models::json_schema::SchemaRootType;
 use minijinja::{Environment, context};
 use serde::Serialize;
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Per-field context shape that mirrors what the vendored
 /// `data-model-code-generator` `BaseModel.jinja2` template expects.
@@ -66,40 +66,28 @@ pub fn generate(
     output_dir: &Path,
     opts: &crate::Options,
 ) -> Result<crate::GenerateOutput, Error> {
+    // ── Phase 1: validate + render (no destructive IO) ─────────────────────────
     crate::validate::all_schemas(schemas)?;
-
-    if opts.clear_output {
-        crate::clear_dir_if_exists(output_dir)?;
-    } else {
-        std::fs::create_dir_all(output_dir)?;
-    }
     let env = crate::env::make_environment(opts.templates_dir)?;
-
-    let mut written: Vec<PathBuf> = Vec::new();
     let version_str = schemas.version.to_string();
 
-    // ── Per-schema files ───────────────────────────────────────────────────────
     let path_for = |m: &[String]| crate::layout::module_paths(output_dir, m, "py");
-    written.extend(crate::for_each_schema_file(
-        schemas,
-        path_for,
-        |ctx| match &ctx.parsed {
+    let mut files: Vec<crate::PreparedFile> =
+        crate::for_each_schema_file(schemas, path_for, |ctx| match &ctx.parsed {
             SchemaRootType::StrEnum(e) => {
                 render_enum(&env, &ctx.class_name, &e.str_enum.enum_values)
             }
             SchemaRootType::Object(o) => render_object(&env, &ctx.class_name, &o.object, ctx.depth),
-        },
-    )?);
+        })?;
 
-    // ── __version__.py at the root ─────────────────────────────────────────────
-    let version_path = output_dir.join("__version__.py");
-    std::fs::write(
-        &version_path,
-        format!("__version__: str = \"{version_str}\"\n"),
-    )?;
-    written.push(version_path);
+    files.push((
+        output_dir.join("__version__.py"),
+        format!(
+            "__version__: str = {}\n",
+            crate::python::python_string_literal(&version_str)
+        ),
+    ));
 
-    // ── Root __init__.py with re-exports ───────────────────────────────────────
     let init_tpl = env.get_template("python/pydantic/__init__.jinja2")?;
     let init_classes: Vec<_> = schemas
         .iter()
@@ -119,23 +107,20 @@ pub fn generate(
         })
         .collect();
     let init_body = init_tpl.render(context! { classes => init_classes })?;
-    let init_path = output_dir.join("__init__.py");
-    std::fs::write(
-        &init_path,
+    files.push((
+        output_dir.join("__init__.py"),
         format!("{}\n{init_body}", root_init_module_docstring(&version_str)),
-    )?;
-    written.push(init_path);
+    ));
 
-    // ── Empty __init__.py at every nested subdirectory ─────────────────────────
-    // Build the module tree so nested depths (e.g. `foo/bar/Baz.json`) get
-    // an __init__.py at every intermediate level, not just `foo/`.
+    // Empty `__init__.py` at every nested subdirectory level so root
+    // imports resolve across arbitrary-depth schema trees.
     let tree = crate::layout::ModuleTree::from_schemas(schemas);
-    crate::python::write_empty_subdir_inits_recursive(output_dir, &tree, &mut written)?;
+    files.extend(crate::python::prepare_empty_subdir_inits_recursive(
+        output_dir, &tree,
+    ));
 
-    Ok(crate::GenerateOutput {
-        written,
-        diagnostics: vec![],
-    })
+    // ── Phase 2: commit (clear + write) ────────────────────────────────────────
+    crate::write_prepared(output_dir, opts.clear_output, files, vec![])
 }
 
 // ── Renderers ────────────────────────────────────────────────────────────────
@@ -155,7 +140,7 @@ fn render_enum(
         .iter()
         .map(|v| EnumMember {
             name: sanitize_member_name(v),
-            default: format!("\"{v}\""),
+            default: crate::python::python_string_literal(v),
             docstring: None,
         })
         .collect();
@@ -238,9 +223,14 @@ fn render_object(
 
         let (field_expr, represented_default, required_flag) = if needs_alias {
             needs_field_import = true;
+            // Validator restricts property names to `[A-Za-z_][A-Za-z0-9_]*`,
+            // so the escape is defensive; using `python_string_literal`
+            // keeps the alias rendering symmetric with every other
+            // string-into-Python-source site.
+            let alias_lit = crate::python::python_string_literal(prop_name);
             let inner = match &default_expr {
-                Some(d) => format!("default={d}, alias=\"{prop_name}\""),
-                None => format!("..., alias=\"{prop_name}\""),
+                Some(d) => format!("default={d}, alias={alias_lit}"),
+                None => format!("..., alias={alias_lit}"),
             };
             (Some(format!("Field({inner})")), String::new(), false)
         } else {

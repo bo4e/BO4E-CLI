@@ -42,7 +42,10 @@ fn render_single_variant_enum(
         doc => render_doc_comment(docstring),
         single_variant => true,
         class_name => class_name,
-        variants => vec![context! { wire => wire_value, name => variant_ident }],
+        variants => vec![context! {
+            wire_quoted => rust_string_literal(wire_value),
+            name => variant_ident,
+        }],
     })?)
 }
 
@@ -57,7 +60,7 @@ pub(crate) fn render_str_enum(
         .iter()
         .map(|m| {
             context! {
-                wire => m,
+                wire_quoted => rust_string_literal(m),
                 name => to_pascal_case(&sanitize_member_name(m)),
             }
         })
@@ -69,6 +72,17 @@ pub(crate) fn render_str_enum(
         class_name => class_name,
         variants => variants,
     })?)
+}
+
+/// Render a string as a Rust double-quoted string literal — handles
+/// quotes, backslashes, and control characters via the standard
+/// Debug format. Used wherever a runtime string flows into Rust
+/// source via a template (currently `serde(rename = …)` on enum
+/// variants). Mirrors [`crate::python::python_string_literal`] on
+/// the Python side so both flavours emit safe literals from
+/// arbitrary JSON-schema values.
+fn rust_string_literal(s: &str) -> String {
+    format!("{s:?}")
 }
 
 /// Per-field context for the Struct.jinja2 template.

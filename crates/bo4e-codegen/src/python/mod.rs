@@ -1,5 +1,4 @@
-use crate::error::Error;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub(crate) mod imports;
 pub(crate) mod types;
@@ -36,6 +35,36 @@ pub(crate) const PYTHON_RESERVED: &[&str] = &[
     "map", "filter",
 ];
 
+/// Escape an arbitrary string into a Python double-quoted string literal.
+///
+/// Handles the cases that matter for generated source:
+/// - `\` → `\\`, `"` → `\"`, `\n`/`\r`/`\t` → escaped forms.
+/// - Control characters (`< 0x20`) → `\xHH`.
+/// - Any other Unicode is passed through as a literal `char` (Python
+///   source is UTF-8; pydantic / sql_model output files declare no
+///   explicit encoding, so the system default is fine).
+///
+/// Symmetric with Rust's `format!("{s:?}")` Debug pattern used in
+/// [`crate::rust::types::literal_default_rust`]; both flavours emit
+/// safe string literals from arbitrary JSON-schema default values.
+pub(crate) fn python_string_literal(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\x{:02x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// Translate a snake-case JSON property name into a valid Pydantic model attribute.
 ///
 /// Pydantic v2 forbids leading-underscore field names. BO4E uses `_id`, `_typ`,
@@ -53,33 +82,31 @@ pub(crate) fn python_attr_name(snake: &str) -> String {
     }
 }
 
-/// Write an empty `__init__.py` to every non-root directory in the
-/// supplied [`crate::layout::ModuleTree`], skipping any that already
-/// exist. Supports arbitrarily nested module trees (e.g. `foo/bar/Baz`
-/// gets `__init__.py` at `foo/` and `foo/bar/`). Pushes resulting paths
-/// onto `written`.
+/// Stage an empty `__init__.py` for every non-root directory implied by
+/// the supplied [`crate::layout::ModuleTree`]. Used to make nested
+/// packages importable across arbitrary depth (`foo/bar/Baz.json`
+/// produces `foo/__init__.py` and `foo/bar/__init__.py`).
+///
+/// Returns prepared `(path, body)` pairs — does no IO. The caller
+/// merges these into its file buffer and commits via
+/// [`crate::write_prepared`].
 #[cfg(any(feature = "python-pydantic", feature = "python-sql-model"))]
-pub(crate) fn write_empty_subdir_inits_recursive(
+pub(crate) fn prepare_empty_subdir_inits_recursive(
     output_dir: &Path,
     tree: &crate::layout::ModuleTree,
-    written: &mut Vec<PathBuf>,
-) -> Result<(), Error> {
+) -> Vec<crate::PreparedFile> {
+    let mut out: Vec<crate::PreparedFile> = Vec::new();
     for (dir_path, _) in tree.iter() {
         if dir_path.is_empty() {
-            continue; // root __init__.py is written separately with re-exports
+            continue; // root __init__.py is staged separately with re-exports
         }
         let mut p = output_dir.to_path_buf();
         for seg in dir_path {
             p.push(seg);
         }
-        let init = p.join("__init__.py");
-        if !init.exists() {
-            std::fs::create_dir_all(&p)?;
-            std::fs::write(&init, "")?;
-            written.push(init);
-        }
+        out.push((p.join("__init__.py"), String::new()));
     }
-    Ok(())
+    out
 }
 
 #[cfg(test)]
@@ -105,6 +132,19 @@ mod tests {
         assert_eq!(python_attr_name("_id"), "id_");
         assert_eq!(python_attr_name("_type"), "type_");
         assert_eq!(python_attr_name("_class"), "class_");
+    }
+
+    #[test]
+    fn python_string_literal_escapes_quotes_and_backslashes() {
+        assert_eq!(python_string_literal("hi"), "\"hi\"");
+        assert_eq!(
+            python_string_literal("He said \"X\""),
+            "\"He said \\\"X\\\"\""
+        );
+        assert_eq!(python_string_literal("c:\\path"), "\"c:\\\\path\"");
+        assert_eq!(python_string_literal("line1\nline2"), "\"line1\\nline2\"");
+        // Control char (BEL = 0x07).
+        assert_eq!(python_string_literal("\x07"), "\"\\x07\"");
     }
 
     #[test]

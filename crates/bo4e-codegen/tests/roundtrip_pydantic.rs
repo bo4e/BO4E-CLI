@@ -20,11 +20,16 @@ fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bo4e_invariants")
 }
 
-fn python3_with_pydantic() -> Option<PathBuf> {
+/// Probe for a Python 3 with **pydantic v2** installed. The generated
+/// code calls `model_validate` (a v2 API), so probing only `import
+/// pydantic` would let v1 environments run the test and fail in
+/// confusing ways; we explicitly require `pydantic.VERSION` to start
+/// with `2.`.
+fn python3_with_pydantic_v2() -> Option<PathBuf> {
     let py = std::env::var("PYTHON3").unwrap_or_else(|_| "python3".to_string());
     let probe = Command::new(&py)
         .arg("-c")
-        .arg("import pydantic")
+        .arg("import pydantic, sys; sys.exit(0 if pydantic.VERSION.split('.')[0] == '2' else 2)")
         .output()
         .ok()?;
     if probe.status.success() {
@@ -36,8 +41,8 @@ fn python3_with_pydantic() -> Option<PathBuf> {
 
 #[test]
 fn generated_pydantic_roundtrips_strict_matrix() {
-    let Some(py) = python3_with_pydantic() else {
-        eprintln!("python3 or pydantic not available; skipping roundtrip_pydantic test");
+    let Some(py) = python3_with_pydantic_v2() else {
+        eprintln!("python3 with pydantic v2 not available; skipping roundtrip_pydantic test");
         return;
     };
     let tmp = tempfile::tempdir().unwrap();

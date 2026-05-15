@@ -12,10 +12,11 @@ Generates source code from a `bo4e_schemas::Schemas` collection. Output families
 
 ```
 src/
-├── lib.rs           # `Options`, `RustCrateOptions`, `GenerateOutput`,
-│                    #   `clear_dir_if_exists`, `rename_in_written` (rust-crate only),
-│                    #   `for_each_schema_file` + `SchemaCtx` (shared per-flavour iteration,
-│                    #   takes a caller-supplied `path_for` closure)
+├── lib.rs           # `Options`, `RustCrateOptions`, `GenerateOutput`, `PreparedFile`,
+│                    #   `clear_dir_if_exists`, `rename_in_prepared` (rust-crate only),
+│                    #   `for_each_schema_file` + `SchemaCtx` (per-schema render loop —
+│                    #   buffers `(path, body)` pairs, no IO), `write_prepared` (commit
+│                    #   phase: clear + write the prepared buffer).
 ├── env.rs           # MiniJinja Environment builder; embedded + disk template loaders
 ├── error.rs         # `Error` (thiserror) — `Io`, `TemplateRender`, `TemplateNotFound`,
 │                    #   `SchemaLookup`, `Schema`, `UnclassifiableProperty`,
@@ -109,11 +110,12 @@ Each per-flavour `generate` clears or creates the output dir, builds a MiniJinja
 
 ## Shared orchestration helpers (`lib.rs`)
 
-The per-schema iterate-render-write skeleton lives in `lib.rs` so every flavour shares the borrow lifecycle:
+The per-schema iterate-render-write skeleton lives in `lib.rs` so every flavour shares the borrow lifecycle. **All four generators follow the same two-phase pattern**: render every file into an in-memory buffer first, commit the entire buffer to disk afterwards. Destructive IO (`clear_dir_if_exists`) happens only after every render has succeeded — so a validation failure, plan-build error, or render error can never leave the user with a half-clobbered output tree.
 
-- `for_each_schema_file(schemas, path_for, render_fn)` — borrows each `Rc<RefCell<Schema>>`, snapshots `module` + `class_name`, calls the caller-supplied `path_for: Fn(&[String]) -> (PathBuf, String, usize)` closure for the on-disk path (Python passes `layout::module_paths`, Rust passes `rust::module_paths` so the `enum`/`enums` rewrite happens at path-build time), drops the borrow, calls `render_fn(&SchemaCtx) -> Result<String, Error>`, writes the body, and returns every path written. Flavours that need extra per-file state capture it in the closure. Used by `python::pydantic::generate` and `rust::plain::generate`; `sql_model` iterates `plan.tables` instead.
-- `rename_in_written(from, to, &mut written)` *(rust-crate only)* — renames `<out>/src/mod.rs` to `<out>/src/lib.rs` after `rust::plain::generate` writes the module tree. Patches any matching entries in `written`. (The `enum/` → `enums/` rewrite that previously also went through this helper now happens at path-build time via `rust::path_segments`.)
-- `clear_dir_if_exists(dir)` — drives `Options::clear_output`.
+- `for_each_schema_file(schemas, path_for, render_fn)` — borrows each `Rc<RefCell<Schema>>`, snapshots `module` + `class_name`, calls the caller-supplied `path_for: Fn(&[String]) -> (PathBuf, String, usize)` closure for the on-disk path (Python passes `layout::module_paths`, Rust passes `rust::module_paths` so the `enum`/`enums` rewrite happens at path-build time), drops the borrow, calls `render_fn(&SchemaCtx) -> Result<String, Error>`, and **stages** the `(path, body)` pair into a `Vec<PreparedFile>` — no filesystem mutation. Flavours that need extra per-file state capture it in the closure. Used by `python::pydantic::generate` and `rust::plain::prepare`; `sql_model` iterates `plan.tables` instead.
+- `write_prepared(output_dir, clear_output, files, diagnostics)` — the commit phase. Clears the output dir (per `Options::clear_output`), creates parent directories for each prepared file on demand, writes every body, returns `GenerateOutput`.
+- `rename_in_prepared(from, to, files)` *(rust-crate only)* — buffered rename used by `rust::crate_::generate` to rewrite the inner `<src>/mod.rs` path to `<src>/lib.rs` before commit. Operates on the prepared buffer; no disk IO.
+- `clear_dir_if_exists(dir)` — drives `Options::clear_output` from inside `write_prepared`.
 
 ## Feature flags
 

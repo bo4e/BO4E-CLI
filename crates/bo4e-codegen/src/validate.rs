@@ -99,6 +99,12 @@ pub(crate) fn object_invariants(
 /// other punctuation can't round-trip through `to_snake_case` →
 /// `rust_field_name` / `python_attr_name` without producing invalid
 /// identifiers in the generated code; reject them up front instead.
+///
+/// Also rejects names whose post-leading-underscore-strip result is
+/// empty or `_` — the generators strip one leading `_` (BO4E's `_id`,
+/// `_typ`, `_version` convention), so `_` would become an empty Rust /
+/// Python field name and `__` would become the placeholder `_`. Both
+/// are unusable identifiers.
 fn validate_property_name(schema_name: &str, prop_name: &str) -> Result<(), Error> {
     fn is_first_char_ok(c: char) -> bool {
         c.is_ascii_alphabetic() || c == '_'
@@ -106,15 +112,32 @@ fn validate_property_name(schema_name: &str, prop_name: &str) -> Result<(), Erro
     fn is_rest_char_ok(c: char) -> bool {
         c.is_ascii_alphanumeric() || c == '_'
     }
-    let mut chars = prop_name.chars();
-    let first_ok = chars.next().is_some_and(is_first_char_ok);
-    let rest_ok = chars.all(is_rest_char_ok);
-    if !first_ok || !rest_ok {
+    let invalid_charset = {
+        let mut chars = prop_name.chars();
+        let first_ok = chars.next().is_some_and(is_first_char_ok);
+        let rest_ok = chars.all(is_rest_char_ok);
+        !first_ok || !rest_ok
+    };
+    if invalid_charset {
         return Err(Error::InconsistentSchema {
             schema: schema_name.to_string(),
             property: prop_name.to_string(),
             reason: "property name is not a valid identifier source; expected \
                  `[A-Za-z_][A-Za-z0-9_]*` (camelCase or snake_case shape)"
+                .to_string(),
+        });
+    }
+    // After stripping one leading underscore (the generator convention
+    // for `_id`/`_typ`/`_version`), the result must be a non-empty,
+    // non-underscore-only identifier. `_` becomes empty; `__` becomes
+    // `_` (used as Rust's "ignore" placeholder).
+    let stripped = prop_name.strip_prefix('_').unwrap_or(prop_name);
+    if stripped.is_empty() || stripped.chars().all(|c| c == '_') {
+        return Err(Error::InconsistentSchema {
+            schema: schema_name.to_string(),
+            property: prop_name.to_string(),
+            reason: "property name has no meaningful identifier after stripping a \
+                 leading underscore; got `_` / `__` / similar"
                 .to_string(),
         });
     }
@@ -667,6 +690,22 @@ mod tests {
                 assert!(reason.contains("identifier"), "got: {reason}");
             }
             other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn property_name_underscore_only_is_rejected() {
+        for bad in ["_", "__", "___"] {
+            let o = obj(&[(bad, s_string_no_default())], &[bad]);
+            match object_invariants("Foo", &o, &empty_schemas()) {
+                Err(Error::InconsistentSchema { reason, .. }) => {
+                    assert!(
+                        reason.contains("meaningful identifier"),
+                        "got: {reason} for {bad:?}"
+                    );
+                }
+                other => panic!("expected InconsistentSchema for {bad:?}, got {other:?}"),
+            }
         }
     }
 

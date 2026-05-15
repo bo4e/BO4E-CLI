@@ -69,8 +69,25 @@ pub(crate) struct SchemaCtx {
     pub file_name: String,
 }
 
-/// Drive the per-schema file write loop shared by the per-schema-file
-/// flavours (pydantic, rust-plain). For each schema:
+/// One file the generator wants on disk: an absolute output path plus the
+/// rendered body. The orchestration pattern is **render-everything-then-commit**:
+/// each `generate()` accumulates `PreparedFile`s in memory through a
+/// pure pre-render phase, then a single [`write_prepared`] call clears the
+/// output and writes the buffered files. A failure during render therefore
+/// leaves the user's prior output intact (no half-clobbered crate or
+/// partially-regenerated package).
+#[cfg(any(
+    feature = "python-pydantic",
+    feature = "python-sql-model",
+    feature = "rust-plain",
+    feature = "rust-crate",
+))]
+pub(crate) type PreparedFile = (PathBuf, String);
+
+/// Iterate every schema, call `render` to produce a body string, and
+/// return the resulting `(path, body)` pairs *without touching the
+/// filesystem*. The caller is responsible for any subsequent IO (see
+/// [`write_prepared`]).
 ///
 /// 1. Borrow the cell, snapshot `module` / `name` / parsed schema, drop the
 ///    borrow (so the closure can call back into anything without aliasing).
@@ -79,11 +96,11 @@ pub(crate) struct SchemaCtx {
 ///    [`crate::rust::module_paths`] so the `enum/`→`enums/` rewrite
 ///    happens at path-build time rather than as a post-write rename).
 /// 3. Call `render` for the file body.
-/// 4. Write the body and record the path.
+/// 4. Stash `(out_path, body)` into the returned buffer.
 ///
-/// Returns every path written, in the same order as iteration. Closures
-/// that need extra per-file state (diagnostics, mod.rs reexport maps, …)
-/// capture it themselves.
+/// Schema validation must have run before this iterator — see
+/// `validate::all_schemas`. Closures that need extra per-file state
+/// (diagnostics, mod.rs reexport maps, …) capture it themselves.
 ///
 /// `sql_model` deliberately doesn't use this helper: it iterates a pre-built
 /// `SqlPlan` rather than the raw `Schemas`, so the contract here doesn't fit.
@@ -96,12 +113,12 @@ pub(crate) fn for_each_schema_file<F, P>(
     schemas: &bo4e_schemas::Schemas,
     path_for: P,
     mut render: F,
-) -> Result<Vec<PathBuf>, Error>
+) -> Result<Vec<PreparedFile>, Error>
 where
     P: Fn(&[String]) -> (PathBuf, String, usize),
     F: FnMut(&SchemaCtx) -> Result<String, Error>,
 {
-    let mut written = Vec::new();
+    let mut prepared: Vec<PreparedFile> = Vec::new();
     for schema_rc in schemas {
         let mut schema = schema_rc.borrow_mut();
         let module = schema.module().to_vec();
@@ -110,11 +127,6 @@ where
         let parsed = schema.schema().map_err(Error::Schema)?.clone();
         drop(schema);
 
-        // Schema validation runs once up-front via
-        // `validate::all_schemas(schemas)` (called at the top of each
-        // `generate()`), so the file-writing loop can assume validity.
-
-        std::fs::create_dir_all(&out_dir)?;
         let ctx = SchemaCtx {
             class_name,
             #[cfg(feature = "rust-plain")]
@@ -129,10 +141,70 @@ where
         let _ = module;
         let body = render(&ctx)?;
         let out_path = out_dir.join(&ctx.file_name);
-        std::fs::write(&out_path, &body)?;
-        written.push(out_path);
+        prepared.push((out_path, body));
     }
-    Ok(written)
+    Ok(prepared)
+}
+
+/// Commit a fully-prepared file set to disk. Runs *only* after every
+/// pre-render check (schema validation, plan build, per-property
+/// rendering) has succeeded — so a render-time failure can never leave
+/// the user with a half-clobbered output tree.
+///
+/// Behaviour:
+/// - If `clear_output` is true, wipe `output_dir` first (created if missing).
+/// - Otherwise just ensure `output_dir` exists.
+/// - Create parent directories for each prepared file on demand.
+/// - Write every body, in order, returning the paths in the same order.
+#[cfg(any(
+    feature = "python-pydantic",
+    feature = "python-sql-model",
+    feature = "rust-plain",
+    feature = "rust-crate",
+))]
+pub(crate) fn write_prepared(
+    output_dir: &Path,
+    clear_output: bool,
+    files: Vec<PreparedFile>,
+    diagnostics: Vec<String>,
+) -> Result<GenerateOutput, Error> {
+    if clear_output {
+        clear_dir_if_exists(output_dir)?;
+    } else {
+        std::fs::create_dir_all(output_dir)?;
+    }
+    let mut written: Vec<PathBuf> = Vec::with_capacity(files.len());
+    for (path, body) in files {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, body)?;
+        written.push(path);
+    }
+    Ok(GenerateOutput {
+        written,
+        diagnostics,
+    })
+}
+
+/// Rename `from` → `to` inside a prepared file buffer (in-memory; no
+/// disk IO). Mirrors the on-disk semantics of the old `rename_in_written`
+/// but operates on the pre-commit buffer so the rename happens atomically
+/// with the rest of the write phase. Used by `rust::crate_::generate` to
+/// rewrite the inner `<src>/mod.rs` path to `<src>/lib.rs` after
+/// `rust::plain::prepare` has staged it.
+///
+/// Works for both single-file (exact match) and directory (prefix-match)
+/// renames.
+#[cfg(feature = "rust-crate")]
+pub(crate) fn rename_in_prepared(from: &Path, to: &Path, files: &mut [PreparedFile]) {
+    for (path, _body) in files.iter_mut() {
+        if *path == from {
+            *path = to.to_path_buf();
+        } else if let Ok(rel) = path.strip_prefix(from) {
+            *path = to.join(rel);
+        }
+    }
 }
 
 pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
@@ -151,133 +223,9 @@ pub(crate) fn clear_dir_if_exists(dir: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-/// Rename `from` → `to` on disk and update any matching entries in `written` to
-/// point at the new path. Works for both a single file (exact-match) and a
-/// directory (any descendant path is relocated). No-op when `from` doesn't
-/// exist (nothing to rename). When `to` already exists from a prior
-/// `--no-clear-output` run we **remove the stale target first** so the
-/// freshly-generated content under `from` wins: skipping the rename instead
-/// would leave a half-stale crate.
-///
-/// Used by `rust::crate_::generate` to rename `<out>/src/mod.rs` →
-/// `<out>/src/lib.rs`. (The `enum/` → `enums/` rewrite that previously
-/// also went through this helper is now done at path-build time via
-/// `rust::path_segments`.)
-#[cfg(feature = "rust-crate")]
-pub(crate) fn rename_in_written(
-    from: &Path,
-    to: &Path,
-    written: &mut [PathBuf],
-) -> std::io::Result<()> {
-    if !from.exists() {
-        return Ok(());
-    }
-    if to.exists() {
-        // Stale leftover from a previous --no-clear-output run. Wipe it so
-        // the fresh source content wins; treat dir-or-file generically.
-        let metadata = std::fs::metadata(to)?;
-        if metadata.is_dir() {
-            std::fs::remove_dir_all(to)?;
-        } else {
-            std::fs::remove_file(to)?;
-        }
-    }
-    std::fs::rename(from, to)?;
-    for p in written.iter_mut() {
-        if *p == from {
-            *p = to.to_path_buf();
-        } else if let Ok(rel) = p.strip_prefix(from) {
-            *p = to.join(rel);
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(feature = "rust-crate")]
-    #[test]
-    fn rename_in_written_noop_when_source_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let from = tmp.path().join("missing");
-        let to = tmp.path().join("renamed");
-        let mut written = vec![tmp.path().join("unrelated.txt")];
-        rename_in_written(&from, &to, &mut written).unwrap();
-        assert!(!to.exists());
-        assert_eq!(written[0], tmp.path().join("unrelated.txt"));
-    }
-
-    #[cfg(feature = "rust-crate")]
-    #[test]
-    fn rename_in_written_overwrites_stale_target_file() {
-        // `--no-clear-output` rerun: a previous run left `dst`, this run
-        // freshly wrote `src`. The stale `dst` must be replaced by `src`'s
-        // content, not skipped over.
-        let tmp = tempfile::tempdir().unwrap();
-        let from = tmp.path().join("src");
-        let to = tmp.path().join("dst");
-        std::fs::write(&from, "fresh").unwrap();
-        std::fs::write(&to, "stale").unwrap();
-        let mut written = vec![from.clone()];
-        rename_in_written(&from, &to, &mut written).unwrap();
-        assert!(!from.exists());
-        assert!(to.exists());
-        assert_eq!(std::fs::read_to_string(&to).unwrap(), "fresh");
-        assert_eq!(written[0], to);
-    }
-
-    #[cfg(feature = "rust-crate")]
-    #[test]
-    fn rename_in_written_overwrites_stale_target_directory() {
-        let tmp = tempfile::tempdir().unwrap();
-        let from = tmp.path().join("enum");
-        let to = tmp.path().join("enums");
-        std::fs::create_dir_all(&from).unwrap();
-        std::fs::write(from.join("a.rs"), "fresh").unwrap();
-        std::fs::create_dir_all(&to).unwrap();
-        std::fs::write(to.join("old.rs"), "stale").unwrap();
-        let mut written = vec![from.join("a.rs")];
-        rename_in_written(&from, &to, &mut written).unwrap();
-        assert!(!from.exists());
-        assert!(to.join("a.rs").exists());
-        assert!(!to.join("old.rs").exists(), "stale entry survived");
-        assert_eq!(written[0], to.join("a.rs"));
-    }
-
-    #[cfg(feature = "rust-crate")]
-    #[test]
-    fn rename_in_written_relocates_exact_file_path() {
-        let tmp = tempfile::tempdir().unwrap();
-        let from = tmp.path().join("a.rs");
-        let to = tmp.path().join("b.rs");
-        std::fs::write(&from, "data").unwrap();
-        let mut written = vec![from.clone(), tmp.path().join("other.rs")];
-        rename_in_written(&from, &to, &mut written).unwrap();
-        assert!(!from.exists());
-        assert!(to.exists());
-        assert_eq!(written[0], to);
-        assert_eq!(written[1], tmp.path().join("other.rs"));
-    }
-
-    #[cfg(feature = "rust-crate")]
-    #[test]
-    fn rename_in_written_relocates_directory_descendants() {
-        let tmp = tempfile::tempdir().unwrap();
-        let from = tmp.path().join("enum");
-        let to = tmp.path().join("enums");
-        std::fs::create_dir_all(from.join("nested")).unwrap();
-        std::fs::write(from.join("a.rs"), "").unwrap();
-        std::fs::write(from.join("nested/b.rs"), "").unwrap();
-        let mut written = vec![from.join("a.rs"), from.join("nested/b.rs")];
-        rename_in_written(&from, &to, &mut written).unwrap();
-        assert!(!from.exists());
-        assert!(to.join("a.rs").exists());
-        assert!(to.join("nested/b.rs").exists());
-        assert_eq!(written[0], to.join("a.rs"));
-        assert_eq!(written[1], to.join("nested/b.rs"));
-    }
 
     #[cfg(any(
         feature = "python-pydantic",
@@ -285,7 +233,7 @@ mod tests {
         feature = "rust-plain",
     ))]
     #[test]
-    fn for_each_schema_file_writes_per_schema_and_returns_paths() {
+    fn for_each_schema_file_buffers_per_schema_without_writing() {
         let tmp = tempfile::tempdir().unwrap();
         let mut schemas = bo4e_schemas::Schemas::new("v202401.0.0".parse().unwrap());
         let mut s1 = bo4e_schemas::Schema::new(vec!["bo".into(), "Angebot".into()], None).unwrap();
@@ -303,19 +251,112 @@ mod tests {
 
         let mut seen: Vec<String> = Vec::new();
         let path_for = |m: &[String]| layout::module_paths(tmp.path(), m, "txt");
-        let written = for_each_schema_file(&schemas, path_for, |ctx| {
+        let prepared = for_each_schema_file(&schemas, path_for, |ctx| {
             seen.push(ctx.class_name.clone());
             Ok(format!("// {}\n", ctx.class_name))
         })
         .unwrap();
 
         assert_eq!(seen, vec!["Angebot".to_string(), "Typ".to_string()]);
-        assert_eq!(written.len(), 2);
-        // Files were actually written with the closure's body.
-        let body = std::fs::read_to_string(&written[0]).unwrap();
-        assert_eq!(body, "// Angebot\n");
+        assert_eq!(prepared.len(), 2);
+        // Buffered, not on disk yet.
+        assert!(!prepared[0].0.exists());
+        assert!(!prepared[1].0.exists());
+        // Body matches what the closure produced.
+        assert_eq!(prepared[0].1, "// Angebot\n");
         // Path is `<out>/<top>/<lowercased-leaf>.<ext>`.
-        assert_eq!(written[0], tmp.path().join("bo").join("angebot.txt"));
-        assert_eq!(written[1], tmp.path().join("enum").join("typ.txt"));
+        assert_eq!(prepared[0].0, tmp.path().join("bo").join("angebot.txt"));
+        assert_eq!(prepared[1].0, tmp.path().join("enum").join("typ.txt"));
+    }
+
+    /// `write_prepared` is the single commit point. If the buffer is
+    /// empty we still create the output dir; otherwise we write every
+    /// file in order, creating parent dirs on demand.
+    #[cfg(any(
+        feature = "python-pydantic",
+        feature = "python-sql-model",
+        feature = "rust-plain",
+        feature = "rust-crate",
+    ))]
+    #[test]
+    fn write_prepared_writes_buffer_and_creates_parents() {
+        let tmp = tempfile::tempdir().unwrap();
+        let files = vec![
+            (tmp.path().join("bo/angebot.txt"), "a".into()),
+            (tmp.path().join("com/adresse.txt"), "b".into()),
+        ];
+        let out = write_prepared(tmp.path(), true, files, vec![]).unwrap();
+        assert_eq!(out.written.len(), 2);
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("bo/angebot.txt")).unwrap(),
+            "a"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("com/adresse.txt")).unwrap(),
+            "b"
+        );
+    }
+
+    /// `write_prepared(..., clear_output=true, ...)` wipes the output
+    /// dir before writing. Files that exist outside the buffer are
+    /// removed.
+    #[cfg(any(
+        feature = "python-pydantic",
+        feature = "python-sql-model",
+        feature = "rust-plain",
+        feature = "rust-crate",
+    ))]
+    #[test]
+    fn write_prepared_clears_first_when_requested() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("stale.txt"), "stale").unwrap();
+        let files = vec![(tmp.path().join("fresh.txt"), "fresh".into())];
+        write_prepared(tmp.path(), true, files, vec![]).unwrap();
+        assert!(!tmp.path().join("stale.txt").exists());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("fresh.txt")).unwrap(),
+            "fresh"
+        );
+    }
+
+    /// Buffered rename of `from` → `to` operates on the prepared file
+    /// list, never on disk. Used by `rust::crate_::generate` to rewrite
+    /// the inner `src/mod.rs` → `src/lib.rs` before commit.
+    #[cfg(feature = "rust-crate")]
+    #[test]
+    fn rename_in_prepared_renames_files_in_buffer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = tmp.path().join("src").join("mod.rs");
+        let to = tmp.path().join("src").join("lib.rs");
+        let mut files = vec![
+            (from.clone(), "// root".into()),
+            (tmp.path().join("src/bo/foo.rs"), "// bo".into()),
+        ];
+        rename_in_prepared(&from, &to, &mut files);
+        assert_eq!(files[0].0, to);
+        // Unrelated entries untouched.
+        assert_eq!(files[1].0, tmp.path().join("src/bo/foo.rs"));
+        // No disk effects.
+        assert!(!from.exists());
+        assert!(!to.exists());
+    }
+
+    /// Directory-prefix rename: every entry whose path starts with
+    /// `from` is relocated under `to`.
+    #[cfg(feature = "rust-crate")]
+    #[test]
+    fn rename_in_prepared_relocates_directory_prefixes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = tmp.path().join("enum");
+        let to = tmp.path().join("enums");
+        let mut files = vec![
+            (from.join("a.rs"), "".into()),
+            (from.join("nested/b.rs"), "".into()),
+            (tmp.path().join("other.rs"), "".into()),
+        ];
+        rename_in_prepared(&from, &to, &mut files);
+        assert_eq!(files[0].0, to.join("a.rs"));
+        assert_eq!(files[1].0, to.join("nested/b.rs"));
+        assert_eq!(files[2].0, tmp.path().join("other.rs"));
     }
 }

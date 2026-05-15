@@ -52,6 +52,11 @@ pub(crate) enum SqlField {
         #[allow(dead_code)]
         title: Option<String>,
         docstring: Option<String>,
+        /// Imports required by `type_` and `default` (e.g. `typing.Literal`,
+        /// `datetime.date`, `uuid.UUID`, `decimal.Decimal`). Carried through
+        /// the plan because the renderer manages its own import block and
+        /// would otherwise lose the type-mapper's import set silently.
+        imports: std::collections::BTreeSet<crate::imports::Import>,
     },
     /// `<name>_id: UUID = Field(default=None, foreign_key="adresse.id")`.
     /// Sibling of a `Relationship` entry that follows immediately in `sql_fields`.
@@ -233,13 +238,12 @@ fn synth_id_field(obj: &ObjectSchema) -> SqlField {
         .get("_id")
         .and_then(literal_title)
         .unwrap_or_else(|| "Primary key ID-Field".to_string());
-    let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
+    let title_lit = crate::python::python_string_literal(&title);
     // The renderer rewrites `_id` → `id_` and injects `alias="_id"` automatically
     // via the shared `python_attr_name` / `inject_alias` path; keep the leading
     // underscore here so that single code path stays the source of truth.
-    let default = format!(
-        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, title=\"{escaped_title}\")"
-    );
+    let default =
+        format!("Field(default_factory=uuid_pkg.uuid4, primary_key=True, title={title_lit})");
     SqlField::Scalar {
         name: "_id".to_string(),
         type_: "uuid_pkg.UUID".to_string(),
@@ -247,6 +251,9 @@ fn synth_id_field(obj: &ObjectSchema) -> SqlField {
         default: Some(default),
         title: None,
         docstring: Some("The primary key of the table as a UUID4.".to_string()),
+        // `uuid_pkg.UUID` resolves via the renderer's well-known
+        // `from uuid import uuid as uuid_pkg` import; no extra imports.
+        imports: std::collections::BTreeSet::new(),
     }
 }
 
@@ -278,6 +285,11 @@ fn simple_scalar_field(
         default,
         title: literal_title(schema),
         docstring: literal_description(schema),
+        // Carry the type-mapper's imports through the plan so the
+        // renderer can merge them into its import block. Without this,
+        // type expressions like `Literal["X"]`, `date`, `UUID`,
+        // `Decimal` would render with undefined names.
+        imports: mapped.imports,
     }))
 }
 

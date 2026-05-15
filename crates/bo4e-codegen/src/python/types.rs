@@ -111,30 +111,52 @@ fn render_typed_default(schema: &SchemaType, prim: &PrimitiveValue) -> String {
         (SchemaType::NumberSchema(_), PrimitiveValue::Integer(i)) => format!("{i}.0"),
         (SchemaType::NumberSchema(_), PrimitiveValue::Float(f)) => f.to_string(),
 
-        // ── Decimal: always string form for precision. ────────────
-        (SchemaType::DecimalSchema(_), PrimitiveValue::Integer(i)) => format!("Decimal(\"{i}\")"),
-        (SchemaType::DecimalSchema(_), PrimitiveValue::Float(f)) => format!("Decimal(\"{f}\")"),
-        (SchemaType::DecimalSchema(_), PrimitiveValue::String(s)) => format!("Decimal(\"{s}\")"),
+        // ── Decimal: always string form for precision. All values
+        // pass through `python_string_literal` so a quote / backslash
+        // in the original (validator already proved parseable) can't
+        // produce invalid Python source. ──────────────────────────
+        (SchemaType::DecimalSchema(_), PrimitiveValue::Integer(i)) => {
+            format!(
+                "Decimal({})",
+                crate::python::python_string_literal(&i.to_string())
+            )
+        }
+        (SchemaType::DecimalSchema(_), PrimitiveValue::Float(f)) => {
+            format!(
+                "Decimal({})",
+                crate::python::python_string_literal(&f.to_string())
+            )
+        }
+        (SchemaType::DecimalSchema(_), PrimitiveValue::String(s)) => {
+            format!("Decimal({})", crate::python::python_string_literal(s))
+        }
 
         // ── String: plain and typed-format. ───────────────────────
         (SchemaType::StringSchema(s), PrimitiveValue::String(v)) if s.format.is_none() => {
-            format!("\"{v}\"")
+            crate::python::python_string_literal(v)
         }
         (SchemaType::StringSchema(s), PrimitiveValue::String(v)) => match &s.format {
             Some(StringSchemaFormat::Date) => render_python_date(v),
             Some(StringSchemaFormat::Time) => render_python_time(v),
             Some(StringSchemaFormat::DateTime) => render_python_datetime(v),
-            Some(StringSchemaFormat::Uuid) => format!("UUID(\"{v}\")"),
-            _ => format!("\"{v}\""),
+            Some(StringSchemaFormat::Uuid) => {
+                format!("UUID({})", crate::python::python_string_literal(v))
+            }
+            _ => crate::python::python_string_literal(v),
         },
 
         // ── Enum / const / $ref string defaults. The pydantic
         // generator's `qualify_enum_default` wraps a quoted-string
         // default to `EnumName.<member>` when the schema $refs an
-        // enum; this base rendering covers the inline cases. ─────
+        // enum; this base rendering covers the inline cases. The
+        // string passes through `python_string_literal` so that
+        // arbitrary enum-member shapes (rare but allowed by JSON
+        // Schema) escape cleanly. ─────────────────────────────────
         (SchemaType::ConstantSchema(_), PrimitiveValue::String(v))
         | (SchemaType::StrEnum(_), PrimitiveValue::String(v))
-        | (SchemaType::ReferenceSchema(_), PrimitiveValue::String(v)) => format!("\"{v}\""),
+        | (SchemaType::ReferenceSchema(_), PrimitiveValue::String(v)) => {
+            crate::python::python_string_literal(v)
+        }
 
         // ── Any / Object: validator only accepts Null here; the
         // PrimitiveValue::Null arm at the top already handles it. ─
@@ -155,7 +177,10 @@ fn render_python_date(value: &str) -> String {
     use chrono::Datelike;
     match chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d") {
         Ok(d) => format!("date({}, {}, {})", d.year(), d.month(), d.day()),
-        Err(_) => format!("date.fromisoformat(\"{value}\")"),
+        Err(_) => format!(
+            "date.fromisoformat({})",
+            crate::python::python_string_literal(value)
+        ),
     }
 }
 
@@ -181,7 +206,10 @@ fn render_python_time(value: &str) -> String {
                 )
             }
         }
-        Err(_) => format!("time.fromisoformat(\"{value}\")"),
+        Err(_) => format!(
+            "time.fromisoformat({})",
+            crate::python::python_string_literal(value)
+        ),
     }
 }
 
@@ -197,7 +225,10 @@ fn render_python_datetime(value: &str) -> String {
     } else {
         value.to_string()
     };
-    format!("datetime.fromisoformat(\"{normalised}\")")
+    format!(
+        "datetime.fromisoformat({})",
+        crate::python::python_string_literal(&normalised)
+    )
 }
 
 // ── Public mapping function ───────────────────────────────────────────────────
@@ -360,7 +391,7 @@ fn literal_str_type(value: &str) -> MappedType {
         name: "Literal".to_string(),
     });
     MappedType {
-        rendered: format!("Literal[\"{value}\"]"),
+        rendered: format!("Literal[{}]", crate::python::python_string_literal(value)),
         imports,
     }
 }

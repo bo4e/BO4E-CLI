@@ -21,12 +21,18 @@ fn inject_alias(field_def: &str, alias: &str) -> String {
     };
     let prefix = &field_def[..open + 1];
     let rest = &field_def[open + 1..];
+    // `alias` is the original JSON property name. Validator restricts
+    // property names to identifier-shaped characters, so escape is
+    // technically defensive — but routing through the shared helper
+    // keeps every string-into-Python-source site uniform and prevents
+    // drift if a future relaxation widens the allowed name set.
+    let alias_lit = crate::python::python_string_literal(alias);
     if rest.starts_with(')') {
-        format!("{prefix}alias=\"{alias}\")")
+        format!("{prefix}alias={alias_lit})")
     } else if let Some(after_ellipsis) = rest.strip_prefix("...") {
-        format!("{prefix}..., alias=\"{alias}\"{after_ellipsis}")
+        format!("{prefix}..., alias={alias_lit}{after_ellipsis}")
     } else {
-        format!("{prefix}alias=\"{alias}\", {rest}")
+        format!("{prefix}alias={alias_lit}, {rest}")
     }
 }
 
@@ -117,6 +123,46 @@ struct RawImport {
     alias: Option<String>,
 }
 
+/// Convert the language-neutral [`crate::imports::Import`] values
+/// produced by [`crate::python::types::map_pydantic`] into the
+/// SQL-renderer's `RawImport` shape. Sibling imports turn into
+/// relative `from .X.Y import Z` lines using `depth` super-dots.
+/// Named imports map 1:1.
+fn raw_imports_from(
+    imports: &BTreeSet<crate::imports::Import>,
+    depth: usize,
+) -> BTreeSet<RawImport> {
+    use crate::imports::Import;
+    let mut out = BTreeSet::new();
+    for imp in imports {
+        match imp {
+            Import::Named { module, name } => {
+                out.insert(RawImport {
+                    from_: module.clone(),
+                    name: name.clone(),
+                    alias: None,
+                });
+            }
+            Import::Sibling { module, name } => {
+                let dots = ".".repeat(depth);
+                let path = module
+                    .iter()
+                    .take(module.len().saturating_sub(1))
+                    .cloned()
+                    .chain(std::iter::once(crate::layout::module_file_name(module)))
+                    .collect::<Vec<_>>()
+                    .join(".");
+                out.insert(RawImport {
+                    from_: format!("{dots}{path}"),
+                    name: name.clone(),
+                    alias: None,
+                });
+            }
+        }
+    }
+    out
+}
+
 /// Convert a set of `RawImport`s to grouped, sorted `SqlImport`s suitable for the template.
 /// Imports that share the same `from_` and no alias are combined on one line.
 /// Imports with an alias are always kept separate.
@@ -197,18 +243,22 @@ pub(crate) fn render_table(
                 type_,
                 default,
                 docstring,
+                imports,
                 ..
             } => {
                 // Schema-driven: the default comes from the property's
-                // declared `default` literal. No field-name special cases
-                // (the earlier `_version` → `__version__` import shortcut
-                // is gone — `_version` defaults like any other string
-                // field, taking its value from the schema literal).
+                // declared `default` literal. No field-name special cases.
                 let definition = match default {
                     Some(d) if d.starts_with("Field(") => d.clone(),
                     Some(d) => format!("Field(default={d})"),
                     None => "Field(...)".to_string(),
                 };
+                // Pull through every import the type mapper attached:
+                // `typing.Literal` for single-variant narrowing,
+                // `datetime.date` / `time` / `datetime`, `uuid.UUID`,
+                // `decimal.Decimal`. Without this the rendered type or
+                // default expression would reference undefined names.
+                raw_imports.extend(raw_imports_from(imports, depth));
                 insert_field(
                     &mut fields_map,
                     name,
@@ -516,7 +566,7 @@ fn render_enum(env: &Environment<'_>, table: &TablePlan) -> Result<String, Error
         .map(|v| {
             minijinja::Value::from_serialize(&context! {
                 name => sanitize_member_name(v),
-                default => format!("\"{v}\""),
+                default => crate::python::python_string_literal(v),
                 docstring => None::<String>,
             })
         })
@@ -641,7 +691,10 @@ pub(crate) fn render_init(env: &Environment<'_>, plan: &SqlPlan) -> Result<Strin
 }
 
 pub(crate) fn render_version(version: &str) -> String {
-    format!("__version__: str = \"{version}\"\n")
+    format!(
+        "__version__: str = {}\n",
+        crate::python::python_string_literal(version)
+    )
 }
 
 #[cfg(test)]
@@ -778,6 +831,7 @@ mod tests {
                     ),
                     title: None,
                     docstring: Some("Primary key.".to_string()),
+                    imports: std::collections::BTreeSet::new(),
                 },
                 SqlField::ForeignKey {
                     name: "geschaeftspartner_id".to_string(),

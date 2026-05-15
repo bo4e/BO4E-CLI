@@ -5,7 +5,7 @@
 pub enum {{ class_name }} {
 {%- for v in variants %}
 {% if single_variant %}    #[default]
-{% endif %}    #[serde(rename = "{{ v.wire }}")]
+{% endif %}    #[serde(rename = {{ v.wire_quoted }})]
     {{ v.name }},
 {%- endfor %}
 }

@@ -224,7 +224,7 @@ mod tests {
                 doc => "/// Angebot discriminator",
                 single_variant => true,
                 class_name => "AngebotTyp",
-                variants => vec![context!{ wire => "ANGEBOT", name => "Angebot" }],
+                variants => vec![context!{ wire_quoted => "\"ANGEBOT\"", name => "Angebot" }],
             })
             .unwrap();
         assert!(single.contains("pub enum AngebotTyp"));
@@ -240,8 +240,8 @@ mod tests {
                 single_variant => false,
                 class_name => "Typ",
                 variants => vec![
-                    context!{ wire => "A", name => "A" },
-                    context!{ wire => "B", name => "B" },
+                    context!{ wire_quoted => "\"A\"", name => "A" },
+                    context!{ wire_quoted => "\"B\"", name => "B" },
                 ],
             })
             .unwrap();
