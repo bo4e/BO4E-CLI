@@ -130,7 +130,6 @@ fn drive_pipeline(generate_target: &str) {
         edited.to_str().unwrap(),
         "-o",
         gen_out.to_str().unwrap(),
-        "-t",
         generate_target,
     ])
     .unwrap()

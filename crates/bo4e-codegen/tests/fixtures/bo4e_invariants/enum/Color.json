@@ -1,0 +1,6 @@
+{
+  "title": "Color",
+  "description": "Tri-state colour enum referenced by Foo (used to exercise row 5 with an enum-typed default).",
+  "type": "string",
+  "enum": ["RED", "GREEN", "BLUE"]
+}

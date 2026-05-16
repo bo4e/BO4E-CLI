@@ -4,6 +4,8 @@
 //! (`rust/imports.rs::UseBlock`) consume this type. The data model is
 //! language-neutral; each language owns its own rendering.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 /// A single import statement that a mapped type depends on.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Import {
@@ -18,6 +20,39 @@ pub enum Import {
     /// Example: a `$ref` to `"../bo/Geschaeftspartner.json"` produces
     /// `Sibling { module: vec!["bo", "Geschaeftspartner"], name: "Geschaeftspartner" }`.
     Sibling { module: Vec<String>, name: String },
+}
+
+/// Group every `Named` variant in `items` by its module path, with names
+/// collected into a sorted set per module. `Sibling` variants are ignored —
+/// each language renders those differently (Python: dotted relative paths;
+/// Rust: `super::`-prefixed paths) and that lives in the per-language
+/// renderer.
+///
+/// Used by both `python::imports::ImportBlock` and `rust::imports::UseBlock`.
+pub(crate) fn group_named_by_module(
+    items: &BTreeSet<Import>,
+) -> BTreeMap<&String, BTreeSet<&String>> {
+    let mut by_module: BTreeMap<&String, BTreeSet<&String>> = BTreeMap::new();
+    for item in items {
+        if let Import::Named { module, name } = item {
+            by_module.entry(module).or_default().insert(name);
+        }
+    }
+    by_module
+}
+
+/// Stitch a sequence of pre-rendered import-block strings (one per language
+/// "bucket": stdlib / third-party / sibling for Python; named / sibling for
+/// Rust) into the final block, separating non-empty entries with `sep` and
+/// dropping empty entries entirely. Returns an empty string when every input
+/// is empty.
+pub(crate) fn stitch_nonempty_blocks<S: AsRef<str>>(blocks: &[S], sep: &str) -> String {
+    blocks
+        .iter()
+        .map(|s| s.as_ref())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(sep)
 }
 
 #[cfg(test)]
@@ -62,6 +97,50 @@ mod tests {
                 name: "Optional".into()
             }
         );
+    }
+
+    #[test]
+    fn group_named_collects_by_module_and_skips_sibling() {
+        let mut items = BTreeSet::new();
+        items.insert(Import::Named {
+            module: "serde".into(),
+            name: "Serialize".into(),
+        });
+        items.insert(Import::Named {
+            module: "serde".into(),
+            name: "Deserialize".into(),
+        });
+        items.insert(Import::Named {
+            module: "chrono".into(),
+            name: "DateTime".into(),
+        });
+        items.insert(Import::Sibling {
+            module: vec!["com".into(), "Adresse".into()],
+            name: "Adresse".into(),
+        });
+        let grouped = group_named_by_module(&items);
+        // Sibling skipped.
+        assert_eq!(grouped.len(), 2);
+        // Names grouped under their module.
+        let serde = grouped.get(&"serde".to_string()).unwrap();
+        assert_eq!(serde.len(), 2);
+        assert!(serde.contains(&"Serialize".to_string()));
+        assert!(serde.contains(&"Deserialize".to_string()));
+        let chrono = grouped.get(&"chrono".to_string()).unwrap();
+        assert_eq!(chrono.len(), 1);
+    }
+
+    #[test]
+    fn stitch_drops_empties_and_joins_with_sep() {
+        let blocks = ["from a import b", "", "use c::d;"];
+        assert_eq!(
+            stitch_nonempty_blocks(&blocks, "\n\n"),
+            "from a import b\n\nuse c::d;"
+        );
+        let all_empty: [&str; 3] = ["", "", ""];
+        assert_eq!(stitch_nonempty_blocks(&all_empty, "\n\n"), "");
+        let single = ["only"];
+        assert_eq!(stitch_nonempty_blocks(&single, "\n\n"), "only");
     }
 
     #[test]

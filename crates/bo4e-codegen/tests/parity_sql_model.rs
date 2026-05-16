@@ -24,9 +24,8 @@ fn generated_angebot_parses_as_python_and_has_sqlmodel_class() {
     }
     let tmp = tempfile::tempdir().unwrap();
     let out = bo4e_schemas::io::schemas::read_schemas(&fixture_dir()).unwrap();
-    bo4e_codegen::generate(
+    bo4e_codegen::python::sql_model::generate(
         &out.schemas,
-        bo4e_codegen::OutputType::PythonSqlModel,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: true,

@@ -15,9 +15,8 @@ fn generate_into_tmp() -> tempfile::TempDir {
     let out = bo4e_schemas::io::schemas::read_schemas(&fixture_dir()).expect("read_schemas");
     let schemas = out.schemas;
 
-    bo4e_codegen::generate(
+    bo4e_codegen::python::pydantic::generate(
         &schemas,
-        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: true,
@@ -94,9 +93,8 @@ fn pydantic_renders_richer_sql_fixture_without_error() {
     let tmp = tempfile::tempdir().unwrap();
     let out = bo4e_schemas::io::schemas::read_schemas(&fixture).expect("read_schemas");
 
-    bo4e_codegen::generate(
+    bo4e_codegen::python::pydantic::generate(
         &out.schemas,
-        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: true,
@@ -116,14 +114,99 @@ fn pydantic_renders_richer_sql_fixture_without_error() {
         angebot.contains("adressen: list[Adresse]"),
         "got:\n{angebot}"
     );
-    assert!(
-        angebot.contains("extras: Any") && !angebot.contains("Any | None"),
-        "got:\n{angebot}"
-    );
+    // Strict matrix: `anyOf:[Any, null]` renders the nullability explicitly
+    // as `Any | None` (no `Any subsumes None` collapse any more).
+    assert!(angebot.contains("extras: Any | None"), "got:\n{angebot}");
     assert!(angebot.contains("werte: list[Decimal]"), "got:\n{angebot}");
     assert!(!angebot.contains("__future__"));
     assert!(
         !angebot.contains("table=True"),
         "pydantic flavour must not emit table=True"
+    );
+}
+
+/// Root-level schemas (no parent directory, e.g. BO4E's `ZusatzAttribut`)
+/// must be written to `<output>/<lower>.py` and re-exported from the root
+/// `__init__.py` so `from <pkg> import <Class>` works.
+#[test]
+fn pydantic_wires_root_level_schema_in_init() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut schemas = bo4e_schemas::Schemas::new("v202501.0.0".parse().unwrap());
+
+    let mut s = bo4e_schemas::Schema::new(vec!["ZusatzAttribut".into()], None).unwrap();
+    s.load_schema(
+        r#"{"type":"object","title":"ZusatzAttribut","properties":{"name":{"type":"string"}},"required":["name"]}"#
+            .into(),
+    );
+    schemas
+        .add_schema(std::rc::Rc::new(std::cell::RefCell::new(s)))
+        .unwrap();
+
+    bo4e_codegen::python::pydantic::generate(
+        &schemas,
+        tmp.path(),
+        &bo4e_codegen::Options {
+            clear_output: false,
+            templates_dir: None,
+        },
+    )
+    .expect("generate");
+
+    assert!(
+        tmp.path().join("zusatzattribut.py").exists(),
+        "root-level py file missing"
+    );
+    let init = std::fs::read_to_string(tmp.path().join("__init__.py")).unwrap();
+    assert!(
+        init.contains("from .zusatzattribut import ZusatzAttribut"),
+        "root __init__.py must re-export the root-level class, got:\n{init}"
+    );
+}
+
+/// Arbitrary-depth nesting: a schema at `foo/bar/Baz.json` must produce
+/// `__init__.py` at `foo/` and `foo/bar/` (so Python can import the
+/// nested package), plus the root `__init__.py` re-exports the class.
+#[test]
+fn pydantic_writes_init_py_at_every_nesting_level() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut schemas = bo4e_schemas::Schemas::new("v202501.0.0".parse().unwrap());
+
+    let mut s =
+        bo4e_schemas::Schema::new(vec!["foo".into(), "bar".into(), "Baz".into()], None).unwrap();
+    s.load_schema(
+        r#"{"type":"object","title":"Baz","properties":{"name":{"type":"string"}},"required":["name"]}"#
+            .into(),
+    );
+    schemas
+        .add_schema(std::rc::Rc::new(std::cell::RefCell::new(s)))
+        .unwrap();
+
+    bo4e_codegen::python::pydantic::generate(
+        &schemas,
+        tmp.path(),
+        &bo4e_codegen::Options {
+            clear_output: false,
+            templates_dir: None,
+        },
+    )
+    .expect("generate");
+
+    assert!(
+        tmp.path().join("foo/__init__.py").exists(),
+        "foo/__init__.py missing"
+    );
+    assert!(
+        tmp.path().join("foo/bar/__init__.py").exists(),
+        "foo/bar/__init__.py missing"
+    );
+    assert!(
+        tmp.path().join("foo/bar/baz.py").exists(),
+        "leaf py file missing at foo/bar/baz.py"
+    );
+
+    let init = std::fs::read_to_string(tmp.path().join("__init__.py")).unwrap();
+    assert!(
+        init.contains("from .foo.bar.baz import Baz"),
+        "root __init__.py must import the deeply nested class, got:\n{init}"
     );
 }

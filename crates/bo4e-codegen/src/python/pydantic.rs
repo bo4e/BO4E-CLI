@@ -4,7 +4,7 @@
 //! root `__init__.py`, `__version__.py`, and one empty `__init__.py` per subpackage
 //! directory.
 //!
-//! ## Approach (Option A from Task 8 plan)
+//! ## Approach: build the vendored template context faithfully
 //!
 //! The vendored Jinja2 templates under `templates/python/pydantic/` are byte-identical
 //! to the upstream `data-model-code-generator` templates used by the Python implementation
@@ -30,11 +30,11 @@ use crate::python::imports::ImportBlock;
 use crate::python::types::{Import, enum_ref_target, literal_default, map_pydantic, schema_base};
 use crate::python::{python_attr_name, root_init_module_docstring};
 use bo4e_schemas::Schemas;
-use bo4e_schemas::models::json_schema::SchemaRootType;
+use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootType};
 use minijinja::{Environment, context};
 use serde::Serialize;
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Per-field context shape that mirrors what the vendored
 /// `data-model-code-generator` `BaseModel.jinja2` template expects.
@@ -61,50 +61,33 @@ struct EnumMember {
     docstring: Option<String>,
 }
 
-pub(crate) fn generate_pydantic(
+pub fn generate(
     schemas: &Schemas,
     output_dir: &Path,
-    env: &Environment<'static>,
-) -> Result<Vec<PathBuf>, Error> {
-    std::fs::create_dir_all(output_dir)?;
-
-    let mut written: Vec<PathBuf> = Vec::new();
+    opts: &crate::Options,
+) -> Result<crate::GenerateOutput, Error> {
+    // ── Phase 1: validate + render (no destructive IO) ─────────────────────────
+    crate::validate::all_schemas(schemas)?;
+    let env = crate::env::make_environment(opts.templates_dir)?;
     let version_str = schemas.version.to_string();
 
-    // ── Per-schema files ───────────────────────────────────────────────────────
-    for schema_rc in schemas {
-        let mut schema = schema_rc.borrow_mut();
-        let module = schema.module().to_vec();
-        let class_name = schema.name().to_string();
-
-        let (out_dir, file_name, depth) = crate::python::module_paths(output_dir, &module, "py");
-        std::fs::create_dir_all(&out_dir)?;
-        let out_path = out_dir.join(&file_name);
-
-        // Resolve the parsed JSON Schema (clone so we drop the borrow before render).
-        let parsed = schema.schema().map_err(Error::Schema)?.clone();
-        drop(schema); // release the RefCell borrow before any further work
-
-        let body = match &parsed {
-            SchemaRootType::StrEnum(e) => render_enum(env, &class_name, &e.str_enum.enum_values)?,
-            SchemaRootType::Object(o) => {
-                render_object(env, &class_name, &module, &o.object, depth)?
+    let path_for = |m: &[String]| crate::layout::module_paths(output_dir, m, "py");
+    let mut files: Vec<crate::PreparedFile> =
+        crate::for_each_schema_file(schemas, path_for, |ctx| match &ctx.parsed {
+            SchemaRootType::StrEnum(e) => {
+                render_enum(&env, &ctx.class_name, &e.str_enum.enum_values)
             }
-        };
+            SchemaRootType::Object(o) => render_object(&env, &ctx.class_name, &o.object, ctx.depth),
+        })?;
 
-        std::fs::write(&out_path, body)?;
-        written.push(out_path);
-    }
+    files.push((
+        output_dir.join("__version__.py"),
+        format!(
+            "__version__: str = {}\n",
+            crate::python::python_string_literal(&version_str)
+        ),
+    ));
 
-    // ── __version__.py at the root ─────────────────────────────────────────────
-    let version_path = output_dir.join("__version__.py");
-    std::fs::write(
-        &version_path,
-        format!("__version__: str = \"{version_str}\"\n"),
-    )?;
-    written.push(version_path);
-
-    // ── Root __init__.py with re-exports ───────────────────────────────────────
     let init_tpl = env.get_template("python/pydantic/__init__.jinja2")?;
     let init_classes: Vec<_> = schemas
         .iter()
@@ -124,22 +107,20 @@ pub(crate) fn generate_pydantic(
         })
         .collect();
     let init_body = init_tpl.render(context! { classes => init_classes })?;
-    let init_path = output_dir.join("__init__.py");
-    std::fs::write(
-        &init_path,
+    files.push((
+        output_dir.join("__init__.py"),
         format!("{}\n{init_body}", root_init_module_docstring(&version_str)),
-    )?;
-    written.push(init_path);
+    ));
 
-    // ── Empty __init__.py per first-level subdirectory ─────────────────────────
-    let modules: Vec<Vec<String>> = schemas
-        .iter()
-        .map(|s| s.borrow().module().to_vec())
-        .collect();
-    let subdirs = crate::python::first_level_subdirs(modules.iter().map(|m| m.as_slice()));
-    crate::python::write_empty_subdir_inits(output_dir, &subdirs, &mut written)?;
+    // Empty `__init__.py` at every nested subdirectory level so root
+    // imports resolve across arbitrary-depth schema trees.
+    let tree = crate::layout::ModuleTree::from_schemas(schemas);
+    files.extend(crate::python::prepare_empty_subdir_inits_recursive(
+        output_dir, &tree,
+    ));
 
-    Ok(written)
+    // ── Phase 2: commit (clear + write) ────────────────────────────────────────
+    crate::write_prepared(output_dir, opts.clear_output, files, vec![])
 }
 
 // ── Renderers ────────────────────────────────────────────────────────────────
@@ -159,7 +140,7 @@ fn render_enum(
         .iter()
         .map(|v| EnumMember {
             name: sanitize_member_name(v),
-            default: format!("\"{v}\""),
+            default: crate::python::python_string_literal(v),
             docstring: None,
         })
         .collect();
@@ -179,7 +160,6 @@ fn render_enum(
 fn render_object(
     env: &Environment<'static>,
     class_name: &str,
-    parent_module: &[String],
     obj: &bo4e_schemas::models::json_schema::ObjectSchema,
     depth: usize,
 ) -> Result<String, Error> {
@@ -204,55 +184,20 @@ fn render_object(
     let required: BTreeSet<&str> = obj.required.iter().map(|s| s.as_str()).collect();
 
     for (prop_name, prop_schema) in &obj.properties {
-        let mut mapped = map_pydantic(prop_schema);
-        // BO4E `_typ` discriminators carry exactly one allowed value (either as
-        // `const: "X"` or as a one-entry `enum: ["X"]` — both shapes appear in the
-        // schemas). Tighten the type to `Literal[BoTyp.<MEMBER>]` (or
-        // `Literal[ComTyp.<MEMBER>]`) so the type system reflects the single-value
-        // constraint instead of the loose `str` fallback from `map_pydantic`.
-        if prop_name == "_typ" {
-            use bo4e_schemas::models::json_schema::SchemaType;
-            let const_value: Option<&str> = match prop_schema {
-                SchemaType::ConstantSchema(c) => Some(c.constant.as_str()),
-                SchemaType::StrEnum(s) if s.enum_values.len() == 1 => {
-                    Some(s.enum_values[0].as_str())
-                }
-                _ => None,
-            };
-            if let Some(value) = const_value {
-                let typing_enum = match parent_module.first().map(|s| s.as_str()) {
-                    Some("bo") => Some(("BoTyp", vec!["enum".to_string(), "BoTyp".to_string()])),
-                    Some("com") => Some(("ComTyp", vec!["enum".to_string(), "ComTyp".to_string()])),
-                    _ => None,
-                };
-                if let Some((enum_name, enum_module)) = typing_enum {
-                    let member = sanitize_member_name(value);
-                    mapped.rendered = format!("Literal[{enum_name}.{member}]");
-                    mapped.imports.clear();
-                    mapped.imports.insert(Import::Named {
-                        module: "typing".into(),
-                        name: "Literal".into(),
-                    });
-                    mapped.imports.insert(Import::Sibling {
-                        module: enum_module,
-                        name: enum_name.into(),
-                    });
-                }
-            }
-        }
+        let mapped = map_pydantic(prop_schema).map_err(|e| Error::UnsupportedSchemaShape {
+            schema_name: class_name.to_string(),
+            property: prop_name.clone(),
+            shape: e.0,
+        })?;
         imports.extend(mapped.imports.iter().cloned());
 
         let is_required = required.contains(prop_name.as_str());
 
-        // pydantic dialect: optional fields render as `T | None` only when the
-        // mapper hasn't already produced that union (e.g. via anyOf with null).
-        // `Any` already covers None, so don't widen it.
-        let type_str =
-            if is_required || mapped.rendered == "Any" || mapped.rendered.contains("| None") {
-                mapped.rendered.clone()
-            } else {
-                format!("{} | None", mapped.rendered)
-            };
+        // Strict matrix: the rendered type follows the schema's nullability
+        // *only*. No `| None` auto-widening for optional fields — optionality
+        // is expressed by the field's default expression below, not by
+        // widening the type beyond what the schema declares.
+        let type_str = mapped.rendered.clone();
 
         let name_snake = to_snake_case(prop_name);
         let python_name = python_attr_name(&name_snake);
@@ -261,41 +206,14 @@ fn render_object(
         // (or otherwise diverges from to_camel's roundtrip).
         let needs_alias = python_name != *prop_name;
 
-        // Choose the default expression. The schema may carry a JSON `default`;
-        // otherwise optional fields default to None and required fields have no default.
-        // String defaults that originate from an enum are qualified as `EnumName.MEMBER`
-        // instead of bare string literals — see qualify_enum_default.
+        // Strict matrix: the field's default expression is the schema's
+        // literal `default` (when present), with enum-`$ref` strings rewritten
+        // to `EnumName.MEMBER`. The validator (`crate::validate`) enforces
+        // `required ⇔ no default`, so we don't have to invent a `= None`
+        // fallback for optional-without-default fields any more.
         let schema_default = literal_default(prop_schema);
-        let schema_default = qualify_enum_default(
-            schema_default,
-            prop_schema,
-            prop_name,
-            parent_module,
-            &mut imports,
-        );
-        let default_expr: Option<String> = if let Some(d) = schema_default {
-            Some(d)
-        } else if is_required {
-            None
-        } else {
-            Some("None".into())
-        };
-
-        // Special-case: `_version` carries the BO4E version of the schema; default it
-        // to the live module-level `__version__` constant so generated objects round-trip.
-        let is_version_field = prop_name == "_version";
-        let default_expr = if is_version_field {
-            Some("__version__".to_string())
-        } else {
-            default_expr
-        };
-
-        if is_version_field {
-            imports.extend([Import::Sibling {
-                module: vec!["__version__".into()],
-                name: "__version__".into(),
-            }]);
-        }
+        let schema_default = qualify_enum_default(schema_default, prop_schema, &mut imports);
+        let default_expr: Option<String> = schema_default;
 
         let docstring = schema_base(prop_schema)
             .description
@@ -305,14 +223,19 @@ fn render_object(
 
         let (field_expr, represented_default, required_flag) = if needs_alias {
             needs_field_import = true;
+            // Validator restricts property names to `[A-Za-z_][A-Za-z0-9_]*`,
+            // so the escape is defensive; using `python_string_literal`
+            // keeps the alias rendering symmetric with every other
+            // string-into-Python-source site.
+            let alias_lit = crate::python::python_string_literal(prop_name);
             let inner = match &default_expr {
-                Some(d) => format!("default={d}, alias=\"{prop_name}\""),
-                None => format!("..., alias=\"{prop_name}\""),
+                Some(d) => format!("default={d}, alias={alias_lit}"),
+                None => format!("..., alias={alias_lit}"),
             };
             (Some(format!("Field({inner})")), String::new(), false)
         } else {
             let rep = default_expr.clone().unwrap_or_default();
-            (None, rep, is_required && !is_version_field)
+            (None, rep, is_required)
         };
 
         fields.push(PydanticField {
@@ -353,48 +276,40 @@ fn render_object(
     Ok(stitch(class_name, &imports, depth, &rendered))
 }
 
-/// If `default` is a quoted string literal (`"VALUE"`) AND the property's type is an
-/// enum, promote the literal to `EnumName.<sanitized_member>` and add the matching
-/// import to `imports`. Otherwise return `default` unchanged.
+/// If the property's declared `default` is a JSON string AND its schema is
+/// (or `anyOf`-wraps) a `$ref` to an `enum/<Name>` schema, replace the
+/// already-rendered Python literal with `EnumName.<sanitized_member>` and
+/// inject the matching sibling import. Anything else — non-string defaults,
+/// raw `None`, string defaults whose schema isn't an enum `$ref` — passes
+/// through untouched. Driven by schema shape only: no field-name special
+/// cases, so `bo4e edit` changes flow through.
 ///
-/// Two enum-detection paths:
-/// 1. The schema directly references (or `anyOf:[$ref, null]`-wraps) an `enum/<Name>`
-///    schema — e.g. `Adresse.landescode` (default `"DE"` → `Landescode.DE`),
-///    `Bilanzierung._typ` (default `"BILANZIERUNG"` → `BoTyp.BILANZIERUNG`).
-/// 2. The field is named `_typ` and the parent schema lives in `bo/` or `com/` —
-///    even when the schema is an inline `const`/`enum` string with no `$ref`,
-///    BO4E convention says the value belongs to `BoTyp`/`ComTyp` respectively, so
-///    we promote `default="ANGEBOT"` to `default=BoTyp.ANGEBOT` and import `BoTyp`.
+/// The raw default value is pulled directly from the schema (rather than
+/// recovered by stripping quotes from the rendered literal). Otherwise a
+/// member like `A"B` would round-trip through `python_string_literal` as
+/// `"A\"B"`, and stripping the outer quotes would leave `\"` in the value,
+/// which `sanitize_member_name` would convert to `__` — yielding a default
+/// that points to a non-existent enum member.
 fn qualify_enum_default(
     default: Option<String>,
     prop_schema: &bo4e_schemas::models::json_schema::SchemaType,
-    prop_name: &str,
-    parent_module: &[String],
     imports: &mut ImportBlock,
 ) -> Option<String> {
     let d = default?;
-    // Only quoted string literals can be enum members; pass through anything else
-    // (`None`, `True`, integers, …) untouched.
-    let value = d.strip_prefix('"').and_then(|s| s.strip_suffix('"'))?;
+    let raw_value = match schema_base(prop_schema).default.as_ref()? {
+        PrimitiveValue::String(v) => v.as_str(),
+        _ => return Some(d),
+    };
 
-    let (enum_name, enum_module) = enum_ref_target(prop_schema).or_else(|| {
-        // Fallback: special-case `_typ` for BO/COM modules where the schema is an
-        // inline const string with no enum $ref (most BO models follow this shape).
-        if prop_name != "_typ" {
-            return None;
-        }
-        match parent_module.first().map(|s| s.as_str()) {
-            Some("bo") => Some(("BoTyp".to_string(), vec!["enum".into(), "BoTyp".into()])),
-            Some("com") => Some(("ComTyp".to_string(), vec!["enum".into(), "ComTyp".into()])),
-            _ => None,
-        }
-    })?;
+    let Some((enum_name, enum_module)) = enum_ref_target(prop_schema) else {
+        return Some(d);
+    };
 
     imports.extend([Import::Sibling {
         module: enum_module,
         name: enum_name.clone(),
     }]);
-    let member = sanitize_member_name(value);
+    let member = sanitize_member_name(raw_value);
     Some(format!("{enum_name}.{member}"))
 }
 

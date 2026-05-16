@@ -7,9 +7,9 @@ use std::process::Command;
 fn bo4e_generate_writes_output_directory() {
     let fixture: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .unwrap() // crates/
+        .unwrap()
         .parent()
-        .unwrap() // repo root
+        .unwrap()
         .join("crates/bo4e-codegen/tests/fixtures/bo4e_min");
     assert!(fixture.exists(), "fixture dir not vendored");
 
@@ -20,7 +20,7 @@ fn bo4e_generate_writes_output_directory() {
         .arg("generate")
         .args(["-i", fixture.to_str().unwrap()])
         .args(["-o", tmp.path().to_str().unwrap()])
-        .args(["-t", "python-pydantic"])
+        .arg("python-pydantic")
         .output()
         .unwrap();
     assert!(

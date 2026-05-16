@@ -1,0 +1,65 @@
+{
+  "title": "Foo",
+  "description": "Strict required/default matrix fixture. One field per row (and a few extra payload shapes) so every cell of the matrix gets exercised at least once.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["req_str", "req_nullable_str"],
+  "properties": {
+    "req_str": {
+      "title": "Required, non-nullable, no default (row 1)",
+      "type": "string"
+    },
+    "req_nullable_str": {
+      "title": "Required, nullable, no default (row 2)",
+      "anyOf": [{ "type": "string" }, { "type": "null" }]
+    },
+    "opt_str_with_default": {
+      "title": "Optional, non-nullable, literal string default (row 3, string)",
+      "type": "string",
+      "default": "hello"
+    },
+    "opt_int_with_default": {
+      "title": "Optional, non-nullable, literal int default (row 3, int)",
+      "type": "integer",
+      "default": 42
+    },
+    "opt_bool_with_default": {
+      "title": "Optional, non-nullable, literal bool default (row 3, bool)",
+      "type": "boolean",
+      "default": true
+    },
+    "opt_nullable_str_null_default": {
+      "title": "Optional, nullable, null default (row 4)",
+      "default": null,
+      "anyOf": [{ "type": "string" }, { "type": "null" }]
+    },
+    "opt_nullable_str_literal_default": {
+      "title": "Optional, nullable, literal string default (row 5, string)",
+      "default": "world",
+      "anyOf": [{ "type": "string" }, { "type": "null" }]
+    },
+    "opt_nullable_enum_with_default": {
+      "title": "Optional, nullable, enum-ref default (row 5, enum)",
+      "default": "RED",
+      "anyOf": [{ "$ref": "../enum/Color.json#" }, { "type": "null" }]
+    },
+    "opt_date_with_default": {
+      "title": "Optional, typed-format `date` default — exercises chrono::NaiveDate::from_ymd_opt / Python date(y,m,d).",
+      "type": "string",
+      "format": "date",
+      "default": "2024-01-15"
+    },
+    "opt_uuid_with_default": {
+      "title": "Optional, typed-format `uuid` default — exercises uuid::uuid! / Python UUID(...).",
+      "type": "string",
+      "format": "uuid",
+      "default": "550e8400-e29b-41d4-a716-446655440000"
+    },
+    "opt_decimal_with_default": {
+      "title": "Optional, `decimal`-typed default with String form — exercises rust_decimal_macros::dec! / Python Decimal(\"...\").",
+      "type": "string",
+      "format": "decimal",
+      "default": "1.23"
+    }
+  }
+}

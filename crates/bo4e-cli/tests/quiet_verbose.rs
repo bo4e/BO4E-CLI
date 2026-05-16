@@ -110,7 +110,6 @@ fn generate_quiet_does_not_panic() {
         FIXTURE,
         "-o",
         outdir.path().to_str().unwrap(),
-        "-t",
         "python-pydantic",
     ])
     .unwrap();
@@ -132,7 +131,6 @@ fn generate_verbose_does_not_panic() {
         FIXTURE,
         "-o",
         outdir.path().to_str().unwrap(),
-        "-t",
         "python-pydantic",
     ])
     .unwrap();

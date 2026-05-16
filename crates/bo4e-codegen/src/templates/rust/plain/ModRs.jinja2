@@ -1,0 +1,6 @@
+{%- for m in modules %}
+pub mod {{ m }};
+{%- endfor %}
+{%- for r in reexports %}
+pub use {{ r.module }}::{{ r.name }};
+{%- endfor %}

@@ -68,6 +68,38 @@ fn load_embedded(env: &mut minijinja::Environment<'static>) -> Result<(), Error>
         )?;
     }
 
+    #[cfg(feature = "rust-plain")]
+    {
+        env.add_template(
+            "rust/plain/Struct.jinja2",
+            include_str!("templates/rust/plain/Struct.jinja2"),
+        )?;
+        env.add_template(
+            "rust/plain/Enum.jinja2",
+            include_str!("templates/rust/plain/Enum.jinja2"),
+        )?;
+        env.add_template(
+            "rust/plain/DefaultImpl.jinja2",
+            include_str!("templates/rust/plain/DefaultImpl.jinja2"),
+        )?;
+        env.add_template(
+            "rust/plain/ModRs.jinja2",
+            include_str!("templates/rust/plain/ModRs.jinja2"),
+        )?;
+        env.add_template(
+            "rust/plain/RootModRs.jinja2",
+            include_str!("templates/rust/plain/RootModRs.jinja2"),
+        )?;
+    }
+
+    #[cfg(feature = "rust-crate")]
+    {
+        env.add_template(
+            "rust/crate_/CargoToml.jinja2",
+            include_str!("templates/rust/crate_/CargoToml.jinja2"),
+        )?;
+    }
+
     Ok(())
 }
 
@@ -149,5 +181,137 @@ mod tests {
         assert!(out.contains("from .many import AngebotAdressenLink"));
         assert!(out.contains("__all__ = ["));
         assert!(out.contains("\"Angebot\","));
+    }
+
+    #[cfg(feature = "rust-plain")]
+    #[test]
+    fn embedded_rust_plain_struct_template_loads() {
+        let env = make_environment(None).expect("env builds");
+        let tpl = env
+            .get_template("rust/plain/Struct.jinja2")
+            .expect("template registered");
+        let out = tpl
+            .render(context! {
+                uses => "use serde::{Deserialize, Serialize};",
+                extra_enums => Vec::<String>::new(),
+                doc => "/// docstring",
+                class_name => "Foo",
+                fields => vec![context!{
+                    name => "id",
+                    type_hint => "Option<String>",
+                    serde_attrs => "rename = \"_id\", default, skip_serializing_if = \"Option::is_none\"",
+                    doc => "/// id docstring"
+                }],
+                default_impl => "",
+            })
+            .unwrap();
+        assert!(out.contains("pub struct Foo"));
+        assert!(out.contains("pub id: Option<String>"));
+        assert!(out.contains("rename = \"_id\""));
+    }
+
+    #[cfg(feature = "rust-plain")]
+    #[test]
+    fn embedded_rust_plain_enum_template_loads() {
+        let env = make_environment(None).expect("env builds");
+        let tpl = env
+            .get_template("rust/plain/Enum.jinja2")
+            .expect("template registered");
+
+        // Single-variant discriminator shape: `Copy`/`Default` derives + `#[default]`.
+        let single = tpl
+            .render(context! {
+                doc => "/// Angebot discriminator",
+                single_variant => true,
+                class_name => "AngebotTyp",
+                variants => vec![context!{ wire_quoted => "\"ANGEBOT\"", name => "Angebot" }],
+            })
+            .unwrap();
+        assert!(single.contains("pub enum AngebotTyp"));
+        assert!(single.contains("Copy"));
+        assert!(single.contains("Default"));
+        assert!(single.contains("#[default]"));
+        assert!(single.contains("#[serde(rename = \"ANGEBOT\")]"));
+
+        // Multi-variant str-enum shape: no `Copy`/`Default` derives, no `#[default]`.
+        let multi = tpl
+            .render(context! {
+                doc => "",
+                single_variant => false,
+                class_name => "Typ",
+                variants => vec![
+                    context!{ wire_quoted => "\"A\"", name => "A" },
+                    context!{ wire_quoted => "\"B\"", name => "B" },
+                ],
+            })
+            .unwrap();
+        assert!(multi.contains("pub enum Typ"));
+        assert!(!multi.contains("Copy"));
+        assert!(!multi.contains("#[default]"));
+    }
+
+    #[cfg(feature = "rust-plain")]
+    #[test]
+    fn embedded_rust_plain_default_impl_template_loads() {
+        let env = make_environment(None).expect("env builds");
+        let tpl = env
+            .get_template("rust/plain/DefaultImpl.jinja2")
+            .expect("template registered");
+
+        // Emitted variant: full `impl Default` block.
+        let emitted = tpl
+            .render(context! {
+                class_name => "Angebot",
+                missing => Vec::<&str>::new(),
+                fields => vec![context!{ name => "id", expr => "None" }],
+            })
+            .unwrap();
+        assert!(emitted.contains("impl Default for Angebot"));
+        assert!(emitted.contains("id: None,"));
+
+        // Skipped variant, single missing field — uses singular grammar.
+        let skipped_one = tpl
+            .render(context! {
+                class_name => "Angebot",
+                missing => vec!["bad_field"],
+                fields => Vec::<minijinja::Value>::new(),
+            })
+            .unwrap();
+        assert!(skipped_one.contains("Default impl omitted"));
+        assert!(skipped_one.contains("field `bad_field` has no"));
+        assert!(!skipped_one.contains("impl Default for"));
+
+        // Skipped variant, multiple missing fields — uses plural grammar.
+        let skipped_many = tpl
+            .render(context! {
+                class_name => "Angebot",
+                missing => vec!["anhaenge", "werte"],
+                fields => Vec::<minijinja::Value>::new(),
+            })
+            .unwrap();
+        assert!(skipped_many.contains("fields `anhaenge`, `werte` have no"));
+    }
+
+    #[cfg(feature = "rust-crate")]
+    #[test]
+    fn embedded_rust_crate_cargo_toml_template_loads() {
+        let env = make_environment(None).expect("env builds");
+        let tpl = env
+            .get_template("rust/crate_/CargoToml.jinja2")
+            .expect("template registered");
+        let out = tpl
+            .render(context! {
+                crate_name => "my_bo4e",
+                semver => "202401.4.0",
+                bo4e_version => "v202401.4.0+gabc1234",
+            })
+            .unwrap();
+        assert!(out.contains("name = \"my_bo4e\""));
+        assert!(out.contains("version = \"202401.4.0\""));
+        // The bo4e_version goes in the description with its full original shape.
+        assert!(out.contains("version v202401.4.0+gabc1234"));
+        // Critical dependencies for the generated crate are present.
+        assert!(out.contains("serde = "));
+        assert!(out.contains("chrono = "));
     }
 }

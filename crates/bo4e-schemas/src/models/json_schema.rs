@@ -259,8 +259,16 @@ pub enum SchemaType {
     Array(ArraySchema),
     AnyOf(AnyOfSchema),
     AllOf(AllOfSchema),
-    StringSchema(StringSchema),
+    // `ConstantSchema` must precede `StringSchema`: both carry `type: "string"`,
+    // but only `ConstantSchema` requires the `const` field. Without this ordering,
+    // serde's untagged dispatch silently parses `{const, type:string}` (no `enum`)
+    // as a plain `StringSchema` and drops the `const` field — bypassing the
+    // inline-const default-value validator. BO4E itself always writes both
+    // `const` and `enum` (which match `StrEnum` first), so this ordering only
+    // affects bare-`const` JSON-Schema fragments, but the parsing must still be
+    // correct for those.
     ConstantSchema(ConstantSchema),
+    StringSchema(StringSchema),
     NumberSchema(NumberSchema),
     DecimalSchema(DecimalSchema),
     IntegerSchema(IntegerSchema),

@@ -28,8 +28,11 @@
       ]
     },
     "adressen": {
-      "type": "array",
-      "items": { "$ref": "../com/Adresse.json#" }
+      "default": null,
+      "anyOf": [
+        { "type": "array", "items": { "$ref": "../com/Adresse.json#" } },
+        { "type": "null" }
+      ]
     },
     "angebotsnummer": {
       "title": "Angebotsnummer",

@@ -15,7 +15,11 @@
     },
     "ort": {
       "title": "Ort",
-      "type": "string"
+      "default": null,
+      "anyOf": [
+        { "type": "string" },
+        { "type": "null" }
+      ]
     }
   }
 }

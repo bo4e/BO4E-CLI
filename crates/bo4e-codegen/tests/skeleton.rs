@@ -10,9 +10,8 @@ fn generate_pydantic_writes_at_least_one_file() {
         .add_schema(std::rc::Rc::new(std::cell::RefCell::new(s)))
         .unwrap();
 
-    bo4e_codegen::generate(
+    bo4e_codegen::python::pydantic::generate(
         &schemas,
-        bo4e_codegen::OutputType::PythonPydantic,
         tmp.path(),
         &bo4e_codegen::Options {
             clear_output: false,

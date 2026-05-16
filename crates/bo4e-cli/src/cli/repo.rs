@@ -2,7 +2,7 @@ use crate::cli::base::Executable;
 use clap::{Args, Subcommand};
 
 /// Command group for interacting with the BO4E-python repository
-/// (https://github.com/bo4e/BO4E-python). See 'repo --help' for more information.
+/// (<https://github.com/bo4e/BO4E-python>). See 'repo --help' for more information.
 #[derive(Args)]
 pub struct Repo {
     #[command(subcommand)]

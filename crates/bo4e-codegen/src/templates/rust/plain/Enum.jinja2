@@ -1,0 +1,11 @@
+{%- if doc -%}
+{{ doc }}
+{% endif -%}
+#[derive(Debug, Clone, {% if single_variant %}Copy, {% endif %}PartialEq, {% if single_variant %}Default, {% endif %}serde::Serialize, serde::Deserialize)]
+pub enum {{ class_name }} {
+{%- for v in variants %}
+{% if single_variant %}    #[default]
+{% endif %}    #[serde(rename = {{ v.wire_quoted }})]
+    {{ v.name }},
+{%- endfor %}
+}

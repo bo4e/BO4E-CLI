@@ -1,0 +1,31 @@
+#![cfg(feature = "rust-plain")]
+
+use std::path::PathBuf;
+use std::process::Command;
+
+#[test]
+fn bo4e_generate_rust_plain_writes_files() {
+    let fixture: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("crates/bo4e-codegen/tests/fixtures/bo4e_min");
+    assert!(fixture.exists());
+    let tmp = tempfile::tempdir().unwrap();
+    let exe = env!("CARGO_BIN_EXE_bo4e");
+    let out = Command::new(exe)
+        .arg("generate")
+        .args(["-i", fixture.to_str().unwrap()])
+        .args(["-o", tmp.path().to_str().unwrap()])
+        .arg("rust-plain")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(tmp.path().join("bo/angebot.rs").exists());
+    assert!(tmp.path().join("mod.rs").exists());
+}

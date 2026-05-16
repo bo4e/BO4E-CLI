@@ -29,15 +29,36 @@ Three crates: `bo4e-schemas` (model + IO), `bo4e-codegen` (template-driven gener
 ## 2. Documentation contract
 
 - `README.md` — for end users: features, install, usage. Keep implementation-agnostic.
-- `STRUCTURE.md` (root) — workspace overview, crate graph, architectural decisions.
-- `crates/<crate>/STRUCTURE.md` — what the crate does, how it's used, key implementation details.
+- `STRUCTURE.md` (root) — workspace overview, crate graph, architectural decisions. See §3 for the upkeep contract.
+- `crates/<crate>/STRUCTURE.md` — what the crate does, how it's used, key implementation details. See §3 for the upkeep contract.
 - Keep STRUCTURE.md lean — agents have small context windows. Prefer short pointers (`see crates/bo4e-codegen/src/python/pydantic.rs`) over inlining code.
-- **STRUCTURE.md updates are mandatory and unprompted.** Whenever you change repo structure, crate boundaries, public API, file layout, feature flags, or template directories, update the root `STRUCTURE.md` *and* each affected crate's `STRUCTURE.md` **in the same change** — don't wait to be asked. List the STRUCTURE.md updates explicitly when writing a design/plan migration list.
 - When you change user-visible behaviour, update `README.md` in the same change.
-- **Never modify `CHANGELOG.md` unless the user explicitly asks.** Even on breaking changes, release-worthy features, or version bumps — leave `CHANGELOG.md` alone. The user owns release-note framing and the `git-cliff` / `cargo-dist` pipeline. Do not list `CHANGELOG.md` edits in any plan or design. See §9 for the on-request workflow.
+- **Never modify `CHANGELOG.md` unless the user explicitly asks.** Even on breaking changes, release-worthy features, or version bumps — leave `CHANGELOG.md` alone. The user owns release-note framing and the `git-cliff` / `cargo-dist` pipeline. Do not list `CHANGELOG.md` edits in any plan or design. See §11 for the on-request workflow.
 - Don't create other ad-hoc `.md` files (summaries, handoffs, planning notes) unless asked.
 
-## 3. Build, verify, run
+## 3. STRUCTURE.md upkeep — non-negotiable
+
+`STRUCTURE.md` (root and per-crate) is a working document, not a release artefact. It must describe what the code does **today**. Whenever you change code that touches any claim a STRUCTURE.md file makes, update the affected STRUCTURE.md files **in the same commit** as the code change. Do not wait to be asked.
+
+**Triggers — far broader than "structural changes":**
+
+- **Repo layout / crate boundaries / file moves** — directory tree, module paths, file relocations.
+- **Public API** — function signatures, struct fields, trait bounds, error variants, feature-flag set on any `pub` item.
+- **Template directories** — additions / removals / renames under `crates/bo4e-codegen/src/templates/`.
+- **Architectural rules documented in any STRUCTURE.md** — schema invariants, default-rendering matrix, path-layout conventions, validation phase, naming conventions, no-special-cases-by-name rule, allOf/anyOf restrictions, dependency graph, error-handling boundaries. If you change *what these rules say*, even if the public API is unchanged, the doc must follow.
+- **Behavioural rules** — "the validator now rejects X", "the renderer no longer auto-wraps Y", "this function used to scan the disk, now it doesn't". Any statement in STRUCTURE.md that becomes false because of your edit is a defect to fix in the same commit.
+
+**Per-commit procedure (before staging):**
+
+1. Re-read the affected `STRUCTURE.md` claims. Ask: *does anything I just changed make a sentence in there inaccurate or incomplete?*
+2. Update the root `STRUCTURE.md` and each touched crate's `STRUCTURE.md` so they match the new reality.
+3. Add those edits to the same commit as the code change. They are not a follow-up.
+4. When writing a design or plan, list each STRUCTURE.md edit as an explicit migration-list item.
+5. If you discover a stale claim that predates your change while working in that area, fix it. STRUCTURE.md must not carry known lies forward.
+
+**Failure mode this rule exists to prevent:** a STRUCTURE.md statement that was true when written but isn't any more. A future reader (human or agent) trusts the doc and writes code against the stale claim — the divergence compounds until the doc is worse than no doc at all.
+
+## 4. Build, verify, run
 
 ```bash
 cargo check --workspace
@@ -55,7 +76,7 @@ CI runs `fmt`, `clippy`, `doc`, and `test` (on macOS + Windows). Match it locall
 
 **Verify before claiming done.** Run `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` and confirm both pass. Never assert "should work" without evidence in the conversation.
 
-## 4. Testing
+## 5. Testing
 
 - Unit tests live inline with `#[cfg(test)]` in the same file.
 - Integration tests live in `crates/<crate>/tests/`.
@@ -64,7 +85,7 @@ CI runs `fmt`, `clippy`, `doc`, and `test` (on macOS + Windows). Match it locall
 - Bug fixes need a regression test: **make it fail on the unfixed code first, then fix, then confirm it passes**. Note the failure mode in the test name.
 - When you significantly change behaviour, add or update tests in the same PR.
 
-## 5. Code conventions
+## 6. Code conventions
 
 - Rust 2024 edition.
 - Library crates (`bo4e-schemas`, `bo4e-codegen`) surface errors with `thiserror`. The CLI binary uses `color-eyre` / `String` at the `Executable::run` boundary.
@@ -74,33 +95,37 @@ CI runs `fmt`, `clippy`, `doc`, and `test` (on macOS + Windows). Match it locall
 - Don't silence warnings/errors with `#[allow(...)]`, `.unwrap()`-spam, or `// TODO: fix later`. Investigate the root cause.
 - Don't introduce unrelated refactors during a focused task.
 
-## 6. Feature flags & output types
+## 7. Feature flags & output types
 
 Output generators are gated by Cargo features. Existing flags (defined in both `bo4e-cli/Cargo.toml` and `bo4e-codegen/Cargo.toml`):
 
-| Feature             | Effect                                                  |
-| ------------------- | ------------------------------------------------------- |
-| `python-pydantic`   | Compile in the Pydantic-v2 generator and its templates. |
-| `python-sql-model`  | Compile in the SQLModel generator and its templates.    |
-| `python`            | Umbrella feature — both of the above.                   |
-| `default`           | All Python generators.                                  |
+| Feature             | Effect                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| `python-pydantic`   | Compile in the Pydantic-v2 generator and its templates.                |
+| `python-sql-model`  | Compile in the SQLModel generator and its templates.                   |
+| `python`            | Umbrella feature — both Python flavours.                               |
+| `rust-plain`        | Compile in the loose `rust-plain` generator (module tree, no manifest).|
+| `rust-crate`        | Compile in the `rust-crate` generator (wraps rust-plain in a Cargo crate, depends on `rust-plain`). |
+| `rust`              | Umbrella feature — both Rust flavours.                                 |
+| `default`           | All Python + Rust generators.                                          |
 
-`OutputType` (in `bo4e-codegen`) has its variants gated by these features, so clap's `--output-type` only accepts compiled-in values.
+`GenerateFlavour` (in `bo4e-cli::cli::generate`) has its variants gated by these features, so clap's `bo4e generate <flavour>` subcommand list only contains compiled-in values. The library side (`bo4e-codegen`) exposes one `pub fn generate` per flavour under `python::pydantic`, `python::sql_model`, `rust::plain`, and `rust::crate_`.
 
 **When asked to add a new output type:**
 
-1. Generalize first. Find code shared with existing generators (`naming.rs`, `python/mod.rs` helpers, the MiniJinja environment, root-`__init__.py` / `__version__.py` plumbing) and lift it to a shared layer if a clean abstraction emerges. Be willing to redesign existing generators when it lets you reuse code — copy-paste is not acceptable.
+1. Generalize first. Find code shared with existing generators (`naming.rs`, `layout.rs`, `validate.rs`, `python/mod.rs` helpers, the MiniJinja environment, root-`__init__.py` / `__version__.py` plumbing for Python, `rust/path_segments` for Rust paths) and lift it to a shared layer if a clean abstraction emerges. Be willing to redesign existing generators when it lets you reuse code — copy-paste is not acceptable.
 2. Add a Cargo feature in `bo4e-codegen` (and re-export it from `bo4e-cli`).
-3. Add a variant to `OutputType` gated by that feature.
+3. Add a variant to `GenerateFlavour` in `bo4e-cli::cli::generate`, gated by the feature, and dispatch it inside the `Executable` impl.
 4. Add embedded templates under `crates/bo4e-codegen/src/templates/<lang>/<flavour>/` and wire them up in `env.rs::load_embedded`.
 5. Cover the new generator with at least one integration test under `crates/bo4e-codegen/tests/` and a smoke test under `crates/bo4e-cli/tests/`.
-6. Update the relevant STRUCTURE.md files and the README feature list.
+6. Follow the **two-phase render** pattern: validate → render to `Vec<PreparedFile>` → commit via `write_prepared`. Destructive IO must happen only after all renders succeed.
+7. Update the relevant STRUCTURE.md files and the README feature list.
 
-## 7. Design / plan workflow
+## 8. Design / plan workflow
 
 Non-trivial work follows a design-then-plan workflow. Look at existing files under `docs/plans/` (e.g. `2026-05-08-generate-command-design.md`, `…-plan.md`) for the format and naming convention `YYYY-MM-DD-<topic>-{design,plan}.md`. Note: `docs/plans/` is `.gitignore`d — it's a personal scratchpad, not a shipped artefact.
 
-## 8. Git, branches, and GitHub
+## 9. Git, branches, and GitHub
 
 - **Commit finished work without asking.** Once a discrete unit of work is done, stage and commit it — don't wait for an explicit "commit it" prompt. The meaningful confirmation gate is the push, not the local commit.
 - **Never commit directly on `main`.** If the working tree is on `main`, create a descriptively named feature branch first (e.g. `feat/python-msgspec`, `fix/diff-dirty-version`, `docs/agent-guidance`), then commit on that branch. The branch-create + commit happen in the same turn — no extra prompt needed.
@@ -111,7 +136,7 @@ Non-trivial work follows a design-then-plan workflow. Look at existing files und
 - **Ask before any other GitHub create / update / delete action** — issues, PRs, comments, labels, releases, branch deletions.
 - Never bypass safety: no `--no-verify`, no editing CI to skip checks, no force-pushing shared branches.
 
-## 9. Stacked PR workflow
+## 10. Stacked PR workflow
 
 When a piece of work naturally splits into a refactor + feature (or any A-then-B sequence) **and** the user asks for two PRs, do not block on PR A's merge before starting PR B. The workflow is:
 
@@ -129,7 +154,7 @@ When a piece of work naturally splits into a refactor + feature (or any A-then-B
 
 This pattern applies to any sequence of dependent PRs, not just refactor-then-feature.
 
-## 10. CHANGELOG updates
+## 11. CHANGELOG updates
 
 **Do not touch `CHANGELOG.md` unless the user explicitly asks.** This is non-negotiable — see §2. The rules below describe the workflow *when asked*.
 
@@ -143,10 +168,10 @@ When asked to update the changelog:
 2. Look at the new and the prior version sections side-by-side.
 3. Rewrite the auto-generated bullets into a developer-facing summary — concise, grouped, focused on *what changed for users of this CLI*. Keep the heading shape `## X.Y.Z - YYYY-MM-DD` so cargo-dist can match it against the tag.
 
-## 11. What NOT to do
+## 12. What NOT to do
 
-- Don't modify `CHANGELOG.md` unless explicitly asked — see §2 and §10.
-- Don't skip the matching `STRUCTURE.md` update when you change repo structure or public API — see §2.
+- Don't modify `CHANGELOG.md` unless explicitly asked — see §2 and §11.
+- Don't skip the matching `STRUCTURE.md` update when you change repo structure, public API, or any documented architectural / behavioural rule — see §3.
 - Don't create new top-level `.md` files (summaries, handoff notes) unless asked.
 - Don't refactor unrelated code while doing a focused task.
 - Don't silence type / lint / test failures — fix the root cause.

@@ -9,12 +9,10 @@ use std::collections::BTreeSet;
 /// A registry of imports collected while rendering a single module file.
 /// `render()` produces the deterministic import block.
 #[derive(Debug, Default)]
-#[allow(dead_code)] // Consumed by Task 8 (template renderer).
 pub struct ImportBlock {
     items: BTreeSet<Import>,
 }
 
-#[allow(dead_code)] // Consumed by Task 8 (template renderer).
 impl ImportBlock {
     pub fn new() -> Self {
         Self::default()
@@ -32,11 +30,7 @@ impl ImportBlock {
 
         use std::collections::BTreeMap;
 
-        let mut stdlib: BTreeMap<&String, BTreeSet<&String>> = BTreeMap::new();
-        let mut third_party: BTreeMap<&String, BTreeSet<&String>> = BTreeMap::new();
-        let mut relative: BTreeMap<String, BTreeSet<&String>> = BTreeMap::new();
-
-        let stdlib_modules = &[
+        const STDLIB_MODULES: &[&str] = &[
             "decimal",
             "datetime",
             "uuid",
@@ -44,36 +38,38 @@ impl ImportBlock {
             "enum",
             "collections",
         ];
+        let is_stdlib = |module: &str| -> bool {
+            STDLIB_MODULES
+                .iter()
+                .any(|m| *m == module || module.starts_with(&format!("{m}.")))
+        };
 
+        // Named: partition the shared module-grouped map into Python's
+        // stdlib / third-party buckets.
+        let named = crate::imports::group_named_by_module(&self.items);
+        let (stdlib, third_party): (BTreeMap<_, _>, BTreeMap<_, _>) = named
+            .into_iter()
+            .partition(|(module, _)| is_stdlib(module.as_str()));
+
+        // Sibling: dot-separated relative paths, with the leaf segment
+        // lower-cased (Python module file names are snake/lower).
+        let mut relative: BTreeMap<String, BTreeSet<&String>> = BTreeMap::new();
         for item in &self.items {
-            match item {
-                Import::Named { module, name } => {
-                    let bucket = if stdlib_modules
-                        .iter()
-                        .any(|m| *m == module || module.starts_with(&format!("{m}.")))
-                    {
-                        &mut stdlib
-                    } else {
-                        &mut third_party
-                    };
-                    bucket.entry(module).or_default().insert(name);
-                }
-                Import::Sibling { module, name } => {
-                    let Some((last, head)) = module.split_last() else {
-                        // Empty sibling module path — skip silently rather than panic.
-                        // (BO4E inputs don't produce this, but we don't want to panic on the type.)
-                        continue;
-                    };
-                    let dots: String = ".".repeat(module_path_depth);
-                    let dotted: String = head
-                        .iter()
-                        .cloned()
-                        .chain(std::iter::once(last.to_ascii_lowercase()))
-                        .collect::<Vec<_>>()
-                        .join(".");
-                    let key = format!("{dots}{dotted}");
-                    relative.entry(key).or_default().insert(name);
-                }
+            if let Import::Sibling { module, name } = item {
+                let Some((last, head)) = module.split_last() else {
+                    continue;
+                };
+                let dots: String = ".".repeat(module_path_depth);
+                let dotted: String = head
+                    .iter()
+                    .cloned()
+                    .chain(std::iter::once(last.to_ascii_lowercase()))
+                    .collect::<Vec<_>>()
+                    .join(".");
+                relative
+                    .entry(format!("{dots}{dotted}"))
+                    .or_default()
+                    .insert(name);
             }
         }
 
@@ -92,11 +88,10 @@ impl ImportBlock {
                 .join("\n")
         }
 
-        [fmt(&stdlib), fmt(&third_party), fmt(&relative)]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n\n")
+        crate::imports::stitch_nonempty_blocks(
+            &[fmt(&stdlib), fmt(&third_party), fmt(&relative)],
+            "\n\n",
+        )
     }
 }
 
