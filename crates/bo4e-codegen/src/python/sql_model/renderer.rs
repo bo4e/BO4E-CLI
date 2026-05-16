@@ -1,4 +1,4 @@
-use super::plan::{JunctionTable, SqlField, SqlPlan, TablePlan};
+use super::plan::{JunctionTable, SqlField, SqlPlan, SyntheticEnum, TablePlan};
 use crate::error::Error;
 use crate::naming::sanitize_member_name;
 use crate::python::python_attr_name;
@@ -231,6 +231,16 @@ pub(crate) fn render_table(
         name: "to_camel".into(),
         alias: None,
     });
+    // Synthetic single-member enum classes are declared inline above the
+    // table class; the `StrEnum` base needs the matching import. Skip when
+    // no synthetic classes exist to avoid an unused import.
+    if !table.synthetic_enums.is_empty() {
+        raw_imports.insert(RawImport {
+            from_: "enum".into(),
+            name: "StrEnum".into(),
+            alias: None,
+        });
+    }
 
     // `SQL.fields` must be a dict-like value so the template's `.items()` call works.
     // We use `serde_json::Map` (insertion-ordered) serialized via MiniJinja's JSON bridge.
@@ -532,6 +542,8 @@ pub(crate) fn render_table(
     // in the template's `for field_name, field in SQL.fields.items()` loop.
     let fields_jinja: minijinja::Value = minijinja::Value::from_serialize(&fields_map);
 
+    let synthetic_classes = synthetic_classes_context(&table.class_name, &table.synthetic_enums);
+
     let tpl = env.get_template("python/sql_model/BaseModel.jinja2")?;
     let rendered = tpl.render(context! {
         decorators => Vec::<String>::new(),
@@ -542,12 +554,37 @@ pub(crate) fn render_table(
         methods => Vec::<String>::new(),
         model_config => MODEL_CONFIG,
         config => None::<String>,
+        synthetic_classes => synthetic_classes,
         SQL => context! {
             imports => imports_vec,
             fields => fields_jinja,
         },
     })?;
     Ok(prepend_module_docstring(&table.class_name, &rendered))
+}
+
+/// Build the per-table MiniJinja context for the synthetic single-member
+/// `StrEnum` classes. `sanitize_member_name` mirrors the full-enum
+/// renderer's handling of identifier-unfriendly values; the unsanitised
+/// member is preserved as the string literal so the SQL value stays
+/// faithful to the schema.
+fn synthetic_classes_context(
+    owner_class: &str,
+    synthetic_enums: &[SyntheticEnum],
+) -> Vec<minijinja::Value> {
+    synthetic_enums
+        .iter()
+        .map(|se| {
+            minijinja::Value::from_serialize(&context! {
+                class_name => se.class_name.clone(),
+                member_name => sanitize_member_name(&se.member),
+                member_value => se.member.clone(),
+                docstring => format!(
+                    "Synthetic single-member enum carrying the inline literal narrowing for `{owner_class}`."
+                ),
+            })
+        })
+        .collect()
 }
 
 /// Prepend `"""Contains class X."""` to a rendered module body, mirroring the
@@ -809,6 +846,80 @@ mod tests {
     }
 
     #[test]
+    fn render_table_emits_synthetic_strenum_above_class() {
+        use super::super::plan::{SqlField, SyntheticEnum, TablePlan};
+        let env = make_environment(None).unwrap();
+
+        // Table with an inline `Literal["ANGEBOT"]` field that the plan
+        // rewrote into a synthetic-enum reference. The renderer must:
+        //   * emit `class AngebotTyp(StrEnum)` above the table class
+        //   * add `from enum import StrEnum` to the import block
+        //   * leave the field annotation pointing at the synthetic class
+        let angebot_table = TablePlan {
+            module: vec!["bo".to_string(), "Angebot".to_string()],
+            class_name: "Angebot".to_string(),
+            is_enum: false,
+            description: None,
+            enum_members: vec![],
+            synthetic_enums: vec![SyntheticEnum {
+                class_name: "AngebotTyp".to_string(),
+                member: "ANGEBOT".to_string(),
+            }],
+            sql_fields: vec![
+                SqlField::Scalar {
+                    name: "_id".to_string(),
+                    type_: "uuid_pkg.UUID".to_string(),
+                    nullable: false,
+                    default: Some(
+                        "Field(default_factory=uuid_pkg.uuid4, primary_key=True, title=\"Id\")"
+                            .to_string(),
+                    ),
+                    title: None,
+                    docstring: None,
+                    imports: std::collections::BTreeSet::new(),
+                },
+                SqlField::Scalar {
+                    name: "_typ".to_string(),
+                    type_: "AngebotTyp".to_string(),
+                    nullable: false,
+                    default: Some("AngebotTyp.ANGEBOT".to_string()),
+                    title: None,
+                    docstring: None,
+                    imports: std::collections::BTreeSet::new(),
+                },
+            ],
+        };
+
+        let class_to_module: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let body = render_table(&env, &angebot_table, 2, &class_to_module).expect("render");
+
+        assert!(
+            body.contains("from enum import StrEnum"),
+            "missing StrEnum import, got:\n{body}"
+        );
+        assert!(
+            body.contains("class AngebotTyp(StrEnum):"),
+            "missing synthetic class, got:\n{body}"
+        );
+        assert!(
+            body.contains("ANGEBOT = \"ANGEBOT\""),
+            "missing synthetic member, got:\n{body}"
+        );
+        assert!(
+            body.contains("typ: AngebotTyp = Field(alias=\"_typ\", default=AngebotTyp.ANGEBOT)"),
+            "field must reference synthetic class without sa_column, got:\n{body}"
+        );
+        // Synthetic class must appear before the table class so the
+        // forward reference in the field annotation resolves.
+        let synth_pos = body.find("class AngebotTyp").expect("synth class present");
+        let table_pos = body.find("class Angebot(").expect("table class present");
+        assert!(
+            synth_pos < table_pos,
+            "synthetic class must precede table class:\n{body}"
+        );
+    }
+
+    #[test]
     fn render_table_bo_to_bo_relationship_uses_bo_module() {
         use super::super::plan::{SqlField, TablePlan};
         let env = make_environment(None).unwrap();
@@ -820,6 +931,7 @@ mod tests {
             is_enum: false,
             description: None,
             enum_members: vec![],
+            synthetic_enums: vec![],
             sql_fields: vec![
                 SqlField::Scalar {
                     name: "_id".to_string(),

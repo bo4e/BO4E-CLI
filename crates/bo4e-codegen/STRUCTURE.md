@@ -127,23 +127,25 @@ rust               = ["rust-plain", "rust-crate"]
 python-pydantic    = []
 python-sql-model   = []
 rust-plain         = []
-rust-crate         = []
+# `rust-crate` wraps the plain renderer + templates, so it pulls in `rust-plain`.
+rust-crate         = ["rust-plain"]
 ```
 
-Per-flavour `generate` functions and template `include_str!` calls are `#[cfg(feature = …)]`-gated. Building with `--no-default-features --features python-pydantic` ships only the pydantic generator and its templates.
+Per-flavour `generate` functions and template `include_str!` calls are `#[cfg(feature = …)]`-gated. Building with `--no-default-features --features python-pydantic` ships only the pydantic generator and its templates. `rust-crate` always co-compiles `rust-plain` because its orchestrator calls `rust::plain::prepare` internally.
 
 ## How a generator runs (pydantic example)
 
 1. `python::pydantic::generate` calls **`crate::validate::all_schemas(schemas)`** first — validation is decoupled from rendering, so a failed schema can never produce a half-written tree.
-2. Clears the output dir (per `Options::clear_output`) and iterates over `schemas`. For each schema:
+2. **Prepare phase** (no filesystem mutation): iterates over `schemas` and stages every rendered file into an in-memory `Vec<PreparedFile>`. For each schema:
    - Compute `(out_dir, file_name, depth)` via the caller-supplied `path_for` closure (here: `layout::module_paths` with `"py"` extension).
    - Build a per-class context struct (`PydanticField` / `EnumMember`) that mirrors the vendored `BaseModel.jinja2` / `Enum.jinja2` shape.
    - Render with MiniJinja; prepend an `ImportBlock` (the vendored template doesn't emit a pydantic import header — see the file-level docstring in `python/pydantic.rs` for the deliberate workarounds).
-3. Emit a root `__init__.py` (with `root_init_module_docstring`) re-exporting every schema class (including root-level ones), `__version__.py`, and an empty `__init__.py` at every nested subdirectory (via `python::write_empty_subdir_inits_recursive` walking the `ModuleTree`).
+   - Stage `(path, body)` into the buffer. Also stage the root `__init__.py` (with `root_init_module_docstring`) re-exporting every schema class, `__version__.py`, and an empty `__init__.py` at every nested subdirectory (via `python::prepare_empty_subdir_inits_recursive` walking the `ModuleTree`).
+3. **Commit phase**: `write_prepared` clears the output dir (per `Options::clear_output`) and writes every staged file. If preparation failed for any schema, the commit phase is never reached and the previous output tree is untouched.
 
 `python::sql_model::generate` follows the same skeleton but with a **two-phase plan**:
 
-1. `plan::build_plan(schemas)` is a pure pass: it walks the schema tree and builds an immutable `SqlPlan { tables, junctions }`. Junction (many-to-many) detection lives entirely here.
+1. `plan::build_plan(schemas)` is a pure pass: it walks the schema tree and builds an immutable `SqlPlan { tables, junctions }`. Junction (many-to-many) detection lives entirely here. The plan also rewrites pydantic's `Literal["X"]` narrowing into a synthetic single-member `StrEnum` class (via `narrow_literal_to_synthetic` in `simple_scalar_field`) — SQLModel's `table=True` column inference walks `issubclass` over the field annotation and raises `TypeError` on `Literal[...]`, so the constraint has to land on a real class. The synthesised class is named `{OwnerClass}{PascalAttrName}` (e.g. `Angebot._typ` → `AngebotTyp`), carried on `TablePlan::synthetic_enums`, and emitted inline above the table class by `renderer::render_table`; SQLModel then derives `Enum(name="<lowered>")` for the column and the value constraint survives into the DDL. Symmetric with the Rust generator's single-variant enum emitted by `rust::render::single_variant_discriminator`.
 2. `renderer::render_table` / `render_many` / `render_init` consume the plan, never the schemas. This keeps the renderer trivial to test against a hand-rolled `SqlPlan`.
 
 ## Templates
@@ -180,14 +182,18 @@ Enforced invariants (every violation raises `Error::InconsistentSchema`):
 3. **Default value matches the schema type.** A `string` property only accepts a `String` default; `integer` only `Integer`; `decimal` accepts `Integer`/`Float`/`String` (string must parse as a decimal); `boolean` only `Bool`; `Any`/`Object` only `Null`; `Array` accepts **no** default. A nullable `anyOf:[T, null]` accepts `T`'s kinds plus `Null`.
 4. **Typed-format defaults are parse-checked.** `date`, `date-time`, `time`, `uuid` string defaults must parse as that format at generate time, so the renderer can emit typed constructors (`chrono::NaiveDate::from_ymd_opt(…)`, `uuid::uuid!(…)`, etc.) whose `unwrap()` paths can never fail at runtime.
 5. **`$ref` defaults are resolved.** `null` defaults pass for any `$ref` target. Non-null defaults are only valid when the target resolves to a `StrEnum` and the string is one of the enum's declared members. `$ref` to an object schema with a non-null default is rejected.
-6. **Property name shape.** Names must be `[A-Za-z_][A-Za-z0-9_]*` (camelCase or snake_case identifier shape); anything else can't round-trip through `to_snake_case` → `rust_field_name` / `python_attr_name`.
-7. **Pure `type: null` rejected.** A property whose schema *is* `NullSchema` (rather than appearing as a branch of `anyOf:[T, null]`) has no use in BO4E.
+6. **Inline `const` / `StrEnum` defaults match declared values.** Parallel to (5) but for inline narrowings: a `ConstantSchema` default must equal the `const` value; a `StrEnum` default must be one of `enum_values`. Without this the Rust single-variant enum (`enum FooTyp { #[default] X }`) and the Python `Literal["X"]` narrowing would silently disagree with the schema's `default`.
+7. **Property name shape.** Names must be `[A-Za-z_][A-Za-z0-9_]*` (camelCase or snake_case identifier shape); anything else can't round-trip through `to_snake_case` → `rust_field_name` / `python_attr_name`. Names whose post-leading-underscore-strip form is empty or `_`-only (`_`, `__`, …) are also rejected — they produce empty / placeholder identifiers in the generated code.
+8. **Normalized identifiers are unique within a schema.** Two distinct JSON property names that normalize to the same generated field identifier (e.g. `_id` vs `id`, `fooBar` vs `foo_bar`, `type` vs `type_`) are rejected before any renderer runs, so the generators never have to handle duplicate-field collisions. The collision key is `snake_case(strip_leading_underscore(name))`, plus the `<key>_` keyword-escape sibling whenever the key is reserved in either Rust or Python.
+9. **Pure `type: null` rejected.** A property whose schema *is* `NullSchema` (rather than appearing as a branch of `anyOf:[T, null]`) has no use in BO4E.
 
 **AllOf / AnyOf shape restrictions** are enforced symmetrically in both `rust/types.rs::map_rust` *and* `python/types.rs::map_pydantic`. Both return `Result<MappedType, UnsupportedShape>` and the orchestrators convert the error to `Error::UnsupportedSchemaShape`:
 - `allOf` must have **exactly one** element. Multi-element `allOf` (intersection) is rejected.
 - `anyOf` must be the `Optional` pattern: **one** non-null branch plus **one** `null` branch. Real unions and `anyOf` without a `null` branch are rejected.
 
-No renderer special-cases field names. `_version`, `_typ`, `_id` are mapped purely from their schema shape across **all** flavours (pydantic, sql_model, rust-plain, rust-crate); `bo4e edit` changes flow through to the generated output.
+No renderer special-cases field names. `_version`, `_typ`, `_id` are mapped purely from their schema shape in `pydantic`, `rust-plain`, and `rust-crate`; `bo4e edit` changes flow through to the generated output.
+
+**`sql_model` exception — synthetic primary key.** SQLModel requires every `table=True` model to declare exactly one primary key column. BO4E JSON schemas carry no shape signal that names a PK (`_id` is typically declared as `anyOf:[{type:string,format:uuid}, null]` with `default:null`, which is the opposite of a non-nullable PK), so the SQL plan synthesizes a non-nullable `uuid_pkg.UUID` column at the `_id` slot via `plan::synth_id_field` and unconditionally drops the schema's own `_id` entry. This is the one remaining name-driven hook in any generator; see the comment on `synth_id_field` for the rationale. All other SQL fields are derived from the schema's shape via `classify_property` / `simple_scalar_field`.
 
 ## Rust path layout
 

@@ -9,6 +9,16 @@ from {{ import.from_ }} import {{ import.import_ }}
 {%- endfor -%}
 
 {%- endif %}
+{%- if synthetic_classes %}
+{%- for cls in synthetic_classes %}
+
+
+class {{ cls.class_name }}(StrEnum):
+    """{{ cls.docstring }}"""
+
+    {{ cls.member_name }} = "{{ cls.member_value }}"
+{%- endfor %}
+{%- endif %}
 
 {% for decorator in decorators -%}
 {{ decorator }}

@@ -58,9 +58,16 @@ pub(crate) fn object_invariants(
         }
     }
 
+    // Per-property identifier shape, then a cross-property collision check.
+    // Both must precede default/type checks so a malformed identifier never
+    // reaches `default_matches_schema_type`'s reasoning about generated code.
+    for prop_name in obj.properties.keys() {
+        validate_property_name(schema_name, prop_name)?;
+    }
+    detect_identifier_collisions(schema_name, &obj.properties)?;
+
     let required: BTreeSet<&str> = obj.required.iter().map(String::as_str).collect();
     for (prop_name, prop_schema) in &obj.properties {
-        validate_property_name(schema_name, prop_name)?;
         reject_pure_null_property(schema_name, prop_name, prop_schema)?;
         let is_required = required.contains(prop_name.as_str());
         let has_default = crate::refs::schema_base(prop_schema).default.is_some();
@@ -143,6 +150,90 @@ fn validate_property_name(schema_name: &str, prop_name: &str) -> Result<(), Erro
     }
     Ok(())
 }
+
+/// Reject schemas whose distinct JSON property names collide after the
+/// per-flavour identifier normalization the generators apply. The two
+/// shared steps are:
+///
+/// 1. **Strip one leading `_`** (BO4E's `_id`/`_typ`/`_version` convention).
+/// 2. **snake_case** the result.
+///
+/// Both Rust and Python flavours then keyword-escape with a trailing `_`
+/// when the snake-cased name is reserved.
+///
+/// The collision key is the snake-cased stripped form. Properties whose
+/// snake-cased stripped form is reserved in either language also reserve
+/// the `<form>_` keyword-escape slot so e.g. JSON `type` and `type_`
+/// resolve to the same generated identifier and are reported as a
+/// collision here instead of producing a duplicate-field compile error
+/// downstream.
+fn detect_identifier_collisions(
+    schema_name: &str,
+    properties: &std::collections::BTreeMap<String, SchemaType>,
+) -> Result<(), Error> {
+    use std::collections::BTreeMap;
+    let mut seen: BTreeMap<String, &str> = BTreeMap::new();
+    for prop_name in properties.keys() {
+        for form in identifier_collision_forms(prop_name) {
+            if let Some(&prior) = seen.get(&form) {
+                return Err(Error::InconsistentSchema {
+                    schema: schema_name.to_string(),
+                    property: prop_name.clone(),
+                    reason: format!(
+                        "normalizes to identifier `{form}`, which collides with \
+                         property `{prior}`; distinct JSON keys must produce \
+                         distinct generated field names"
+                    ),
+                });
+            }
+            seen.insert(form, prop_name.as_str());
+        }
+    }
+    Ok(())
+}
+
+/// All identifier forms `prop_name` could produce across the supported
+/// output flavours. Two properties collide if they share any form here.
+///
+/// The base form is `snake_case(strip_leading_underscore(prop_name))` —
+/// the common-minimum normalization both Rust and Python apply before
+/// any keyword escape. When that form is reserved in either language,
+/// the keyword-escaped sibling (`<form>_`) is added as well: both
+/// generators reserve the underscore-suffix slot for keyword escapes,
+/// so a JSON property with that exact name would also collide.
+fn identifier_collision_forms(prop_name: &str) -> Vec<String> {
+    let stripped = prop_name.strip_prefix('_').unwrap_or(prop_name);
+    let snake = crate::naming::to_snake_case(stripped);
+    let mut forms = vec![snake.clone()];
+    if RESERVED_FOR_COLLISION
+        .binary_search(&snake.as_str())
+        .is_ok()
+    {
+        forms.push(format!("{snake}_"));
+    }
+    forms
+}
+
+/// Union of Rust keywords / reserved words and Python keywords /
+/// commonly-shadowed builtins that drive the trailing-underscore escape
+/// in `rust::rust_field_name` and `python::python_attr_name`.
+///
+/// **Must be kept in lexicographic order so the `binary_search` lookup
+/// above stays valid.** Duplicated here (vs. importing from the
+/// per-language modules) because `validate.rs` is always compiled while
+/// `python::`/`rust::` are feature-gated — and validation runs the same
+/// checks regardless of which flavours are compiled in.
+const RESERVED_FOR_COLLISION: &[&str] = &[
+    "False", "None", "Self", "True", "abstract", "all", "and", "any", "as", "assert", "async",
+    "await", "become", "bool", "box", "break", "bytes", "class", "const", "continue", "crate",
+    "def", "del", "dict", "do", "dyn", "elif", "else", "enum", "except", "extern", "false",
+    "filter", "final", "finally", "float", "fn", "for", "from", "global", "id", "if", "impl",
+    "import", "in", "input", "int", "is", "iter", "lambda", "len", "let", "list", "loop", "macro",
+    "map", "match", "max", "min", "mod", "move", "mut", "next", "nonlocal", "not", "object",
+    "open", "or", "override", "pass", "print", "priv", "pub", "raise", "range", "ref", "return",
+    "self", "set", "static", "str", "struct", "sum", "super", "trait", "true", "try", "tuple",
+    "type", "typeof", "unsafe", "unsized", "use", "virtual", "where", "while", "with", "yield",
+];
 
 /// Reject pure `type: null` property schemas. They have no use in BO4E and
 /// the code generators have no sensible Rust/Python type to emit for them.
@@ -231,6 +322,73 @@ fn default_matches_schema_type(
         check_ref_default(schema_name, prop_name, default, &ref_module, schemas)?;
     }
 
+    // Inline `StrEnum` / `ConstantSchema` defaults: parallel to the
+    // `$ref` enum check above, the literal default must match the
+    // declared member(s) — otherwise the Rust generator's synthetic
+    // single-variant enum and the Python generator's `Literal["X"]`
+    // narrowing would silently disagree with the schema's `default`.
+    check_inline_enum_const_default(schema_name, prop_name, default, prop_schema)?;
+
+    Ok(())
+}
+
+/// Recursively check inline `ConstantSchema` and `StrEnum` defaults
+/// against their declared values. Recurses through single-element
+/// `allOf` and through `anyOf:[…, null]` so wrapping doesn't bypass the
+/// check; `null` defaults always pass.
+fn check_inline_enum_const_default(
+    schema_name: &str,
+    prop_name: &str,
+    default: &PrimitiveValue,
+    schema: &SchemaType,
+) -> Result<(), Error> {
+    if matches!(default, PrimitiveValue::Null) {
+        return Ok(());
+    }
+    match schema {
+        SchemaType::ConstantSchema(c) => {
+            let PrimitiveValue::String(s) = default else {
+                return Ok(()); // wrong-kind defaults are caught by allowed_default_kinds
+            };
+            if s != &c.constant {
+                return Err(Error::InconsistentSchema {
+                    schema: schema_name.to_string(),
+                    property: prop_name.to_string(),
+                    reason: format!(
+                        "default `{s}` does not match inline const value `{}`",
+                        c.constant
+                    ),
+                });
+            }
+        }
+        SchemaType::StrEnum(e) => {
+            let PrimitiveValue::String(s) = default else {
+                return Ok(());
+            };
+            if !e.enum_values.contains(s) {
+                return Err(Error::InconsistentSchema {
+                    schema: schema_name.to_string(),
+                    property: prop_name.to_string(),
+                    reason: format!(
+                        "default `{s}` is not a member of inline string enum \
+                         (declared members: {:?})",
+                        e.enum_values
+                    ),
+                });
+            }
+        }
+        SchemaType::AnyOf(a) => {
+            for branch in &a.any_of {
+                check_inline_enum_const_default(schema_name, prop_name, default, branch)?;
+            }
+        }
+        SchemaType::AllOf(a) => {
+            if let Some(only) = a.all_of.first() {
+                check_inline_enum_const_default(schema_name, prop_name, default, only)?;
+            }
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -694,6 +852,80 @@ mod tests {
     }
 
     #[test]
+    fn reserved_for_collision_is_sorted_and_unique() {
+        let mut sorted = RESERVED_FOR_COLLISION.to_vec();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(
+            sorted.as_slice(),
+            RESERVED_FOR_COLLISION,
+            "RESERVED_FOR_COLLISION must be lexicographically sorted and deduplicated \
+             (binary_search lookup depends on this invariant)"
+        );
+    }
+
+    #[test]
+    fn leading_underscore_pair_collides() {
+        // `_id` and `id` both strip to `id` → collision in both Rust and Python.
+        let o = obj(
+            &[
+                ("_id", s_string_with_default(Some(PrimitiveValue::Null))),
+                ("id", s_string_no_default()),
+            ],
+            &["id"],
+        );
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(reason.contains("collides"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn keyword_and_keyword_suffix_pair_collides() {
+        // `type` is a Rust keyword → escapes to `type_`. `type_` already
+        // has the keyword-escape shape. Both flavours emit `type_`.
+        let o = obj(
+            &[
+                ("type", s_string_no_default()),
+                (
+                    "type_",
+                    s_string_with_default(Some(PrimitiveValue::String("x".into()))),
+                ),
+            ],
+            &["type"],
+        );
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(reason.contains("collides"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn camel_and_snake_pair_collides() {
+        // `fooBar` and `foo_bar` both snake_case to `foo_bar`.
+        let o = obj(
+            &[
+                ("fooBar", s_string_no_default()),
+                (
+                    "foo_bar",
+                    s_string_with_default(Some(PrimitiveValue::String("x".into()))),
+                ),
+            ],
+            &["fooBar"],
+        );
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(reason.contains("collides"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn property_name_underscore_only_is_rejected() {
         for bad in ["_", "__", "___"] {
             let o = obj(&[(bad, s_string_no_default())], &[bad]);
@@ -830,6 +1062,53 @@ mod tests {
         match object_invariants("Foo", &o, &schemas) {
             Err(Error::InconsistentSchema { reason, .. }) => {
                 assert!(reason.contains("not a member"), "got: {reason}");
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_const_default_mismatch_is_rejected() {
+        use bo4e_schemas::models::json_schema::{ConstantSchema, LiteralTypeString};
+        let prop = SchemaType::ConstantSchema(ConstantSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("B".into())),
+                ..TypeBase::default()
+            },
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "A".into(),
+        });
+        let o = obj(&[("typ", prop)], &[]);
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(
+                    reason.contains("does not match inline const"),
+                    "got: {reason}"
+                );
+            }
+            other => panic!("expected InconsistentSchema, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_strenum_default_unknown_member_is_rejected() {
+        use bo4e_schemas::models::json_schema::{LiteralTypeString, StrEnumSchema};
+        let prop = SchemaType::StrEnum(StrEnumSchema {
+            base: TypeBase {
+                default: Some(PrimitiveValue::String("Z".into())),
+                ..TypeBase::default()
+            },
+            r#type: LiteralTypeString::String,
+            enum_values: vec!["A".into(), "B".into()],
+        });
+        let o = obj(&[("typ", prop)], &[]);
+        match object_invariants("Foo", &o, &empty_schemas()) {
+            Err(Error::InconsistentSchema { reason, .. }) => {
+                assert!(
+                    reason.contains("not a member of inline string enum"),
+                    "got: {reason}"
+                );
             }
             other => panic!("expected InconsistentSchema, got {other:?}"),
         }

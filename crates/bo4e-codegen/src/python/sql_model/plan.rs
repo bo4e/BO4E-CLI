@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::Error;
-use crate::naming::to_snake_case;
+use crate::naming::{sanitize_member_name, to_snake_case};
 use crate::python::types::{literal_default, map_pydantic, schema_base};
 use bo4e_schemas::Schemas;
 use bo4e_schemas::models::json_schema::{ObjectSchema, SchemaRootType, SchemaType};
@@ -34,6 +34,22 @@ pub(crate) struct TablePlan {
     pub(crate) enum_members: Vec<String>,
     /// For object tables, the fields in JSON-property insertion order. Empty for enum tables.
     pub(crate) sql_fields: Vec<SqlField>,
+    /// Single-member `StrEnum` classes synthesised inline in this module to
+    /// carry the constraint of an inline `Literal["X"]` narrowing into the SQL
+    /// column type. Symmetric with the Rust single-variant enum emitted by
+    /// `rust::render::single_variant_discriminator`. Empty when the table has
+    /// no inline literal-narrowed fields.
+    pub(crate) synthetic_enums: Vec<SyntheticEnum>,
+}
+
+/// A single-member `StrEnum` class to emit at the top of a table's module so
+/// SQLModel can derive an `Enum` column type from the inline literal constraint.
+/// `class_name` is the local Python class (e.g. `"AngebotTyp"`); `member` is
+/// both the Python attribute (sanitised by the renderer) and the wire value.
+#[derive(Debug)]
+pub(crate) struct SyntheticEnum {
+    pub(crate) class_name: String,
+    pub(crate) member: String,
 }
 
 /// One field on a `TablePlan`. The pre-pass classifies every JSON property into
@@ -179,6 +195,7 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
                         description: e.str_enum.base.description.clone(),
                         enum_members: e.str_enum.enum_values.clone(),
                         sql_fields: Vec::new(),
+                        synthetic_enums: Vec::new(),
                     },
                 );
             }
@@ -189,15 +206,19 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
                 let id_field = synth_id_field(&o.object);
                 let mut fields = vec![id_field];
                 let mut local_junctions: Vec<JunctionTable> = Vec::new();
+                let mut synthetic_enums: Vec<SyntheticEnum> = Vec::new();
                 for (prop_name, prop_schema) in o.object.properties.iter() {
                     if prop_name == "_id" {
                         continue;
                     }
                     if is_simple_scalar(prop_schema) {
-                        if let Some(field) =
+                        if let Some((field, synth)) =
                             simple_scalar_field(&class_name, prop_name, prop_schema)?
                         {
                             fields.push(field);
+                            if let Some(synth) = synth {
+                                synthetic_enums.push(synth);
+                            }
                         }
                         continue;
                     }
@@ -219,6 +240,7 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
                         description: o.object.base.description.clone(),
                         enum_members: Vec::new(),
                         sql_fields: fields,
+                        synthetic_enums,
                     },
                 );
                 junction_buf.extend(local_junctions);
@@ -232,6 +254,23 @@ pub(crate) fn build_plan(schemas: &Schemas) -> Result<SqlPlan, Error> {
     })
 }
 
+/// Build the synthetic primary-key column for a SQLModel table.
+///
+/// SQLModel requires every `table=True` model to designate exactly one
+/// primary key column; BO4E JSON schemas carry no shape that distinguishes
+/// "this is the PK" from "this is just another UUID field" (`_id` is
+/// typically declared as `anyOf:[{type:string,format:uuid}, null]` with
+/// `default:null`, which is the opposite of a non-nullable PK). The plan
+/// therefore *synthesizes* the PK slot rather than deriving it from the
+/// schema — and uses `_id` as the column name because that's the BO4E
+/// convention and the property the schema's `_id`, if present, would
+/// otherwise map to.
+///
+/// This is the one remaining name-based hook in the SQL plan, intentional
+/// because no schema-shape signal carries the PK semantics. Every other
+/// SQL field is derived from the schema's shape via [`classify_property`].
+/// The plan unconditionally drops the schema's own `_id` entry in
+/// [`build_plan`] so this synthetic PK is the only `_id` column emitted.
 fn synth_id_field(obj: &ObjectSchema) -> SqlField {
     let title = obj
         .properties
@@ -261,7 +300,7 @@ fn simple_scalar_field(
     owner_class: &str,
     prop_name: &str,
     schema: &SchemaType,
-) -> Result<Option<SqlField>, Error> {
+) -> Result<Option<(SqlField, Option<SyntheticEnum>)>, Error> {
     if !is_simple_scalar(schema) {
         return Ok(None);
     }
@@ -270,6 +309,16 @@ fn simple_scalar_field(
         property: prop_name.to_string(),
         shape: e.0,
     })?;
+    // Inline `Literal["X"]` (from `ConstantSchema` or a single-member
+    // `StrEnum`) cannot be used as a SQLModel column annotation —
+    // SQLModel's `table=True` column inference walks `issubclass` over
+    // the annotation and raises `TypeError` on `Literal[...]`. Instead
+    // of dropping the constraint by widening to bare `str`, synthesise
+    // a local single-member `StrEnum` class and use that as the column
+    // type, symmetric with the Rust generator's `single_variant_discriminator`
+    // path. SQLModel then derives `Enum(name="<lowered class>")` for the
+    // column and the value constraint survives into the DDL.
+    let (mapped, synth) = narrow_literal_to_synthetic(mapped, owner_class, prop_name);
     let nullable = mapped.rendered.contains("| None");
     let type_ = mapped.rendered.clone();
     // Schema-driven: the default expression comes purely from the
@@ -277,20 +326,86 @@ fn simple_scalar_field(
     // no-default invariant (enforced by `validate::all_schemas`)
     // guarantees we never see an optional field without a default, so
     // there is no synthetic-`None` fallback for missing schema defaults.
-    let default = literal_default(schema);
-    Ok(Some(SqlField::Scalar {
-        name: to_snake_case(prop_name),
-        type_,
-        nullable,
-        default,
-        title: literal_title(schema),
-        docstring: literal_description(schema),
-        // Carry the type-mapper's imports through the plan so the
-        // renderer can merge them into its import block. Without this,
-        // type expressions like `Literal["X"]`, `date`, `UUID`,
-        // `Decimal` would render with undefined names.
-        imports: mapped.imports,
-    }))
+    let default = match (&synth, literal_default(schema)) {
+        (Some(synth), Some(raw)) if raw != "None" => {
+            // `literal_default` for a `Literal["X"]` schema returns the
+            // value wrapped as a Python string literal (`"\"X\""`). Map
+            // it onto the synthetic enum member so the default expression
+            // is `AngebotTyp.X` rather than a bare string.
+            let trimmed = raw.trim_matches('"').to_string();
+            Some(format!(
+                "{}.{}",
+                synth.class_name,
+                sanitize_member_name(&trimmed)
+            ))
+        }
+        (_, other) => other,
+    };
+    Ok(Some((
+        SqlField::Scalar {
+            name: to_snake_case(prop_name),
+            type_,
+            nullable,
+            default,
+            title: literal_title(schema),
+            docstring: literal_description(schema),
+            // Carry the type-mapper's imports through the plan so the
+            // renderer can merge them into its import block. Without this,
+            // type expressions like `date`, `UUID`, `Decimal` would render
+            // with undefined names. `typing.Literal` is already stripped
+            // inside `narrow_literal_to_synthetic` when the field becomes
+            // a synthetic-enum reference.
+            imports: mapped.imports,
+        },
+        synth,
+    )))
+}
+
+/// Detect a `Literal["X"]` (or `Literal["X"] | None`) annotation produced
+/// by [`crate::python::types::literal_str_type`] and rewrite it to a
+/// synthetic single-member `StrEnum` class name. The `typing.Literal`
+/// import is dropped (the rewritten annotation no longer references it);
+/// the synthetic class itself needs no import because it is declared in
+/// the same module as the table. The class name is
+/// `{OwnerClass}{PascalAttrName}` (e.g. `Angebot._typ` → `AngebotTyp`),
+/// derived purely from local-shape signals so two tables with the same
+/// property name produce distinct, namespaced classes.
+fn narrow_literal_to_synthetic(
+    mut mapped: crate::python::types::MappedType,
+    owner_class: &str,
+    prop_name: &str,
+) -> (crate::python::types::MappedType, Option<SyntheticEnum>) {
+    let (body, nullable_suffix) = match mapped.rendered.strip_suffix(" | None") {
+        Some(b) => (b, " | None"),
+        None => (mapped.rendered.as_str(), ""),
+    };
+    let Some(literal_payload) = body
+        .strip_prefix("Literal[")
+        .and_then(|s| s.strip_suffix(']'))
+    else {
+        return (mapped, None);
+    };
+    // `literal_payload` is the Python string literal of the constrained
+    // value (e.g. `"\"ANGEBOT\""`). The validator restricts these values
+    // to identifier-shape strings, so trimming the surrounding quotes is
+    // safe and reverses `python_string_literal` here.
+    let member = literal_payload.trim_matches('"').to_string();
+    let synth_class = format!("{owner_class}{}", pascal_case(&to_snake_case(prop_name)));
+    mapped.rendered = format!("{synth_class}{nullable_suffix}");
+    mapped.imports.retain(|i| {
+        !matches!(
+            i,
+            crate::python::types::Import::Named { module, name }
+                if module == "typing" && name == "Literal"
+        )
+    });
+    (
+        mapped,
+        Some(SyntheticEnum {
+            class_name: synth_class,
+            member,
+        }),
+    )
 }
 
 fn is_simple_scalar(schema: &SchemaType) -> bool {
@@ -310,6 +425,10 @@ fn is_simple_scalar(schema: &SchemaType) -> bool {
         // AnyOf with a non-scalar variant (reference, array, Any, …) is not a simple
         // scalar — it falls through to `None` in `simple_scalar_field`, where the
         // caller handles the structured cases (relationships, junctions) separately.
+        // `StrEnum` is included to keep this list symmetric with the top-level arms
+        // above: `anyOf:[StrEnum, null]` is the inline single-member discriminator
+        // shape (mirrors the top-level `StrEnum` arm), and `map_pydantic` already
+        // narrows it to `Literal[...] | None`.
         SchemaType::AnyOf(a) => {
             a.any_of.iter().all(|t| matches!(t,
                 SchemaType::StringSchema(_)
@@ -318,6 +437,7 @@ fn is_simple_scalar(schema: &SchemaType) -> bool {
                 | SchemaType::BooleanSchema(_)
                 | SchemaType::DecimalSchema(_)
                 | SchemaType::ConstantSchema(_)
+                | SchemaType::StrEnum(_)
                 | SchemaType::NullSchema(_)
             ))
         }
@@ -990,13 +1110,17 @@ mod tests {
     }
 
     #[test]
-    fn inline_strenum_const_typ_field_narrows_to_literal() {
+    fn inline_strenum_const_typ_field_synthesises_local_enum() {
         // Mirrors the real BO4E `_typ` shape: {const, type:string, enum:[X]}.
         // Serde untagged dispatches this to StrEnumSchema before ConstantSchema,
         // so the SQL plan must accept StrEnum as a simple scalar or the field
-        // is silently dropped. Single-member StrEnum narrows to
-        // `Literal["X"]` (symmetric with the Rust side's synthetic
-        // single-variant enum).
+        // is silently dropped. Pydantic narrows single-member StrEnum to
+        // `Literal["X"]` for static type-checker happiness, but SQLModel's
+        // `table=True` column inference walks `issubclass` over the annotation
+        // and raises `TypeError` on `Literal[...]`. The plan therefore
+        // synthesises a single-member `StrEnum` class (`AngebotTyp`) so the
+        // value constraint carries into the SQL column type instead of being
+        // dropped via a `str` widening.
         let body = r#"{
             "type":"object",
             "properties":{
@@ -1016,13 +1140,76 @@ mod tests {
                     name,
                     type_,
                     default,
+                    imports,
                     ..
-                } if name == "_typ" => Some((type_.clone(), default.clone())),
+                } if name == "_typ" => Some((type_.clone(), default.clone(), imports.clone())),
                 _ => None,
             })
             .expect("_typ Scalar present");
-        assert_eq!(typ.0, "Literal[\"ANGEBOT\"]");
-        assert_eq!(typ.1.as_deref(), Some("\"ANGEBOT\""));
+        assert_eq!(typ.0, "AngebotTyp");
+        assert_eq!(typ.1.as_deref(), Some("AngebotTyp.ANGEBOT"));
+        // `typing.Literal` is dropped: the synthetic enum reference replaces
+        // the narrowed annotation, so the import would be unused.
+        assert!(
+            !typ.2.iter().any(|i| matches!(
+                i,
+                crate::imports::Import::Named { module, name }
+                    if module == "typing" && name == "Literal"
+            )),
+            "typing.Literal import must be dropped when narrowing becomes a synthetic enum: {:?}",
+            typ.2
+        );
+        // The synthetic class is registered on the table so the renderer
+        // can emit it above the table class.
+        assert_eq!(table.synthetic_enums.len(), 1);
+        assert_eq!(table.synthetic_enums[0].class_name, "AngebotTyp");
+        assert_eq!(table.synthetic_enums[0].member, "ANGEBOT");
+    }
+
+    #[test]
+    fn inline_strenum_optional_synthesises_local_enum_with_none() {
+        // anyOf:[StrEnum, null] gets `Literal["X"] | None` from `map_pydantic`,
+        // which is rewritten to `AngebotTyp | None` with the synthetic enum
+        // registered on the table. The schema's top-level default `"ANGEBOT"`
+        // descends through the nullable wrapper and ends up as
+        // `AngebotTyp.ANGEBOT` on the field.
+        let body = r#"{
+            "type":"object",
+            "properties":{
+                "_typ":{
+                    "default":"ANGEBOT",
+                    "anyOf":[
+                        {"const":"ANGEBOT","enum":["ANGEBOT"],"type":"string"},
+                        {"type":"null"}
+                    ]
+                }
+            }
+        }"#;
+        let plan = build_plan(&schemas_with_object("Angebot", body)).expect("build_plan");
+        let table = plan
+            .tables
+            .get(&vec!["bo".to_string(), "Angebot".to_string()])
+            .unwrap();
+        let typ = table
+            .sql_fields
+            .iter()
+            .find_map(|f| match f {
+                SqlField::Scalar {
+                    name,
+                    type_,
+                    default,
+                    nullable,
+                    ..
+                } if name == "_typ" => Some((type_.clone(), default.clone(), *nullable)),
+                _ => None,
+            })
+            .expect("_typ Scalar present");
+        assert_eq!(typ.0, "AngebotTyp | None");
+        assert_eq!(typ.1.as_deref(), Some("AngebotTyp.ANGEBOT"));
+        assert!(typ.2);
+        assert_eq!(table.synthetic_enums.len(), 1);
+        assert_eq!(table.synthetic_enums[0].class_name, "AngebotTyp");
+        assert_eq!(table.synthetic_enums[0].member, "ANGEBOT");
     }
 
     #[test]

@@ -327,6 +327,18 @@ bo4e generate -i ./bo4e_schemas_edited -o ./src/bo4e rust-plain
 bo4e generate -i ./bo4e_schemas_edited -o ./bo4e-rust-crate rust-crate --crate-name my-bo4e
 ```
 
+The `rust-plain` flavour writes only `.rs` source files into the target directory and does **not** generate a `Cargo.toml`. The host crate must declare these dependencies for the generated code to compile (use `rust-crate` if you want them written for you):
+
+```toml
+[dependencies]
+serde               = { version = "1", features = ["derive"] }
+serde_json          = "1"
+chrono              = { version = "0.4", features = ["serde"] }
+uuid                = { version = "1", features = ["serde", "v4", "macro-diagnostics"] }
+rust_decimal        = { version = "1", features = ["serde"] }
+rust_decimal_macros = "1"
+```
+
 <a name="supported-languages"></a>Arguments:
 
 | Argument            | Short | Description                                                          |

@@ -30,7 +30,7 @@ use crate::python::imports::ImportBlock;
 use crate::python::types::{Import, enum_ref_target, literal_default, map_pydantic, schema_base};
 use crate::python::{python_attr_name, root_init_module_docstring};
 use bo4e_schemas::Schemas;
-use bo4e_schemas::models::json_schema::SchemaRootType;
+use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootType};
 use minijinja::{Environment, context};
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -276,21 +276,29 @@ fn render_object(
     Ok(stitch(class_name, &imports, depth, &rendered))
 }
 
-/// If `default` is a quoted string literal (`"VALUE"`) AND the property's
-/// schema is (or `anyOf`-wraps) a `$ref` to an `enum/<Name>` schema,
-/// promote the literal to `EnumName.<sanitized_member>` and inject the
-/// matching sibling import. Anything else — non-string defaults, raw
-/// `None`, quoted strings whose schema isn't an enum ref — passes through
-/// untouched. Driven by schema shape only: no field-name special cases,
-/// so `bo4e edit` changes flow through.
+/// If the property's declared `default` is a JSON string AND its schema is
+/// (or `anyOf`-wraps) a `$ref` to an `enum/<Name>` schema, replace the
+/// already-rendered Python literal with `EnumName.<sanitized_member>` and
+/// inject the matching sibling import. Anything else — non-string defaults,
+/// raw `None`, string defaults whose schema isn't an enum `$ref` — passes
+/// through untouched. Driven by schema shape only: no field-name special
+/// cases, so `bo4e edit` changes flow through.
+///
+/// The raw default value is pulled directly from the schema (rather than
+/// recovered by stripping quotes from the rendered literal). Otherwise a
+/// member like `A"B` would round-trip through `python_string_literal` as
+/// `"A\"B"`, and stripping the outer quotes would leave `\"` in the value,
+/// which `sanitize_member_name` would convert to `__` — yielding a default
+/// that points to a non-existent enum member.
 fn qualify_enum_default(
     default: Option<String>,
     prop_schema: &bo4e_schemas::models::json_schema::SchemaType,
     imports: &mut ImportBlock,
 ) -> Option<String> {
     let d = default?;
-    let Some(value) = d.strip_prefix('"').and_then(|s| s.strip_suffix('"')) else {
-        return Some(d);
+    let raw_value = match schema_base(prop_schema).default.as_ref()? {
+        PrimitiveValue::String(v) => v.as_str(),
+        _ => return Some(d),
     };
 
     let Some((enum_name, enum_module)) = enum_ref_target(prop_schema) else {
@@ -301,7 +309,7 @@ fn qualify_enum_default(
         module: enum_module,
         name: enum_name.clone(),
     }]);
-    let member = sanitize_member_name(value);
+    let member = sanitize_member_name(raw_value);
     Some(format!("{enum_name}.{member}"))
 }
 

@@ -80,9 +80,11 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 
   The Python side expresses the matrix inline (`Field(default=…)` / `= …`) with the **same type precision**: `date(2024, 1, 15)`, `time(14, 30, 0, microsecond=N)`, `datetime.fromisoformat("…")`, `UUID("…")`, `Decimal("…")`. All five constructors return immutable values, so passing them as field defaults doesn't hit pydantic's mutable-default trap. No helper functions needed.
 
-  **Single-variant discriminator narrowing** is symmetric too: when a property's schema is `ConstantSchema` or a single-member `StrEnum` (e.g. `_typ` with `{const: "ANGEBOT", type: "string", enum: ["ANGEBOT"]}`), Rust emits a synthetic single-variant enum (`pub enum FooTyp { Angebot }`) and Python emits `Literal["ANGEBOT"]`. Multi-member enum `$ref`s are not narrowed.
+  **Single-variant discriminator narrowing** is symmetric too: when a property's schema is `ConstantSchema` or a single-member `StrEnum` (e.g. `_typ` with `{const: "ANGEBOT", type: "string", enum: ["ANGEBOT"]}`), Rust emits a synthetic single-variant enum (`pub enum FooTyp { Angebot }`) and Python pydantic emits `Literal["ANGEBOT"]`. The `sql_model` flavour can't carry `Literal[...]` as a column annotation (SQLModel's `table=True` inference raises `TypeError`), so it synthesises its own single-member `StrEnum` class (`class AngebotTyp(StrEnum): ANGEBOT = "ANGEBOT"`) inline above the table class and uses that as the column type — symmetric with the Rust enum. Multi-member enum `$ref`s are not narrowed.
 
-- **Schemas are editable, no special-cased field names.** Every rendering decision is driven by the schema's *shape*, never by a field's name. `_version`, `_typ`, `_id` are not special — they're whatever the schema says they are. `bo4e edit` is free to add/remove/rename fields or flip their `required`/`default` shape, and the generated code follows. If a renderer ever needs a per-name carve-out, that's a sign the schema needs a more precise type, not the codegen needs a heuristic.
+- **Schemas are editable, no special-cased field names.** Every rendering decision is driven by the schema's *shape*, never by a field's name, across `pydantic`, `rust-plain`, and `rust-crate`. `_version`, `_typ`, `_id` are not special — they're whatever the schema says they are. `bo4e edit` is free to add/remove/rename fields or flip their `required`/`default` shape, and the generated code follows. If a renderer ever needs a per-name carve-out, that's a sign the schema needs a more precise type, not the codegen needs a heuristic.
+
+  **`sql_model` carries the one documented exception**: SQLModel's `table=True` models require a primary key, and BO4E schemas carry no shape signal that names a PK column. The SQL plan therefore synthesizes a non-nullable `uuid_pkg.UUID` PK at the `_id` slot and drops the schema's own `_id` entry. See `bo4e-codegen/STRUCTURE.md` and the `plan::synth_id_field` comment for the rationale.
 
 - **AllOf and AnyOf are restricted (Rust *and* Python).** Both type mappers (`rust::types::map_rust`, `python::types::map_pydantic`) accept only:
   - `allOf` with **exactly one** element (used as a single-item wrapper). Multi-element `allOf` (intersection) is rejected as `UnsupportedSchemaShape`.
@@ -100,8 +102,10 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
   3. Every property's default value's primitive kind is compatible with its declared schema type (a `string` property accepts only `String`; `integer` only `Integer`; `decimal` accepts `Integer`/`Float`/`String` and parses the string as a decimal; `boolean` only `Bool`; `Any`/`Object` only `Null`; `Array` accepts no default at all; an `anyOf:[T, null]` property accepts `T`'s kinds plus `Null`).
   4. Typed-format string defaults (`date`, `date-time`, `time`, `uuid`) parse as that format at generate time.
   5. `$ref` defaults: `null` is universally accepted; non-null defaults are only valid when the target resolves (through `Schemas`) to a `StrEnum` and the string is one of the enum's declared members.
-  6. Property names are legal identifier sources (`[A-Za-z_][A-Za-z0-9_]*`).
-  7. Pure `type: null` properties are rejected.
+  6. Inline `ConstantSchema` / `StrEnum` defaults match their declared values (the const value, or one of the enum members).
+  7. Property names are legal identifier sources (`[A-Za-z_][A-Za-z0-9_]*`), and whose post-strip-leading-underscore form is non-empty and not all underscores.
+  8. Distinct JSON property names within a schema produce distinct generated field identifiers — `_id` vs `id`, `fooBar` vs `foo_bar`, `type` vs `type_` are detected before any renderer runs.
+  9. Pure `type: null` properties are rejected.
 
 - **Closure-based, object-safe `Visitable`** for schema tree traversal. Avoids `RefCell`-style runtime borrow checking; supports early termination via `ControlFlow`. Used by the `edit` transforms and by `diff` walkers.
 - **Console singleton with sentinel markup.** The CLI uses a `OnceLock<Console>` so every print site (including in libraries that the CLI calls into) renders through one highlighter. `--verbose` / `--quiet` filter by `Level`. Warnings/errors always go to stderr and are never suppressed (info goes to stdout).
