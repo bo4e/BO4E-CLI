@@ -3,6 +3,8 @@ use bo4e_schemas::models::json_schema::{
 };
 use bo4e_schemas::models::schema_meta::Schemas;
 use petgraph::Graph;
+use petgraph::graph::NodeIndex;
+use std::collections::HashMap;
 
 use crate::console::console::CONSOLE;
 use crate::models::graph::{Cardinality, Edge, Field, GraphIR, Node};
@@ -155,6 +157,65 @@ pub fn extract(schemas: &Schemas) -> Result<GraphIR, String> {
         nodes,
         edges,
     })
+}
+
+pub fn to_petgraph(g: &GraphIR) -> PetGraph {
+    let mut pg: PetGraph = PetGraph::new();
+    let mut idx: HashMap<Vec<String>, NodeIndex> = HashMap::new();
+    for n in &g.nodes {
+        let nx = pg.add_node(n.module.clone());
+        idx.insert(n.module.clone(), nx);
+    }
+    for e in &g.edges {
+        let (Some(&a), Some(&b)) = (idx.get(&e.from), idx.get(&e.to)) else {
+            continue;
+        };
+        pg.add_edge(
+            a,
+            b,
+            EdgeData {
+                through_field: e.through_field.clone(),
+                cardinality: e.cardinality.clone(),
+            },
+        );
+    }
+    pg
+}
+
+/// Reassemble a `GraphIR` from a `PetGraph` by re-attaching field metadata
+/// from the original GraphIR via module-path lookup. Used by filter/cluster
+/// passes to reconstruct a full IR for emit.
+pub fn from_petgraph_with_fields(pg: &PetGraph, original: &GraphIR) -> GraphIR {
+    let field_map: HashMap<&Vec<String>, &Vec<Field>> = original
+        .nodes
+        .iter()
+        .map(|n| (&n.module, &n.fields))
+        .collect();
+    let mut nodes: Vec<Node> = Vec::new();
+    for nx in pg.node_indices() {
+        let module = pg[nx].clone();
+        let fields = field_map
+            .get(&module)
+            .map(|f| (*f).clone())
+            .unwrap_or_default();
+        nodes.push(Node { module, fields });
+    }
+    let mut edges: Vec<Edge> = Vec::new();
+    for ex in pg.edge_indices() {
+        let (a, b) = pg.edge_endpoints(ex).unwrap();
+        let data = &pg[ex];
+        edges.push(Edge {
+            from: pg[a].clone(),
+            to: pg[b].clone(),
+            through_field: data.through_field.clone(),
+            cardinality: data.cardinality.clone(),
+        });
+    }
+    GraphIR {
+        version: original.version.clone(),
+        nodes,
+        edges,
+    }
 }
 
 /// Returns (cardinality, Some(target_module) if ref-in-scope else None).
@@ -485,5 +546,42 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn petgraph_roundtrip_with_fields_preserves_full_ir() {
+        let mut p1 = BTreeMap::new();
+        p1.insert("adresse".to_string(), s_ref("../com/Adresse.json"));
+        p1.insert("betrag".to_string(), s_decimal());
+        let sc1 = make_schema(
+            &["bo", "Angebot"],
+            make_root(p1, vec!["adresse".into(), "betrag".into()]),
+        );
+        let target = make_schema(&["com", "Adresse"], make_root(BTreeMap::new(), vec![]));
+        let schemas = collect_schemas(vec![sc1, target]);
+        let g = extract(&schemas).unwrap();
+        let pg = super::to_petgraph(&g);
+        let g2 = super::from_petgraph_with_fields(&pg, &g);
+
+        // Order can differ; sort both sides for comparison.
+        let mut a = g.clone();
+        let mut b = g2;
+        a.nodes.sort_by(|x, y| x.module.cmp(&y.module));
+        a.edges.sort_by(|x, y| {
+            (x.from.clone(), x.to.clone(), x.through_field.clone()).cmp(&(
+                y.from.clone(),
+                y.to.clone(),
+                y.through_field.clone(),
+            ))
+        });
+        b.nodes.sort_by(|x, y| x.module.cmp(&y.module));
+        b.edges.sort_by(|x, y| {
+            (x.from.clone(), x.to.clone(), x.through_field.clone()).cmp(&(
+                y.from.clone(),
+                y.to.clone(),
+                y.through_field.clone(),
+            ))
+        });
+        assert_eq!(a, b);
     }
 }
