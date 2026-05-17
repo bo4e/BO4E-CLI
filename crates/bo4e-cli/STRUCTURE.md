@@ -44,7 +44,7 @@ src/
 │   ├── emit_dot.rs    # GraphIR → DOT, detail levels, clusters, links (Task 11)
 │   ├── emit_plantuml.rs # GraphIR → PlantUML, namespace/cluster modes (Task 12)
 │   ├── extract.rs     # Schemas → GraphIR; type_repr, cardinality, $ref resolution, petgraph conversions
-│   └── filter.rs      # FilterOptions globs, BFS reachable_from, ego_graph (Task 8)
+│   └── filter.rs      # FilterOptions globs, BFS reachable_from, ego_graph, retain_edges_incident_on, default_scope_for
 ├── io.rs / io/
 │   ├── github.rs      # octocrab-based fetch; token detection (`gh auth token` / env / regex)
 │   ├── git.rs         # shell-out helpers (`git clone`, `git log`, …)

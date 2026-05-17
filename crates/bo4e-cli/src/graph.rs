@@ -7,4 +7,6 @@ pub mod filter;
 
 pub use cluster::{Communities, louvain};
 pub use extract::{EdgeData, PetGraph, extract};
-pub use filter::{FilterOptions, apply as filter_apply, ego_graph};
+pub use filter::{
+    FilterOptions, apply as filter_apply, default_scope_for, ego_graph, retain_edges_incident_on,
+};
