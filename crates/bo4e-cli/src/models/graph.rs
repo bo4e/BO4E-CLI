@@ -56,7 +56,10 @@ mod tests {
                 fields: vec![Field {
                     name: "adresse".into(),
                     type_repr: "Adresse".into(),
-                    cardinality: Cardinality { min: "0".into(), max: "1".into() },
+                    cardinality: Cardinality {
+                        min: "0".into(),
+                        max: "1".into(),
+                    },
                     is_reference: true,
                 }],
             }],
@@ -64,7 +67,10 @@ mod tests {
                 from: vec!["bo".into(), "Angebot".into()],
                 to: vec!["com".into(), "Adresse".into()],
                 through_field: "adresse".into(),
-                cardinality: Cardinality { min: "0".into(), max: "1".into() },
+                cardinality: Cardinality {
+                    min: "0".into(),
+                    max: "1".into(),
+                },
             }],
         }
     }
@@ -86,6 +92,10 @@ mod tests {
         let node = &g.nodes[0];
         let field = &node.fields[0];
         assert!(field.is_reference);
-        assert!(g.edges.iter().any(|e| e.from == node.module && e.through_field == field.name));
+        assert!(
+            g.edges
+                .iter()
+                .any(|e| e.from == node.module && e.through_field == field.name)
+        );
     }
 }
