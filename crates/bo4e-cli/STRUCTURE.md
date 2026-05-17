@@ -20,6 +20,7 @@ src/
 │   ├── pull.rs        # `bo4e pull` (GitHub fetch + offline-rewrite refs)
 │   ├── edit.rs        # `bo4e edit` (run config-driven schema transforms)
 │   ├── generate.rs    # `bo4e generate` (delegate to bo4e-codegen)
+│   ├── graph.rs       # `bo4e graph extract` (overview / single added in Tasks 14-15)
 │   ├── diff.rs        # `bo4e diff schemas | matrix | version-bump`
 │   └── repo.rs        # `bo4e repo versions` (BO4E-python tag listing)
 ├── console.rs / console/

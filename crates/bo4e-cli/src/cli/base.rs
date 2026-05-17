@@ -1,6 +1,7 @@
 use crate::cli::diff::Diff;
 use crate::cli::edit::Edit;
 use crate::cli::generate::Generate;
+use crate::cli::graph::Graph;
 use crate::cli::pull::Pull;
 use crate::cli::repo::Repo;
 use clap::builder::styling::{AnsiColor, Effects, Styles};
@@ -68,6 +69,7 @@ pub enum SubcommandsLevel1 {
     Diff(Diff),
     Repo(Repo),
     Generate(Generate),
+    Graph(Graph),
 }
 
 impl Executable for SubcommandsLevel1 {
@@ -78,6 +80,7 @@ impl Executable for SubcommandsLevel1 {
             SubcommandsLevel1::Diff(diff) => diff.run(),
             SubcommandsLevel1::Repo(repo) => repo.run(),
             SubcommandsLevel1::Generate(generate) => generate.run(),
+            SubcommandsLevel1::Graph(graph) => graph.run(),
         }
     }
 }
@@ -124,7 +127,7 @@ mod tests {
     #[test]
     fn each_subcommand_help_contains_ansi() {
         let mut cmd = Cli::command();
-        for name in ["pull", "edit", "diff", "repo", "generate"] {
+        for name in ["pull", "edit", "diff", "repo", "generate", "graph"] {
             let sub = cmd
                 .find_subcommand_mut(name)
                 .unwrap_or_else(|| panic!("subcommand {} missing", name));
