@@ -2,26 +2,26 @@
 left to right direction
 
 class "Angebot" as Angebot {
-    _id : Optional[str] [0..1]
-    _version : Optional[str] [0..1]
-    anfragereferenz : Optional[str] [0..1]
-    angebotsdatum : Optional[datetime] [0..1]
-    angebotsnummer : Optional[str] [0..1]
-    bindefrist : Optional[datetime] [0..1]
+    _id : str [0..1]
+    _version : str [0..1]
+    anfragereferenz : str [0..1]
+    angebotsdatum : datetime [0..1]
+    angebotsnummer : str [0..1]
+    bindefrist : datetime [0..1]
 }
 
 namespace "bo4e.com" as bo4e.com #E0A86C {
     class "Adresse" as Adresse {
-    _id : Optional[str] [0..1]
-    _version : Optional[str] [0..1]
-    adresszusatz : Optional[str] [0..1]
-    coErgaenzung : Optional[str] [0..1]
-    hausnummer : Optional[str] [0..1]
-    ort : Optional[str] [0..1]
-    ortsteil : Optional[str] [0..1]
-    postfach : Optional[str] [0..1]
-    postleitzahl : Optional[str] [0..1]
-    strasse : Optional[str] [0..1]
+    _id : str [0..1]
+    _version : str [0..1]
+    adresszusatz : str [0..1]
+    coErgaenzung : str [0..1]
+    hausnummer : str [0..1]
+    ort : str [0..1]
+    ortsteil : str [0..1]
+    postfach : str [0..1]
+    postleitzahl : str [0..1]
+    strasse : str [0..1]
 }
 }
 namespace "bo4e.enum" as bo4e.enum #d1c358 {

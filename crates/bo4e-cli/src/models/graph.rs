@@ -21,7 +21,9 @@ pub struct Node {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Field {
     pub name: String,
-    /// Pretty-printed type, e.g. `"Decimal"`, `"list[Adresse]"`, `"Optional[Typ]"`.
+    /// Pretty-printed type, e.g. `"Decimal"`, `"list[Adresse]"`, `"Typ"`.
+    /// Nullability is encoded in `cardinality`, so `Optional[...]` wrapping is
+    /// never emitted.
     pub type_repr: String,
     pub cardinality: Cardinality,
     /// True iff there exists an outgoing edge from this node along

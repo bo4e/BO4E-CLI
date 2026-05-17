@@ -60,8 +60,7 @@ fn any_of_repr(a: &AnyOfSchema) -> String {
         }
     }
     match (has_null, non_null.as_slice()) {
-        (true, [t]) => format!("Optional[{}]", type_repr(t)),
-        (false, [t]) => type_repr(t),
+        (true, [t]) | (false, [t]) => type_repr(t),
         _ => "Any".into(),
     }
 }
@@ -388,12 +387,14 @@ mod tests {
     }
 
     #[test]
-    fn anyof_t_plus_null_renders_optional() {
+    fn anyof_t_plus_null_drops_null_branch() {
+        // Nullability is encoded in cardinality (min == 0), so `type_repr`
+        // never emits an `Optional[...]` wrapping.
         let any = SchemaType::AnyOf(AnyOfSchema {
             base: Default::default(),
             any_of: vec![s_ref("../com/Adresse.json"), s_null()],
         });
-        assert_eq!(type_repr(&any), "Optional[Adresse]");
+        assert_eq!(type_repr(&any), "Adresse");
     }
 
     fn make_root(props: BTreeMap<String, SchemaType>, required: Vec<String>) -> SchemaRootType {
