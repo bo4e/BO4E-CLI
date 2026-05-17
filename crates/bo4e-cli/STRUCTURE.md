@@ -20,7 +20,7 @@ src/
 │   ├── pull.rs        # `bo4e pull` (GitHub fetch + offline-rewrite refs)
 │   ├── edit.rs        # `bo4e edit` (run config-driven schema transforms)
 │   ├── generate.rs    # `bo4e generate` (delegate to bo4e-codegen)
-│   ├── graph.rs       # `bo4e graph extract | overview` (single added in Task 15)
+│   ├── graph.rs       # `bo4e graph extract | overview | single`
 │   ├── diff.rs        # `bo4e diff schemas | matrix | version-bump`
 │   └── repo.rs        # `bo4e repo versions` (BO4E-python tag listing)
 ├── console.rs / console/
@@ -115,6 +115,7 @@ Tests that mutate `std::env::set_current_dir` (any test that runs `bo4e repo ver
 - **`pull`** — uses octocrab via a single-threaded tokio runtime (`utils::tokio::get_runtime`). Resolves `latest` against the BO4E-Schemas GitHub repo. After downloading, rewrites GitHub `$ref` URLs to relative offline paths through `edit::update_refs::update_references_all`. Token resolution order: env → `gh auth token` → none.
 - **`edit`** — reads schemas, resolves the config (incl. `$ref` includes via `io::config::load_config`), applies `add` / `non_nullable` / `update_refs` transforms in a fixed order, brands the output `DirtyVersion` with today's `.d<YYYYMMDD>` suffix.
 - **`diff`** — has three subcommands: `schemas` (produce a JSON `Changes` diff), `matrix` (chain N diffs into CSV/JSON), `version-bump` (classify a diff as Technical / Functional / Major, with `--major-bump-allowed` gating).
+- **`graph`** — has three subcommands: `extract` (schemas dir → GraphIR JSON or GraphML), `overview` (graph JSON → big-picture DOT or PlantUML with Louvain / components / package / none clustering; randomised `--seed` by default), `single` (graph JSON → per-class diagrams; output is a file when `--class <NAME>` is given, a directory when `--class all`; `--clustering louvain` and `components` are rejected at the clap level). The `--link-base` flag accepts a URL template with `{pkg}` / `{module}` / `{class}` / `{version}` and `{cwd[.abs|.uri|.rel|.posix|.name]}` / `{output_dir[...]}` placeholders.
 - **`generate`** — dispatches to the per-flavour `pub fn generate` in `bo4e-codegen`. The `Generate` struct holds `common: GenerateCommon` (shared flags: `--no-clear-output`, `--templates-dir`, input/output dirs) and `flavour: GenerateFlavour` (subcommands: `PythonPydantic`, `PythonSqlModel`, `RustPlain`, `RustCrate(RustCrateArgs)`). Feature-gating ensures only compiled-in flavours appear in `--help`.
 - **`repo versions`** — shells out to `git log` from a BO4E-python checkout, parses tags through `models::git::Reference`, filters with `repo::filter::FilterOptions`. CI uses this to discover release tags.
 
