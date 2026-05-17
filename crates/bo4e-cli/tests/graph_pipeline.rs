@@ -119,3 +119,59 @@ fn single_with_concrete_class_writes_one_file() {
     );
     assert!(out_file.is_file());
 }
+
+#[test]
+fn single_writes_root_level_class_at_output_dir_root() {
+    let invariants = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("crates/bo4e-codegen/tests/fixtures/bo4e_invariants");
+
+    let tmp = tempfile::tempdir().unwrap();
+    let graph_json = tmp.path().join("graph.json");
+    let out = Command::new(exe())
+        .args(["graph", "extract", "-i"])
+        .arg(&invariants)
+        .args(["-o"])
+        .arg(&graph_json)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "extract failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+
+    let singles = tmp.path().join("singles");
+    let out = Command::new(exe())
+        .args(["graph", "single", "-i"])
+        .arg(&graph_json)
+        .args(["-o"])
+        .arg(&singles)
+        .args(["--class", "all", "--format", "plantuml"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "single failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+
+    let toplevel_at_root = singles.join("Toplevel.puml");
+    let toplevel_nested = singles.join("Toplevel").join("Toplevel.puml");
+    assert!(
+        toplevel_at_root.is_file(),
+        "root-level class should be written at {}, but file does not exist",
+        toplevel_at_root.display(),
+    );
+    assert!(
+        !toplevel_nested.exists(),
+        "root-level class must not be nested under a same-named directory ({})",
+        toplevel_nested.display(),
+    );
+    assert!(singles.join("bo").join("Foo.puml").is_file());
+}

@@ -407,9 +407,13 @@ fn run_single(a: &SingleArgs) -> Result<(), String> {
         let out_path = if single_target {
             a.output_target.clone()
         } else {
-            let pkg = module.first().cloned().unwrap_or_default();
             let cls = module.last().cloned().unwrap_or_default();
-            a.output_target.join(&pkg).join(format!("{cls}.{ext}"))
+            let mut p = a.output_target.clone();
+            if module.len() > 1 {
+                let pkg = module.first().cloned().unwrap_or_default();
+                p = p.join(&pkg);
+            }
+            p.join(format!("{cls}.{ext}"))
         };
         if let Some(parent) = out_path.parent()
             && !parent.as_os_str().is_empty()
