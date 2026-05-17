@@ -39,11 +39,11 @@ src/
 │   ├── matrix.rs      # chain N diffs into a compatibility matrix (CSV/JSON)
 │   └── version.rs     # `check_version_bump` → Technical | Functional | Major
 ├── io.rs / io/
-│   ├── changes.rs     # read / write a `Changes` JSON diff file
-│   ├── cleanse.rs     # `clear_dir_if_needed` (prompt + wipe) — used by pull/edit/generate
-│   ├── config.rs      # load + resolve the edit config (incl. `$ref`-style inclusion)
-│   ├── git.rs         # shell-out helpers (`git clone`, `git log`, …)
 │   ├── github.rs      # octocrab-based fetch; token detection (`gh auth token` / env / regex)
+│   ├── git.rs         # shell-out helpers (`git clone`, `git log`, …)
+│   ├── config.rs      # load + resolve the edit config (incl. `$ref`-style inclusion)
+│   ├── cleanse.rs     # `clear_dir_if_needed` (prompt + wipe) — used by pull/edit/generate
+│   ├── changes.rs     # read / write a `Changes` JSON diff file
 │   ├── graph.rs       # read/write GraphIR JSON; write GraphIR as GraphML
 │   └── matrix.rs      # write_compatibility_matrix_{csv,json}
 ├── models.rs / models/
