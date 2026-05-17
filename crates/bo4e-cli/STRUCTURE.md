@@ -39,7 +39,7 @@ src/
 │   ├── matrix.rs      # chain N diffs into a compatibility matrix (CSV/JSON)
 │   └── version.rs     # `check_version_bump` → Technical | Functional | Major
 ├── graph.rs / graph/
-│   ├── cluster.rs     # Louvain modularity community detection (Task 9)
+│   ├── cluster.rs     # Louvain modularity-maximisation community detection on undirected projection
 │   ├── emit_common.rs # URL-template engine, cardinality formatting (Task 10)
 │   ├── emit_dot.rs    # GraphIR → DOT, detail levels, clusters, links (Task 11)
 │   ├── emit_plantuml.rs # GraphIR → PlantUML, namespace/cluster modes (Task 12)
