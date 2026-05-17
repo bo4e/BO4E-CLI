@@ -129,6 +129,7 @@ Under `tests/`:
 
 - `full_bo4e.rs` — drives `pull` → `edit` → `generate` end-to-end against a fixture.
 - `generate_smoke.rs` — minimal generate run on a tiny schema set.
+- `graph_pipeline.rs` — drives `graph extract` → `overview` → `single` end-to-end on a fixture schema set.
 - `quiet_verbose.rs` — verifies `--quiet` / `--verbose` routing and stream destinations.
 - `regression_schema_parse.rs` — pins specific JSON-Schema parsing edge cases.
 
