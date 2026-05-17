@@ -88,3 +88,19 @@ jobs:
         run: cargo test --locked --all-features --all-targets
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+  kroki:
+    name: kroki-validation
+    runs-on: ubuntu-latest
+    services:
+      kroki:
+        image: yuzutech/kroki
+        ports:
+          - 8000:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test --test kroki_validation -- --include-ignored
+        run: cargo test -p bo4e-cli --test kroki_validation -- --include-ignored
+        env:
+          KROKI_URL: http://localhost:8000
