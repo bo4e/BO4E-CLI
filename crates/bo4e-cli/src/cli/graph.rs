@@ -139,13 +139,26 @@ fn run_overview(a: &OverviewArgs) -> Result<(), String> {
             Some(comms.of)
         }
         ClusteringMode::Components => {
-            use petgraph::algo::tarjan_scc;
-            let sccs = tarjan_scc(&pg);
-            let mut m = HashMap::new();
-            for (i, scc) in sccs.iter().enumerate() {
-                for &nx in scc {
-                    m.insert(nx, i);
-                }
+            use petgraph::unionfind::UnionFind;
+            let n = pg.node_count();
+            let mut uf: UnionFind<usize> = UnionFind::new(n);
+            for e in pg.edge_indices() {
+                let (a, b) = pg.edge_endpoints(e).unwrap();
+                uf.union(a.index(), b.index());
+            }
+            // Compact root labels to dense 0..k ids.
+            let mut root_to_id: std::collections::HashMap<usize, usize> =
+                std::collections::HashMap::new();
+            let mut next_id: usize = 0;
+            let mut m: HashMap<petgraph::graph::NodeIndex, usize> = HashMap::new();
+            for nx in pg.node_indices() {
+                let root = uf.find(nx.index());
+                let id = *root_to_id.entry(root).or_insert_with(|| {
+                    let v = next_id;
+                    next_id += 1;
+                    v
+                });
+                m.insert(nx, id);
             }
             Some(m)
         }
