@@ -1,0 +1,37 @@
+@startuml
+left to right direction
+
+class "Angebot" as Angebot {
+    _id : Optional[str] [0..1]
+    _version : Optional[str] [0..1]
+    anfragereferenz : Optional[str] [0..1]
+    angebotsdatum : Optional[datetime] [0..1]
+    angebotsnummer : Optional[str] [0..1]
+    bindefrist : Optional[datetime] [0..1]
+}
+
+namespace "bo4e.com" as bo4e.com #E0A86C {
+    class "Adresse" as Adresse {
+    _id : Optional[str] [0..1]
+    _version : Optional[str] [0..1]
+    adresszusatz : Optional[str] [0..1]
+    coErgaenzung : Optional[str] [0..1]
+    hausnummer : Optional[str] [0..1]
+    ort : Optional[str] [0..1]
+    ortsteil : Optional[str] [0..1]
+    postfach : Optional[str] [0..1]
+    postleitzahl : Optional[str] [0..1]
+    strasse : Optional[str] [0..1]
+}
+}
+namespace "bo4e.enum" as bo4e.enum #d1c358 {
+    class "Typ" as Typ {
+}
+}
+
+Angebot --* "0..1" Adresse : adresse
+Angebot --* "0..1" Typ : _typ
+
+hide members
+show .Angebot fields
+@enduml
