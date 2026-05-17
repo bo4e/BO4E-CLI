@@ -5,6 +5,7 @@ pub mod cli;
 pub mod console;
 pub mod diff;
 pub mod edit;
+pub mod graph;
 pub mod io;
 pub mod models;
 pub mod repo;

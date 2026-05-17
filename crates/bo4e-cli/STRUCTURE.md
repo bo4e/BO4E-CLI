@@ -36,8 +36,15 @@ src/
 ├── diff.rs / diff/
 │   ├── diff.rs        # core schema diff walker (allOf/anyOf/array/object/refs/enum/string)
 │   ├── filters.rs     # `has_critical` + change-class predicates
-│   ├── matrix.rs      # chain N diffs into a compatibility matrix (CSV/JSON)
+│   ├── matrix.rs      # chain N diffs into a compatible matrix (CSV/JSON)
 │   └── version.rs     # `check_version_bump` → Technical | Functional | Major
+├── graph.rs / graph/
+│   ├── cluster.rs     # Louvain modularity community detection (Task 9)
+│   ├── emit_common.rs # URL-template engine, cardinality formatting (Task 10)
+│   ├── emit_dot.rs    # GraphIR → DOT, detail levels, clusters, links (Task 11)
+│   ├── emit_plantuml.rs # GraphIR → PlantUML, namespace/cluster modes (Task 12)
+│   ├── extract.rs     # Schemas → PetGraph → GraphIR; type_repr (Tasks 5-7)
+│   └── filter.rs      # FilterOptions globs, BFS reachable_from, ego_graph (Task 8)
 ├── io.rs / io/
 │   ├── github.rs      # octocrab-based fetch; token detection (`gh auth token` / env / regex)
 │   ├── git.rs         # shell-out helpers (`git clone`, `git log`, …)
