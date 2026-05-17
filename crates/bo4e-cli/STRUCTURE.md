@@ -36,7 +36,7 @@ src/
 ├── diff.rs / diff/
 │   ├── diff.rs        # core schema diff walker (allOf/anyOf/array/object/refs/enum/string)
 │   ├── filters.rs     # `has_critical` + change-class predicates
-│   ├── matrix.rs      # chain N diffs into a compatible matrix (CSV/JSON)
+│   ├── matrix.rs      # chain N diffs into a compatibility matrix (CSV/JSON)
 │   └── version.rs     # `check_version_bump` → Technical | Functional | Major
 ├── graph.rs / graph/
 │   ├── cluster.rs     # Louvain modularity community detection (Task 9)
