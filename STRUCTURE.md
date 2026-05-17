@@ -42,13 +42,16 @@ bo4e-codegen  ◀── bo4e-cli (binary + lib facade)
 ## End-to-end data flow
 
 ```
-pull       : GitHub (BO4E-Schemas)  ─▶ schemas dir (.json files + .version)
-edit       : schemas dir + config   ─▶ edited schemas dir
-generate   : schemas dir            ─▶ Python package (pydantic / sql-model) or Rust crate / module tree
-diff       : two schemas dirs       ─▶ JSON diff file (Changes)
-matrix     : N diff files           ─▶ CSV/JSON compatibility matrix
-version-bump : a diff file          ─▶ technical | functional | major
-repo       : a BO4E-python checkout ─▶ list of version tags (CI helper)
+pull           : GitHub (BO4E-Schemas)  ─▶ schemas dir (.json files + .version)
+edit           : schemas dir + config   ─▶ edited schemas dir
+generate       : schemas dir            ─▶ Python package (pydantic / sql-model) or Rust crate / module tree
+diff           : two schemas dirs       ─▶ JSON diff file (Changes)
+matrix         : N diff files           ─▶ CSV/JSON compatibility matrix
+version-bump   : a diff file            ─▶ technical | functional | major
+repo           : a BO4E-python checkout ─▶ list of version tags (CI helper)
+graph extract  : schemas dir            ─▶ graph.json (machine-readable) or .graphml
+graph overview : graph.json             ─▶ big-picture DOT/PlantUML (Louvain clusters by default)
+graph single   : graph.json             ─▶ per-class DOT/PlantUML diagrams (one file or a dir)
 ```
 
 Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a thin shim that parses args, initialises the `CONSOLE` singleton, then calls `Executable::run`.
@@ -127,3 +130,4 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 | New diff metric                   | `crates/bo4e-cli/src/diff/`.                                             |
 | New code-generation output type   | `crates/bo4e-codegen/` (see `AGENTS.md` §6 and the codegen STRUCTURE.md). |
 | New schema-model type or visitor  | `crates/bo4e-schemas/src/models/` + `visitable.rs`.                      |
+| New graph emitter / clustering pass | `crates/bo4e-cli/src/graph/` (`emit_*.rs` / `cluster.rs` / `filter.rs`). Wire into `cli/graph.rs`. |

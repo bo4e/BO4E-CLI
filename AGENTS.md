@@ -28,6 +28,7 @@ Three crates: `bo4e-schemas` (model + IO), `bo4e-codegen` (template-driven gener
 
 ## 2. Documentation contract
 
+- **Read before working in this repo.** Always load the root `STRUCTURE.md` and the `STRUCTURE.md` of every crate you'll touch into context before making changes. They're kept lean for exactly this purpose. The write-side counterpart to this rule (keeping them up to date) lives in §3.
 - `README.md` — for end users: features, install, usage. Keep implementation-agnostic.
 - `STRUCTURE.md` (root) — workspace overview, crate graph, architectural decisions. See §3 for the upkeep contract.
 - `crates/<crate>/STRUCTURE.md` — what the crate does, how it's used, key implementation details. See §3 for the upkeep contract.
