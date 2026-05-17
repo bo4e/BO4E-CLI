@@ -40,7 +40,7 @@ src/
 │   └── version.rs     # `check_version_bump` → Technical | Functional | Major
 ├── graph.rs / graph/
 │   ├── cluster.rs     # Louvain modularity-maximisation community detection on undirected projection
-│   ├── emit_common.rs # URL-template engine, cardinality formatting (Task 10)
+│   ├── emit_common.rs # URL-template engine (placeholders, dot-accessors); format_cardinality; dotted helpers
 │   ├── emit_dot.rs    # GraphIR → DOT, detail levels, clusters, links (Task 11)
 │   ├── emit_plantuml.rs # GraphIR → PlantUML, namespace/cluster modes (Task 12)
 │   ├── extract.rs     # Schemas → GraphIR; type_repr, cardinality, $ref resolution, petgraph conversions
