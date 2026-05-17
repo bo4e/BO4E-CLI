@@ -23,7 +23,10 @@ pub struct Field {
     pub name: String,
     /// Pretty-printed type, e.g. `"Decimal"`, `"list[Adresse]"`, `"Typ"`.
     /// Nullability is encoded in `cardinality`, so `Optional[...]` wrapping is
-    /// never emitted.
+    /// never emitted. Inline enums and constants — those not represented as a
+    /// separate class — render as Python-style literals, e.g.
+    /// `"Literal[\"ANGEBOT\"]"` (single-variant) or `"Literal[\"A\",\"B\"]"`
+    /// (multi-variant).
     pub type_repr: String,
     pub cardinality: Cardinality,
     /// True iff there exists an outgoing edge from this node along

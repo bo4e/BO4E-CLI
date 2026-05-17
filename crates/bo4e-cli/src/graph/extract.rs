@@ -29,7 +29,7 @@ pub fn type_repr(s: &SchemaType) -> String {
             Some(StringSchemaFormat::Uuid) => "UUID".into(),
             _ => "str".into(),
         },
-        SchemaType::ConstantSchema(_) => "str".into(),
+        SchemaType::ConstantSchema(c) => format!(r#"Literal["{}"]"#, c.constant),
         SchemaType::NumberSchema(_) => "float".into(),
         SchemaType::DecimalSchema(_) => "Decimal".into(),
         SchemaType::IntegerSchema(_) => "int".into(),
@@ -45,7 +45,19 @@ pub fn type_repr(s: &SchemaType) -> String {
                 "Any".into()
             }
         }
-        SchemaType::StrEnum(_) => "str".into(),
+        SchemaType::StrEnum(e) => {
+            // Inline enum (no separate class). Render as Python `Literal[...]`
+            // so single-variant discriminators show their value and multi-variant
+            // inline enums show their full set. `$ref` to a class-backed enum
+            // is handled above via `ReferenceSchema` (renders as the class name).
+            let joined = e
+                .enum_values
+                .iter()
+                .map(|v| format!("\"{v}\""))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("Literal[{joined}]")
+        }
     }
 }
 
@@ -322,9 +334,10 @@ fn unreachable_ref_target(s: &SchemaType) -> Option<String> {
 mod tests {
     use super::*;
     use bo4e_schemas::models::json_schema::{
-        AnyOfSchema, ArraySchema, BooleanSchema, DecimalSchema, IntegerSchema, LiteralTypeArray,
-        LiteralTypeObject, NullSchema, ObjectSchema, ReferenceSchema, SchemaRootObject,
-        SchemaRootTypeBase, StringSchema, TypeBase,
+        AnyOfSchema, ArraySchema, BooleanSchema, ConstantSchema, DecimalSchema, IntegerSchema,
+        LiteralTypeArray, LiteralTypeObject, LiteralTypeString, NullSchema, ObjectSchema,
+        ReferenceSchema, SchemaRootObject, SchemaRootTypeBase, StrEnumSchema, StringSchema,
+        TypeBase,
     };
     use bo4e_schemas::models::schema_meta::{Schema, Schemas};
     use bo4e_schemas::models::version::DirtyVersion;
@@ -395,6 +408,39 @@ mod tests {
             any_of: vec![s_ref("../com/Adresse.json"), s_null()],
         });
         assert_eq!(type_repr(&any), "Adresse");
+    }
+
+    #[test]
+    fn inline_single_variant_str_enum_renders_as_literal() {
+        // Real BO4E discriminator shape, e.g. Angebot._typ:
+        // `{"type":"string","default":"ANGEBOT","enum":["ANGEBOT"]}`.
+        let e = SchemaType::StrEnum(StrEnumSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            enum_values: vec!["ANGEBOT".into()],
+        });
+        assert_eq!(type_repr(&e), r#"Literal["ANGEBOT"]"#);
+    }
+
+    #[test]
+    fn inline_multi_variant_str_enum_renders_as_literal_with_all_values() {
+        let e = SchemaType::StrEnum(StrEnumSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            enum_values: vec!["A".into(), "B".into(), "C".into()],
+        });
+        assert_eq!(type_repr(&e), r#"Literal["A","B","C"]"#);
+    }
+
+    #[test]
+    fn constant_schema_renders_as_literal() {
+        let c = SchemaType::ConstantSchema(ConstantSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "FIXED".into(),
+        });
+        assert_eq!(type_repr(&c), r#"Literal["FIXED"]"#);
     }
 
     fn make_root(props: BTreeMap<String, SchemaType>, required: Vec<String>) -> SchemaRootType {

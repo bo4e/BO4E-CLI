@@ -14,11 +14,10 @@
       ]
     },
     "_typ": {
+      "title": " Typ",
       "default": "ANGEBOT",
-      "anyOf": [
-        { "$ref": "../enum/Typ.json#" },
-        { "type": "null" }
-      ]
+      "type": "string",
+      "enum": ["ANGEBOT"]
     },
     "adresse": {
       "default": null,

@@ -3,6 +3,7 @@ left to right direction
 
 class "Angebot" as Angebot {
     _id : str [0..1]
+    _typ : Literal["ANGEBOT"] [0..1]
     _version : str [0..1]
     anfragereferenz : str [0..1]
     angebotsdatum : datetime [0..1]
@@ -24,13 +25,8 @@ namespace "bo4e.com" as bo4e.com #E0A86C {
     strasse : str [0..1]
 }
 }
-namespace "bo4e.enum" as bo4e.enum #d1c358 {
-    class "Typ" as Typ {
-}
-}
 
 Angebot --* "0..1" Adresse : adresse
-Angebot --* "0..1" Typ : _typ
 
 hide members
 show .Angebot fields
