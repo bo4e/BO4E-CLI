@@ -14,7 +14,7 @@ pub struct Graph {
 #[derive(Subcommand)]
 pub enum GraphSubcommand {
     Extract(ExtractArgs),
-    // Overview / Single subcommands added in Tasks 14 and 15.
+    Overview(OverviewArgs),
 }
 
 /// Build a directed graph of BO4E class references and write it as JSON or GraphML.
@@ -37,10 +37,57 @@ pub enum GraphFormat {
     Graphml,
 }
 
+/// Render the big-picture overview diagram for all classes in a graph.json.
+#[derive(Args)]
+pub struct OverviewArgs {
+    #[arg(short = 'i', long = "input", required = true)]
+    pub input_graph: PathBuf,
+    #[arg(short = 'o', long = "output", required = true)]
+    pub output_file: PathBuf,
+    #[arg(long = "format", default_value = "dot")]
+    pub format: DiagramFormat,
+    #[arg(long = "detail", default_value = "none")]
+    pub detail: DetailLevel,
+    #[arg(long = "clustering", default_value = "louvain")]
+    pub clustering: ClusteringMode,
+    #[arg(long = "seed")]
+    pub seed: Option<u64>,
+    #[arg(long = "include")]
+    pub include: Vec<String>,
+    #[arg(long = "exclude")]
+    pub exclude: Vec<String>,
+    #[arg(long = "reachable-from")]
+    pub reachable_from: Option<String>,
+    #[arg(long = "link-base")]
+    pub link_base: Option<String>,
+}
+
+#[derive(ValueEnum, Clone, Debug, Copy)]
+pub enum DiagramFormat {
+    Dot,
+    Plantuml,
+}
+
+#[derive(ValueEnum, Clone, Debug, Copy)]
+pub enum DetailLevel {
+    None,
+    Names,
+    Full,
+}
+
+#[derive(ValueEnum, Clone, Debug, Copy)]
+pub enum ClusteringMode {
+    Louvain,
+    Components,
+    Package,
+    None,
+}
+
 impl Executable for Graph {
     fn run(&self) -> Result<(), String> {
         match &self.command {
             GraphSubcommand::Extract(a) => run_extract(a),
+            GraphSubcommand::Overview(a) => run_overview(a),
         }
     }
 }
@@ -57,5 +104,123 @@ fn run_extract(a: &ExtractArgs) -> Result<(), String> {
         GraphFormat::Graphml => write_graph_graphml(&g, &a.output_file)?,
     }
     crate::cprint_normal!("Wrote graph to {}", a.output_file.display());
+    Ok(())
+}
+
+fn run_overview(a: &OverviewArgs) -> Result<(), String> {
+    use crate::graph::cluster::louvain;
+    use crate::graph::emit_dot::{self, Detail as DotDetail};
+    use crate::graph::emit_plantuml;
+    use crate::graph::extract::{from_petgraph_with_fields, to_petgraph};
+    use crate::graph::filter::{FilterOptions, apply};
+    use crate::io::graph::read_graph;
+    use std::collections::HashMap;
+
+    let ir = read_graph(&a.input_graph)?;
+    let pg = to_petgraph(&ir);
+
+    let mut opts = FilterOptions::new();
+    for glob in &a.include {
+        opts = opts.include_glob(glob)?;
+    }
+    for glob in &a.exclude {
+        opts = opts.exclude_glob(glob)?;
+    }
+    if let Some(rf) = &a.reachable_from {
+        opts.reachable_from = Some(rf.split('.').map(|s| s.to_string()).collect());
+    }
+    let pg = apply(pg, &opts);
+    let ir_filtered = from_petgraph_with_fields(&pg, &ir);
+
+    let clusters: Option<HashMap<petgraph::graph::NodeIndex, usize>> = match a.clustering {
+        ClusteringMode::Louvain => {
+            let seed = a.seed.unwrap_or_else(rand::random);
+            let comms = louvain(&pg, seed);
+            Some(comms.of)
+        }
+        ClusteringMode::Components => {
+            use petgraph::algo::tarjan_scc;
+            let sccs = tarjan_scc(&pg);
+            let mut m = HashMap::new();
+            for (i, scc) in sccs.iter().enumerate() {
+                for &nx in scc {
+                    m.insert(nx, i);
+                }
+            }
+            Some(m)
+        }
+        ClusteringMode::Package => {
+            let mut pkg_to_id: HashMap<String, usize> = HashMap::new();
+            let mut next: usize = 0;
+            let mut m = HashMap::new();
+            let mut ixs: Vec<_> = pg.node_indices().collect();
+            ixs.sort_by(|x, y| pg[*x].cmp(&pg[*y]));
+            for nx in ixs {
+                let pkg = pg[nx].first().cloned().unwrap_or_default();
+                let id = *pkg_to_id.entry(pkg).or_insert_with(|| {
+                    let v = next;
+                    next += 1;
+                    v
+                });
+                m.insert(nx, id);
+            }
+            Some(m)
+        }
+        ClusteringMode::None => None,
+    };
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let output_dir = a
+        .output_file
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .to_path_buf();
+    let detail = match a.detail {
+        DetailLevel::None => DotDetail::None,
+        DetailLevel::Names => DotDetail::Names,
+        DetailLevel::Full => DotDetail::Full,
+    };
+    let version_str = ir.version.to_string();
+
+    let text = match a.format {
+        DiagramFormat::Dot => emit_dot::emit(
+            &pg,
+            &ir_filtered,
+            &emit_dot::EmitOptions {
+                detail,
+                root_detail: None,
+                clusters: clusters.as_ref(),
+                root: None,
+                link_template: a.link_base.as_deref(),
+                cwd: &cwd,
+                output_dir: &output_dir,
+                version: &version_str,
+            },
+        ),
+        DiagramFormat::Plantuml => emit_plantuml::emit(
+            &pg,
+            &ir_filtered,
+            &emit_plantuml::EmitOptions {
+                detail,
+                clusters: clusters.as_ref(),
+                root: None,
+                link_template: a.link_base.as_deref(),
+                cwd: &cwd,
+                output_dir: &output_dir,
+                version: &version_str,
+                package_grouping: matches!(a.clustering, ClusteringMode::Package),
+            },
+        ),
+    };
+
+    if let Some(parent) = a.output_file.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
+    }
+    std::fs::write(&a.output_file, text)
+        .map_err(|e| format!("Failed to write {}: {}", a.output_file.display(), e))?;
+    crate::cprint_normal!("Wrote overview to {}", a.output_file.display());
     Ok(())
 }
