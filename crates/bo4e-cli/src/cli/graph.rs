@@ -397,7 +397,7 @@ fn run_single(a: &SingleArgs) -> Result<(), String> {
                         cwd: &cwd,
                         output_dir: &a.output_target,
                         version: &ir.version.to_string(),
-                        package_grouping: true,
+                        package_grouping: matches!(a.clustering, ClusteringMode::Package),
                     },
                 ),
                 "puml",
