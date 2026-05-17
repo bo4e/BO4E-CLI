@@ -17,8 +17,7 @@ pub fn write_graph_json(graph: &GraphIR, path: &Path) -> Result<(), String> {
     }
     let text = serde_json::to_string_pretty(graph)
         .map_err(|e| format!("Failed to serialize GraphIR: {}", e))?;
-    std::fs::write(path, text)
-        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+    std::fs::write(path, text).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }
 
 pub fn write_graph_graphml(graph: &GraphIR, path: &Path) -> Result<(), String> {
@@ -67,8 +66,7 @@ pub fn write_graph_graphml(graph: &GraphIR, path: &Path) -> Result<(), String> {
         out.push_str("    </edge>\n");
     }
     out.push_str("  </graph>\n</graphml>\n");
-    std::fs::write(path, out)
-        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+    std::fs::write(path, out).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }
 
 fn xml_escape(s: &str) -> String {
@@ -92,7 +90,10 @@ mod tests {
                 fields: vec![Field {
                     name: "adresse".into(),
                     type_repr: "Adresse".into(),
-                    cardinality: Cardinality { min: "0".into(), max: "1".into() },
+                    cardinality: Cardinality {
+                        min: "0".into(),
+                        max: "1".into(),
+                    },
                     is_reference: true,
                 }],
             }],
@@ -100,7 +101,10 @@ mod tests {
                 from: vec!["bo".into(), "Angebot".into()],
                 to: vec!["com".into(), "Adresse".into()],
                 through_field: "adresse".into(),
-                cardinality: Cardinality { min: "0".into(), max: "1".into() },
+                cardinality: Cardinality {
+                    min: "0".into(),
+                    max: "1".into(),
+                },
             }],
         }
     }
