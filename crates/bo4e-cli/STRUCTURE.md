@@ -41,7 +41,7 @@ src/
 ├── graph.rs / graph/
 │   ├── cluster.rs     # Louvain modularity-maximisation community detection on undirected projection
 │   ├── emit_common.rs # URL-template engine (placeholders, dot-accessors); format_cardinality; dotted helpers
-│   ├── emit_dot.rs    # GraphIR → DOT, detail levels, clusters, links (Task 11)
+│   ├── emit_dot.rs    # GraphIR → DOT (record-shape, cluster subgraphs, detail levels, URL attributes)
 │   ├── emit_plantuml.rs # GraphIR → PlantUML, namespace/cluster modes (Task 12)
 │   ├── extract.rs     # Schemas → GraphIR; type_repr, cardinality, $ref resolution, petgraph conversions
 │   └── filter.rs      # FilterOptions globs, BFS reachable_from, ego_graph, retain_edges_incident_on, default_scope_for
