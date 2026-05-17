@@ -131,6 +131,7 @@ Under `tests/`:
 - `generate_smoke.rs` — minimal generate run on a tiny schema set.
 - `graph_pipeline.rs` — drives `graph extract` → `overview` → `single` end-to-end on a fixture schema set.
 - `graph_plantuml_parity.rs` — pins PlantUML emitter output for `bo graph single --class Angebot` against a committed golden under `tests/fixtures/graph/golden/plantuml/`. Regenerate goldens with the command in the test panic message.
+- `kroki_validation.rs` — `#[ignore]`d by default. POSTs emitted DOT/PlantUML to a local Kroki container (env `KROKI_URL`, default `http://localhost:8000`) and asserts HTTP 200. CI runs this with `--include-ignored`.
 - `quiet_verbose.rs` — verifies `--quiet` / `--verbose` routing and stream destinations.
 - `regression_schema_parse.rs` — pins specific JSON-Schema parsing edge cases.
 
