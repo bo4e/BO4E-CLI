@@ -50,6 +50,7 @@ src/
 │   ├── config.rs      # serde models for the edit config file
 │   ├── changes.rs     # `Change`, `ChangeType`, `ChangeValue`, `Changes`
 │   ├── git.rs         # `Reference` (git refspec parsing)
+│   ├── graph.rs       # `GraphIR`, `Node`, `Field`, `Edge`, `Cardinality` (on-disk graph IR)
 │   └── matrix.rs      # `CompatibilityMatrix`, `MatrixCell`, …
 ├── repo.rs / repo/
 │   └── filter.rs      # `FilterOptions` + `filter_tags` for `bo4e repo versions`
