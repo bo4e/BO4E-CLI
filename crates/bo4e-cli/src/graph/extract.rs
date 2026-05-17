@@ -33,7 +33,7 @@ pub fn type_repr(s: &SchemaType) -> String {
         SchemaType::Array(a) => format!("list[{}]", type_repr(&a.items)),
         SchemaType::AnyOf(any_of) => any_of_repr(any_of),
         SchemaType::AllOf(all_of) => {
-            if let Some(only) = all_of.all_of.iter().next() {
+            if let Some(only) = all_of.all_of.first() {
                 type_repr(only)
             } else {
                 "Any".into()
@@ -93,9 +93,10 @@ mod tests {
         SchemaType::StringSchema(StringSchema::default())
     }
     fn s_datetime() -> SchemaType {
-        let mut ss = StringSchema::default();
-        ss.format = Some(StringSchemaFormat::DateTime);
-        SchemaType::StringSchema(ss)
+        SchemaType::StringSchema(StringSchema {
+            format: Some(StringSchemaFormat::DateTime),
+            ..Default::default()
+        })
     }
     fn s_decimal() -> SchemaType {
         SchemaType::DecimalSchema(DecimalSchema::default())
@@ -110,9 +111,10 @@ mod tests {
         SchemaType::NullSchema(NullSchema::default())
     }
     fn s_ref(ref_: &str) -> SchemaType {
-        let mut r = ReferenceSchema::default();
-        r.r#ref = ref_.to_string();
-        SchemaType::ReferenceSchema(r)
+        SchemaType::ReferenceSchema(ReferenceSchema {
+            r#ref: ref_.to_string(),
+            ..Default::default()
+        })
     }
 
     #[test]

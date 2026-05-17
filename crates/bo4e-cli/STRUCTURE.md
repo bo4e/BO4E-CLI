@@ -43,7 +43,7 @@ src/
 │   ├── emit_common.rs # URL-template engine, cardinality formatting (Task 10)
 │   ├── emit_dot.rs    # GraphIR → DOT, detail levels, clusters, links (Task 11)
 │   ├── emit_plantuml.rs # GraphIR → PlantUML, namespace/cluster modes (Task 12)
-│   ├── extract.rs     # Schemas → PetGraph → GraphIR; type_repr (Tasks 5-7)
+│   ├── extract.rs     # Schemas → PetGraph → GraphIR; type_repr / ref_class_name (Tasks 6-7 fill remainder)
 │   └── filter.rs      # FilterOptions globs, BFS reachable_from, ego_graph (Task 8)
 ├── io.rs / io/
 │   ├── github.rs      # octocrab-based fetch; token detection (`gh auth token` / env / regex)
