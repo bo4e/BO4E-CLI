@@ -63,7 +63,13 @@ fn generated_angebot_contains_all_field_kinds_and_imports() {
         body.contains("from ..many import AngebotAdressenLink"),
         "got:\n{body}"
     );
-    assert!(body.contains("from ..enum.typ import Typ"), "got:\n{body}");
+    // `_typ` is an inline single-variant StrEnum in the fixture (matching real
+    // BO4E), which the plan rewrites into a synthetic per-class enum. The
+    // standalone `Typ` enum is no longer referenced from `Angebot`.
+    assert!(
+        !body.contains("from ..enum.typ import Typ"),
+        "Typ should no longer be imported, got:\n{body}"
+    );
 
     assert!(body.contains(
         "id_: uuid_pkg.UUID = Field(alias=\"_id\", default_factory=uuid_pkg.uuid4, primary_key=True"
@@ -79,7 +85,14 @@ fn generated_angebot_contains_all_field_kinds_and_imports() {
             "adressen: list[Adresse] | None = Relationship(link_model=AngebotAdressenLink)"
         )
     );
-    assert!(body.contains("typ: Typ | None = Field(alias=\"_typ\","));
+    assert!(
+        body.contains("class AngebotTyp(StrEnum):"),
+        "expected synthetic single-member enum above the table class, got:\n{body}"
+    );
+    assert!(
+        body.contains("typ: AngebotTyp = Field(alias=\"_typ\", default=AngebotTyp.ANGEBOT)"),
+        "expected synthetic-enum-typed _typ field, got:\n{body}"
+    );
     assert!(body.contains("werte: list[Decimal] = Field(sa_column=Column(ARRAY(Numeric)))"));
     assert!(
         body.contains("extras: Any = Field(sa_column=Column(PickleType, nullable=True))")

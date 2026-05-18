@@ -20,6 +20,7 @@ src/
 │   ├── pull.rs        # `bo4e pull` (GitHub fetch + offline-rewrite refs)
 │   ├── edit.rs        # `bo4e edit` (run config-driven schema transforms)
 │   ├── generate.rs    # `bo4e generate` (delegate to bo4e-codegen)
+│   ├── graph.rs       # `bo4e graph extract | overview | single`
 │   ├── diff.rs        # `bo4e diff schemas | matrix | version-bump`
 │   └── repo.rs        # `bo4e repo versions` (BO4E-python tag listing)
 ├── console.rs / console/
@@ -38,18 +39,27 @@ src/
 │   ├── filters.rs     # `has_critical` + change-class predicates
 │   ├── matrix.rs      # chain N diffs into a compatibility matrix (CSV/JSON)
 │   └── version.rs     # `check_version_bump` → Technical | Functional | Major
+├── graph.rs / graph/
+│   ├── cluster.rs     # Louvain modularity-maximisation community detection on undirected projection
+│   ├── emit_common.rs # URL-template engine (placeholders, dot-accessors); format_cardinality; dotted helpers
+│   ├── emit_dot.rs    # GraphIR → DOT (record-shape, cluster subgraphs, detail levels, URL attributes)
+│   ├── emit_plantuml.rs # GraphIR → PlantUML (namespace blocks with palette, Louvain packages, root mode with hide-members)
+│   ├── extract.rs     # Schemas → GraphIR; type_repr, cardinality, $ref resolution, petgraph conversions
+│   └── filter.rs      # FilterOptions globs, BFS reachable_from, ego_graph, retain_edges_incident_on, default_scope_for
 ├── io.rs / io/
 │   ├── github.rs      # octocrab-based fetch; token detection (`gh auth token` / env / regex)
 │   ├── git.rs         # shell-out helpers (`git clone`, `git log`, …)
 │   ├── config.rs      # load + resolve the edit config (incl. `$ref`-style inclusion)
 │   ├── cleanse.rs     # `clear_dir_if_needed` (prompt + wipe) — used by pull/edit/generate
 │   ├── changes.rs     # read / write a `Changes` JSON diff file
+│   ├── graph.rs       # read/write GraphIR JSON; write GraphIR as GraphML
 │   └── matrix.rs      # write_compatibility_matrix_{csv,json}
 ├── models.rs / models/
 │   ├── cli.rs         # `Token` + `get_token_as_string` (CLI-shared types)
 │   ├── config.rs      # serde models for the edit config file
 │   ├── changes.rs     # `Change`, `ChangeType`, `ChangeValue`, `Changes`
 │   ├── git.rs         # `Reference` (git refspec parsing)
+│   ├── graph.rs       # `GraphIR`, `Node`, `Field`, `Edge`, `Cardinality` (on-disk graph IR)
 │   └── matrix.rs      # `CompatibilityMatrix`, `MatrixCell`, …
 ├── repo.rs / repo/
 │   └── filter.rs      # `FilterOptions` + `filter_tags` for `bo4e repo versions`
@@ -105,6 +115,7 @@ Tests that mutate `std::env::set_current_dir` (any test that runs `bo4e repo ver
 - **`pull`** — uses octocrab via a single-threaded tokio runtime (`utils::tokio::get_runtime`). Resolves `latest` against the BO4E-Schemas GitHub repo. After downloading, rewrites GitHub `$ref` URLs to relative offline paths through `edit::update_refs::update_references_all`. Token resolution order: env → `gh auth token` → none.
 - **`edit`** — reads schemas, resolves the config (incl. `$ref` includes via `io::config::load_config`), applies `add` / `non_nullable` / `update_refs` transforms in a fixed order, brands the output `DirtyVersion` with today's `.d<YYYYMMDD>` suffix.
 - **`diff`** — has three subcommands: `schemas` (produce a JSON `Changes` diff), `matrix` (chain N diffs into CSV/JSON), `version-bump` (classify a diff as Technical / Functional / Major, with `--major-bump-allowed` gating).
+- **`graph`** — has three subcommands: `extract` (schemas dir → GraphIR JSON or GraphML), `overview` (graph JSON → big-picture DOT or PlantUML with Louvain / components / package / none clustering; randomised `--seed` by default; `--layout dot|neato|fdp|sfdp|circo|twopi` picks the Graphviz engine for DOT output (default `neato`) — `dot` keeps `rankdir=LR`, others emit `layout=<engine>` plus `overlap=<value>` (controlled by `--overlap scale|scalexy|prism|true|false`, default `prism` which assumes a GTS-enabled Graphviz; `scale` is the portable fallback); `--node-margin <N>` emits `sep="+N"` to loosen tightly-packed non-dot layouts (default `50`, pass `0` to disable); `--edge-labels` re-enables `fieldname [cardinality]` annotations which are off by default (when off, parallel edges between the same node pair are deduped to a single arrow). Nodes render as HTML-table labels with the package palette colour as `BGCOLOR` (matching `emit_plantuml`'s namespace blocks), a bold 16-pt class name, and a lighter 10-pt grey for field rows. With `--detail full`, StrEnum nodes additionally list their variants in the same lighter style — these come from a new `enum_values: Vec<String>` field on `Node` populated by `extract`), `single` (graph JSON → per-class diagrams; output is a file when `--class <NAME>` is given, a directory when `--class all`; `--clustering louvain` and `components` are rejected at the clap level; with `--class all` the output directory is wiped before writing unless `--no-clear-output` / `-c` is set). The `--link-template` flag accepts a URL template with `{pkg}` / `{module}` / `{class}` / `{version}` and `{cwd[.abs|.uri|.rel|.posix|.name]}` / `{output_dir[...]}` placeholders.
 - **`generate`** — dispatches to the per-flavour `pub fn generate` in `bo4e-codegen`. The `Generate` struct holds `common: GenerateCommon` (shared flags: `--no-clear-output`, `--templates-dir`, input/output dirs) and `flavour: GenerateFlavour` (subcommands: `PythonPydantic`, `PythonSqlModel`, `RustPlain`, `RustCrate(RustCrateArgs)`). Feature-gating ensures only compiled-in flavours appear in `--help`.
 - **`repo versions`** — shells out to `git log` from a BO4E-python checkout, parses tags through `models::git::Reference`, filters with `repo::filter::FilterOptions`. CI uses this to discover release tags.
 
@@ -118,6 +129,9 @@ Under `tests/`:
 
 - `full_bo4e.rs` — drives `pull` → `edit` → `generate` end-to-end against a fixture.
 - `generate_smoke.rs` — minimal generate run on a tiny schema set.
+- `graph_pipeline.rs` — drives `graph extract` → `overview` → `single` end-to-end on a fixture schema set.
+- `graph_plantuml_parity.rs` — pins PlantUML emitter output for `bo graph single --class Angebot` against a committed golden under `tests/fixtures/graph/golden/plantuml/`. Regenerate goldens with the command in the test panic message.
+- `kroki_validation.rs` — `#[ignore]`d by default. POSTs emitted DOT/PlantUML to a local Kroki container (env `KROKI_URL`, default `http://localhost:8000`) and asserts HTTP 200. CI runs this with `--include-ignored`.
 - `quiet_verbose.rs` — verifies `--quiet` / `--verbose` routing and stream destinations.
 - `regression_schema_parse.rs` — pins specific JSON-Schema parsing edge cases.
 

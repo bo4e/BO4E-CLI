@@ -1,2 +1,6 @@
 * text=auto
 *.rs text eol=lf
+
+# Golden fixtures compared byte-for-byte by parity tests must stay LF on
+# every platform; emitters always produce LF.
+*.puml text eol=lf

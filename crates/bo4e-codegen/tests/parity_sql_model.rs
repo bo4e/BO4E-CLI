@@ -41,11 +41,13 @@ import ast
 src = open({path:?}).read()
 tree = ast.parse(src)
 classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
-assert len(classes) == 1, f"expected 1 class, got {{len(classes)}}"
-assert classes[0].name == "Angebot", classes[0].name
-bases = [b.id if isinstance(b, ast.Name) else getattr(b, 'attr', '?') for b in classes[0].bases]
+# Inline literal fields can produce synthetic single-member enums (e.g.
+# `AngebotTyp`) emitted above the table class, so just locate `Angebot`.
+angebot = next((c for c in classes if c.name == "Angebot"), None)
+assert angebot is not None, f"Angebot class missing; got {{[c.name for c in classes]}}"
+bases = [b.id if isinstance(b, ast.Name) else getattr(b, 'attr', '?') for b in angebot.bases]
 assert "SQLModel" in bases, f"expected SQLModel in bases, got {{bases}}"
-keywords = {{kw.arg: kw.value for kw in classes[0].keywords}}
+keywords = {{kw.arg: kw.value for kw in angebot.keywords}}
 assert "table" in keywords, f"expected table=True keyword, got {{list(keywords)}}"
 print("ok")
 "#,

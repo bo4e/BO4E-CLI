@@ -1015,33 +1015,6 @@ mod tests {
     }
 
     #[test]
-    fn enum_reference_with_default_emits_enum_column() {
-        let plan = build_plan(&fixture_schemas()).expect("build_plan");
-        let angebot = angebot_table(&plan);
-        let typ = angebot
-            .sql_fields
-            .iter()
-            .find_map(|f| match f {
-                SqlField::EnumColumn {
-                    name,
-                    enum_class,
-                    is_list,
-                    nullable,
-                    default,
-                    ..
-                } if name == "_typ" => {
-                    Some((enum_class.clone(), *is_list, *nullable, default.clone()))
-                }
-                _ => None,
-            })
-            .expect("_typ EnumColumn present");
-        assert_eq!(typ.0, "Typ");
-        assert!(!typ.1);
-        assert!(typ.2);
-        assert_eq!(typ.3.as_deref(), Some("Typ.ANGEBOT"));
-    }
-
-    #[test]
     fn scalar_array_of_decimal_emits_scalar_array() {
         let plan = build_plan(&fixture_schemas()).expect("build_plan");
         let angebot = angebot_table(&plan);

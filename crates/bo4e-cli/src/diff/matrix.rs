@@ -6,7 +6,7 @@ use crate::models::matrix::{
 };
 use bo4e_schemas::models::schema_meta::Schemas;
 use indexmap::IndexMap;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 #[derive(Debug)]
 pub struct VersionChain {
@@ -26,14 +26,15 @@ pub struct ChainEdge {
 }
 
 pub fn build_chain(diffs: Vec<Changes>) -> Result<VersionChain, String> {
+    use petgraph::Direction::{Incoming, Outgoing};
+    use petgraph::graph::{DiGraph, NodeIndex};
+    use petgraph::visit::Bfs;
+
     if diffs.is_empty() {
         return Err("Cannot build a version chain from zero diffs.".to_string());
     }
 
-    // Single-diff case: trivially a length-1 chain with two nodes (the diff's
-    // old and new schemas). Skips the cross-diff integrity check, which would
-    // otherwise reject a same-version diff (e.g. comparing two snapshots of the
-    // same release where one has been edited locally).
+    // Single-diff shortcut, preserved verbatim from the previous implementation.
     if diffs.len() == 1 {
         let d = diffs.into_iter().next().unwrap();
         let old_key = d.old_version().to_string();
@@ -55,49 +56,84 @@ pub fn build_chain(diffs: Vec<Changes>) -> Result<VersionChain, String> {
         });
     }
 
-    let mut nodes: HashMap<String, Schemas> = HashMap::new();
-    let mut insert_node = |key: String, s: Schemas| -> Result<(), String> {
-        if let Some(existing) = nodes.get(&key) {
-            if existing != &s {
+    let mut g: DiGraph<String, usize> = DiGraph::new();
+    let mut idx: HashMap<String, NodeIndex> = HashMap::new();
+    let mut node_schemas: HashMap<NodeIndex, Schemas> = HashMap::new();
+
+    let insert_node = |g: &mut DiGraph<String, usize>,
+                       idx: &mut HashMap<String, NodeIndex>,
+                       node_schemas: &mut HashMap<NodeIndex, Schemas>,
+                       key: String,
+                       s: Schemas|
+     -> Result<NodeIndex, String> {
+        if let Some(&nx) = idx.get(&key) {
+            if let Some(existing) = node_schemas.get(&nx)
+                && existing != &s
+            {
                 return Err(format!(
                     "Node {} already exists with different attributes.",
                     key
                 ));
             }
-            return Ok(());
+            return Ok(nx);
         }
-        nodes.insert(key, s);
-        Ok(())
+        let nx = g.add_node(key.clone());
+        idx.insert(key, nx);
+        node_schemas.insert(nx, s);
+        Ok(nx)
     };
 
-    let mut out_edge: HashMap<String, usize> = HashMap::new();
-    let mut in_keys: HashSet<String> = HashSet::new();
-
-    for (idx, d) in diffs.iter().enumerate() {
+    for d in &diffs {
         let old_key = d.old_version().to_string();
         let new_key = d.new_version().to_string();
-        insert_node(old_key.clone(), d.old_schemas.clone())?;
-        insert_node(new_key.clone(), d.new_schemas.clone())?;
-        if out_edge.insert(old_key.clone(), idx).is_some() {
-            return Err(format!("Duplicate outgoing edge from version {}.", old_key));
+        insert_node(
+            &mut g,
+            &mut idx,
+            &mut node_schemas,
+            old_key.clone(),
+            d.old_schemas.clone(),
+        )?;
+        insert_node(
+            &mut g,
+            &mut idx,
+            &mut node_schemas,
+            new_key.clone(),
+            d.new_schemas.clone(),
+        )?;
+    }
+    for (i, d) in diffs.iter().enumerate() {
+        let from = idx[&d.old_version().to_string()];
+        let to = idx[&d.new_version().to_string()];
+        if g.edges_directed(from, Outgoing).count() > 0 {
+            return Err(format!(
+                "Duplicate outgoing edge from version {}.",
+                d.old_version()
+            ));
         }
-        if !in_keys.insert(new_key.clone()) {
-            return Err(format!("Duplicate incoming edge to version {}.", new_key));
+        if g.edges_directed(to, Incoming).count() > 0 {
+            return Err(format!(
+                "Duplicate incoming edge to version {}.",
+                d.new_version()
+            ));
         }
+        g.add_edge(from, to, i);
     }
 
-    let starts: Vec<&String> = nodes.keys().filter(|k| !in_keys.contains(*k)).collect();
+    let starts: Vec<NodeIndex> = g
+        .node_indices()
+        .filter(|n| g.edges_directed(*n, Incoming).next().is_none())
+        .collect();
     if starts.len() != 1 {
         return Err(format!(
             "Expected exactly one start node, found {}.",
             starts.len()
         ));
     }
-    let start = starts[0].clone();
+    let start = starts[0];
 
-    let ends: Vec<&String> = nodes
-        .keys()
-        .filter(|k| !out_edge.contains_key(*k))
+    let ends: Vec<NodeIndex> = g
+        .node_indices()
+        .filter(|n| g.edges_directed(*n, Outgoing).next().is_none())
         .collect();
     if ends.len() != 1 {
         return Err(format!(
@@ -105,32 +141,35 @@ pub fn build_chain(diffs: Vec<Changes>) -> Result<VersionChain, String> {
             ends.len()
         ));
     }
-    let end = ends[0].clone();
 
     let mut nodes_ordered: Vec<ChainNode> = Vec::new();
     let mut edges_ordered: Vec<ChainEdge> = Vec::new();
-    let mut cursor = start.clone();
-    nodes_ordered.push(ChainNode {
-        version_key: cursor.clone(),
-        schemas: nodes[&cursor].clone(),
-    });
-
-    while cursor != end {
-        let next_idx = *out_edge
-            .get(&cursor)
-            .ok_or_else(|| format!("Disconnected chain: no outgoing edge from {}.", cursor))?;
-        let edge_changes = diffs[next_idx].clone();
-        let next_key = edge_changes.new_version().to_string();
-        edges_ordered.push(ChainEdge {
-            changes: edge_changes,
-        });
-        cursor = next_key;
+    let mut bfs = Bfs::new(&g, start);
+    let mut visited_count = 0usize;
+    while let Some(nx) = bfs.next(&g) {
+        let key = g[nx].clone();
+        let schemas = node_schemas.remove(&nx).ok_or_else(|| {
+            format!(
+                "Internal error: node {} missing schemas during chain walk",
+                key
+            )
+        })?;
         nodes_ordered.push(ChainNode {
-            version_key: cursor.clone(),
-            schemas: nodes[&cursor].clone(),
+            version_key: key,
+            schemas,
         });
+        if let Some(e) = g.edges_directed(nx, Outgoing).next() {
+            let diff_idx = *e.weight();
+            edges_ordered.push(ChainEdge {
+                changes: diffs[diff_idx].clone(),
+            });
+        }
+        visited_count += 1;
     }
 
+    if visited_count != g.node_count() {
+        return Err("Disconnected chain: not all diffs are reachable from the start.".to_string());
+    }
     if edges_ordered.len() != diffs.len() {
         return Err("Disconnected chain: not all diffs are reachable from the start.".to_string());
     }

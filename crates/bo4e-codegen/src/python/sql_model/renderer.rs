@@ -799,10 +799,13 @@ mod tests {
             ),
             "got:\n{body}"
         );
+        // `_typ` is now an inline single-variant StrEnum in the fixture
+        // (matching real BO4E), which the plan rewrites into a synthetic
+        // local enum (`AngebotTyp`). The renderer must emit that class above
+        // the table and use it as the field annotation.
+        assert!(body.contains("class AngebotTyp(StrEnum):"), "got:\n{body}");
         assert!(
-            body.contains(
-                "typ: Typ | None = Field(alias=\"_typ\", default=Typ.ANGEBOT, sa_column="
-            ),
+            body.contains("typ: AngebotTyp = Field(alias=\"_typ\", default=AngebotTyp.ANGEBOT)"),
             "got:\n{body}"
         );
         assert!(
@@ -842,7 +845,6 @@ mod tests {
             body.contains("from ..many import AngebotAdressenLink"),
             "got:\n{body}"
         );
-        assert!(body.contains("from ..enum.typ import Typ"), "got:\n{body}");
     }
 
     #[test]

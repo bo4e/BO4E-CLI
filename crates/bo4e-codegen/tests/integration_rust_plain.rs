@@ -47,21 +47,22 @@ fn angebot_has_struct_and_sibling_use() {
         body.contains("use super::super::com::adresse::Adresse;"),
         "got:\n{body}"
     );
-    // After the strict matrix rework, `_typ` (schema is
-    // `anyOf:[$ref to Typ, null] + default "ANGEBOT"`) is no longer
-    // narrowed to a synthetic single-variant enum — it uses the full
-    // referenced `Typ` enum with a per-field default helper.
+    // `_typ` is an inline single-variant StrEnum in the fixture (matching
+    // real BO4E), so the rust-plain renderer narrows it to a synthetic
+    // local enum `AngebotTyp` declared above the struct. The struct field
+    // uses that local enum directly (no `Option<...>`, since the
+    // single-variant default makes the value always present).
     assert!(
-        !body.contains("pub enum AngebotTyp"),
-        "no synthetic discriminator narrowing for $ref-to-enum fields, got:\n{body}"
+        body.contains("pub enum AngebotTyp"),
+        "expected synthetic single-variant enum for inline _typ, got:\n{body}"
     );
     assert!(
-        body.contains("use super::super::enums::typ::Typ;"),
-        "expected Typ enum import, got:\n{body}"
+        body.contains("pub typ: AngebotTyp"),
+        "expected `AngebotTyp` annotation for the _typ field, got:\n{body}"
     );
     assert!(
-        body.contains("pub typ: Option<Typ>"),
-        "expected `Option<Typ>` for the _typ field, got:\n{body}"
+        !body.contains("use super::super::enums::typ::Typ;"),
+        "the standalone `Typ` enum is no longer referenced, got:\n{body}"
     );
     // `impl Default for Angebot` is emitted because every field has a
     // schema-declared default (validator-enforced invariant).
