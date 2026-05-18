@@ -607,6 +607,39 @@ and write the rendered SVG to disk.
 > Graphviz over the bundled binary (`apt install graphviz libgts-0.7-5`) — the
 > Ubuntu Graphviz package is built with GTS.
 
+<details>
+<summary>Example <code>Dockerfile</code> for a Kroki image with GTS-enabled Graphviz</summary>
+
+```dockerfile
+# Overlay on top of the upstream Kroki image.
+#
+# Why this exists:
+#   Kroki ships a static `dot` binary from yuzutech/graphviz-builder that is
+#   compiled without GTS (the GNU Triangulated Surface library). That makes
+#   the following Graphviz features unusable:
+#     * `overlap=prism` / `overlap=false` (sfdp's overlap removal)
+#     * spline routing fallback on dense graphs (`dot` "lost edge" warnings)
+#   Ubuntu Noble's graphviz package is built --with-gts, so apt-installing it
+#   overlays /usr/bin/{dot,sfdp,neato,fdp,circo,twopi,…} with a GTS-enabled
+#   build. Kroki invokes the layout engines through standard PATH lookups,
+#   so this is transparent to the Kroki Java service.
+FROM yuzutech/kroki:0.25.0
+
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends graphviz libgts-0.7-5 \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+```
+
+Build and run:
+
+```bash
+docker build -t kroki-gts -f Dockerfile.kroki .
+docker run -d --name kroki -p 8000:8000 kroki-gts
+```
+
+</details>
+
 Example 1 — full overview with per-class field-name labels:
 
 ```bash
