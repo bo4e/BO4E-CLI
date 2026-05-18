@@ -75,7 +75,9 @@ pub struct OverviewArgs {
     #[arg(long = "exclude")]
     pub exclude: Vec<String>,
     /// Restrict the graph to nodes reachable from this class (forward BFS).
-    /// Accepts a bare name (`Angebot`) or dotted path (`bo.Angebot`).
+    /// Use a bare name (`Angebot`) or a dotted module path (`bo.Angebot`).
+    /// A bare name that matches multiple classes (across packages) is
+    /// rejected — pass the dotted form to disambiguate.
     #[arg(long = "reachable-from")]
     pub reachable_from: Option<String>,
     /// URL template for clickable class nodes. See `--help` for placeholders
@@ -302,6 +304,14 @@ Examples:
 
 Pass `none` or an empty string to disable links explicitly.";
 
+/// Whether `module` is the class targeted by `needle`. Accepts either the
+/// bare class name (the path's last segment) or the dotted module path.
+/// Used by both `bo4e graph single --class` and `bo4e graph overview
+/// --reachable-from`.
+fn node_matches_class_input(module: &[String], needle: &str) -> bool {
+    module.last().map(String::as_str) == Some(needle) || module.join(".") == needle
+}
+
 fn single_clustering_parser(s: &str) -> Result<ClusteringMode, String> {
     match s {
         "package" => Ok(ClusteringMode::Package),
@@ -359,7 +369,31 @@ fn run_overview(a: &OverviewArgs) -> Result<(), String> {
         opts = opts.exclude_glob(glob)?;
     }
     if let Some(rf) = &a.reachable_from {
-        opts.reachable_from = Some(rf.split('.').map(|s| s.to_string()).collect());
+        let matches: Vec<Vec<String>> = pg
+            .node_indices()
+            .filter(|nx| node_matches_class_input(&pg[*nx], rf))
+            .map(|nx| pg[nx].clone())
+            .collect();
+        opts.reachable_from = Some(match matches.len() {
+            0 => {
+                let known: Vec<String> = pg.node_indices().map(|nx| pg[nx].join(".")).collect();
+                return Err(format!(
+                    "Unknown class {:?} for --reachable-from. Known: {}",
+                    rf,
+                    known.join(", ")
+                ));
+            }
+            1 => matches.into_iter().next().unwrap(),
+            _ => {
+                let qualified: Vec<String> = matches.iter().map(|m| m.join(".")).collect();
+                return Err(format!(
+                    "Ambiguous class {:?} for --reachable-from: matches {}. \
+                     Use the dotted module path to disambiguate.",
+                    rf,
+                    qualified.join(", ")
+                ));
+            }
+        });
     }
     let pg = apply(pg, &opts);
     let ir_filtered = from_petgraph_with_fields(&pg, &ir);
@@ -493,9 +527,7 @@ fn run_single(a: &SingleArgs) -> Result<(), String> {
         let needle = a.class.clone();
         let found: Vec<_> = pg
             .node_indices()
-            .filter(|nx| {
-                pg[*nx].last().map(|s| s.as_str()) == Some(&needle) || pg[*nx].join(".") == needle
-            })
+            .filter(|nx| node_matches_class_input(&pg[*nx], &needle))
             .map(|nx| (pg[nx].clone(), nx))
             .collect();
         if found.is_empty() {
