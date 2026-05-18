@@ -19,6 +19,9 @@ those schemas. It ships as a small self-contained binary with no runtime depende
 - **Classify** a version bump as technical / functional / major based on the diff.
 - **Repo versions** — list version tags of the BO4E-python repository. Mostly used
   by CI.
+- **Graph** the BO4E type-reference graph — emit a machine-readable GraphIR (JSON
+  or GraphML), a big-picture diagram (DOT / PlantUML) with Louvain / component /
+  package clustering, or per-class diagrams.
 
 ## Install
 
@@ -555,13 +558,116 @@ Example:
 bo4e repo versions -n 5 --exclude-candidates --exclude-technical-bumps
 ```
 
+## `bo4e graph extract`
+
+Build a machine-readable graph of all class-to-class references in a BO4E schemas
+directory. The output is consumed by `bo4e graph overview` / `bo4e graph single`,
+or you can export GraphML for external tools such as Gephi or yEd.
+
+| Flag       | Short | Description                                                                |
+|------------|-------|----------------------------------------------------------------------------|
+| `--input`  | `-i`  | Schemas directory (typically the output of `bo4e pull`).                   |
+| `--output` | `-o`  | Output file path.                                                          |
+| `--format` |       | `json` (default — internal GraphIR consumed by `overview`/`single`) or `graphml`. |
+
+Example:
+
+```bash
+bo4e graph extract -i ./bo4e_schemas_latest -o ./graph.json
+```
+
+## `bo4e graph overview`
+
+Render the big-picture diagram for every class in a graph file as Graphviz DOT or
+PlantUML source. Nodes are package-coloured HTML tables; clusters can be Louvain
+communities (default), weakly-connected components, BO4E packages
+(`bo`, `com`, `enum`, …), or off entirely. Filters carve out a subset (glob
+includes/excludes or BFS from a named class).
+
+> Note: the default DOT output uses `--layout neato --overlap prism`, which gives
+> the cleanest packing but needs a Graphviz build linked against the GTS
+> triangulation library. The upstream `yuzutech/kroki` image is **not** — see
+> `/setup/KROKI.md` for the GTS overlay used for the renderings below. For a
+> fully portable build, pass `--overlap scale`.
+
+Example 1 — full overview with per-field detail (extract once, then render the
+DOT via Graphviz or Kroki):
+
+```bash
+bo4e graph extract -i ./bo4e_schemas_latest -o ./graph.json
+bo4e graph overview -i ./graph.json -o ./overview.dot --detail full
+curl --data-binary @overview.dot http://localhost:8000/graphviz/svg > overview.svg
+```
+
+![Full overview of all BO4E classes](diagrams/graph-overview-full.svg)
+
+Example 2 — subset reachable from a single class (forward BFS), with a tighter
+layout because the graph is much smaller:
+
+```bash
+bo4e graph overview -i ./graph.json -o ./vertrag.dot --detail full \
+    --reachable-from Vertrag --node-margin 10
+```
+
+![All classes reachable from Vertrag](diagrams/graph-overview-vertrag-subset.svg)
+
+Flags:
+
+| Flag                       | Description                                                                                                            |
+|----------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `--input`, `-i`            | GraphIR JSON file produced by `bo4e graph extract`.                                                                    |
+| `--output`, `-o`           | Output DOT / PlantUML source file.                                                                                     |
+| `--format`                 | `dot` (default) or `plantuml`.                                                                                         |
+| `--detail`                 | `none` / `names` / `full` — how much per-node detail to render. Default `none`.                                        |
+| `--clustering`             | `louvain` (default), `components`, `package`, or `none`.                                                               |
+| `--seed`                   | RNG seed for `--clustering louvain` (default: randomised each run; set for reproducible layouts).                      |
+| `--include` / `--exclude`  | Globs over dotted module paths (e.g. `bo.*`, `*.Angebot`). Repeatable; `exclude` is applied after `include`.           |
+| `--reachable-from`         | Restrict to nodes reachable from this class via forward BFS (bare name or dotted path).                                |
+| `--layout`                 | Graphviz engine: `neato` (default), `dot`, `fdp`, `sfdp`, `circo`, `twopi`. Ignored for `--format plantuml`.           |
+| `--overlap`                | Overlap-removal strategy: `prism` (default; needs GTS), `scale`, `scalexy`, `true`, `false`.                           |
+| `--node-margin`            | Extra margin (points) around each node, for non-`dot` layouts. Default `50`; pass `0` to fall back to Graphviz's `+4`. |
+| `--edge-labels`            | Re-enable `fieldname [cardinality]` labels on every edge (off by default to reduce clutter).                           |
+| `--link-template`          | URL template for clickable class nodes. Supports `{pkg}`, `{module}`, `{class}`, `{version}`, and the `{cwd[.…]}` / `{output_dir[.…]}` path variants. Run `bo4e graph overview --help` for the full reference. |
+
+## `bo4e graph single`
+
+Render a focused diagram for a single class — or, with `--class all`, one diagram
+per class in the graph. The output is a file in the first case and a directory
+mirroring the BO4E package layout in the second. The focused class is drawn with
+its fields; the neighbours within the chosen BFS radius are shown lighter.
+
+Example:
+
+```bash
+bo4e graph single -i ./graph.json -o ./geschaeftspartner.dot --class Geschaeftspartner
+curl --data-binary @geschaeftspartner.dot http://localhost:8000/graphviz/svg > geschaeftspartner.svg
+```
+
+![Single-class diagram for Geschaeftspartner](diagrams/graph-single-geschaeftspartner.svg)
+
+Flags:
+
+| Flag                          | Description                                                                                                                          |
+|-------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| `--input`, `-i`               | GraphIR JSON file.                                                                                                                   |
+| `--output`, `-o`              | File path (with `--class <NAME>`) or directory (with `--class all`).                                                                 |
+| `--class`                     | Bare name (`Angebot`), dotted path (`bo.Angebot`), or `all`. Default `all`.                                                          |
+| `--format`                    | `dot` (default) or `plantuml`.                                                                                                       |
+| `--detail-root`               | Detail level for the focused class: `none` / `names` / `full`. Default `full`.                                                       |
+| `--detail-neighbours`         | Detail level for neighbour classes. Default `none`.                                                                                  |
+| `--clustering`                | `package` (default) or `none`. `louvain` / `components` are rejected — the per-class ego graph is too small for them to be meaningful. |
+| `--include` / `--exclude`     | Globs over dotted module paths. Default scope keeps siblings in the same BO4E package.                                               |
+| `--radius`                    | BFS radius around the focused class (default `1`).                                                                                   |
+| `--link-template`             | Same URL template engine as `bo4e graph overview`.                                                                                   |
+| `--no-clear-output`, `-c`     | Don't wipe the output directory before writing. Only relevant with `--class all`; for single-class targets the file is overwritten in place regardless. |
+
 ## Contributing
 
 This repo is a Cargo workspace with three crates:
 
 - `crates/bo4e-cli` — the `bo4e` binary, command dispatch, console, IO.
 - `crates/bo4e-schemas` — typed JSON-Schema model and version handling.
-- `crates/bo4e-codegen` — pluggable code generators (Python / pydantic, SQL model).
+- `crates/bo4e-codegen` — pluggable code generators (Python pydantic, Python SQLModel, Rust plain, Rust crate).
 
 Common commands:
 
