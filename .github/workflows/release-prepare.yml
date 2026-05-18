@@ -62,7 +62,7 @@ jobs:
         run: cargo update -p bo4e-cli --precise '${{ inputs.version }}' || cargo generate-lockfile
 
       - name: Open release PR
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: release/v${{ inputs.version }}
           commit-message: "chore: release v${{ inputs.version }}"
