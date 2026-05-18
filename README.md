@@ -584,14 +584,30 @@ communities (default), weakly-connected components, BO4E packages
 (`bo`, `com`, `enum`, …), or off entirely. Filters carve out a subset (glob
 includes/excludes or BFS from a named class).
 
-> Note: the default DOT output uses `--layout neato --overlap prism`, which gives
-> the cleanest packing but needs a Graphviz build linked against the GTS
-> triangulation library. The upstream `yuzutech/kroki` image is **not** — see
-> `/setup/KROKI.md` for the GTS overlay used for the renderings below. For a
-> fully portable build, pass `--overlap scale`.
+The DOT / PlantUML that this command writes is text — to turn it into an image
+you either run Graphviz / PlantUML yourself (`dot -Tsvg foo.dot > foo.svg`,
+`plantuml -tsvg foo.puml`, …) or pipe the source to [Kroki](https://kroki.io),
+an HTTP service that renders many diagram languages to SVG/PNG. Kroki has a
+free public instance at `https://kroki.io` and ships as a Docker image, so the
+lightest local setup is:
 
-Example 1 — full overview with per-class field-name labels (extract once, then
-render the DOT via Graphviz or Kroki):
+```bash
+docker run -d --name kroki -p 8000:8000 yuzutech/kroki
+```
+
+The `curl` lines in the examples below then post the emitted source to
+`http://localhost:8000/<lang>/svg` (where `<lang>` is `graphviz` or `plantuml`)
+and write the rendered SVG to disk.
+
+> The default `--layout neato --overlap prism` produces the cleanest packing but
+> needs a Graphviz built against the GTS triangulation library. The Graphviz
+> binary bundled in the stock `yuzutech/kroki` image is **not** linked against
+> GTS, so `prism` silently fails there. Either pass `--overlap scale` (works
+> against any Graphviz build), or derive a Kroki image that installs the distro
+> Graphviz over the bundled binary (`apt install graphviz libgts-0.7-5`) — the
+> Ubuntu Graphviz package is built with GTS.
+
+Example 1 — full overview with per-class field-name labels:
 
 ```bash
 bo4e graph extract -i ./bo4e_schemas_latest -o ./graph.json
@@ -601,13 +617,14 @@ curl --data-binary @overview.dot http://localhost:8000/graphviz/svg > overview.s
 
 ![Full overview of all BO4E classes](diagrams/graph-overview-full.svg)
 
-Example 2 — subset reachable from a single class (forward BFS), with a tighter
-layout because the graph is much smaller. `--reachable-from` matches on the
-dotted module path, so pass `bo.Vertrag` rather than just `Vertrag`:
+Example 2 — subset reachable from a single class (forward BFS).
+`--reachable-from` matches on the dotted module path, so pass `bo.Vertrag`
+rather than just `Vertrag`:
 
 ```bash
 bo4e graph overview -i ./graph.json -o ./vertrag.dot --detail full \
-    --reachable-from bo.Vertrag --node-margin 10
+    --reachable-from bo.Vertrag
+curl --data-binary @vertrag.dot http://localhost:8000/graphviz/svg > vertrag.svg
 ```
 
 ![All classes reachable from Vertrag](diagrams/graph-overview-vertrag-subset.svg)
@@ -637,11 +654,14 @@ per class in the graph. The output is a file in the first case and a directory
 mirroring the BO4E package layout in the second. The focused class is drawn with
 its fields; the neighbours within the chosen BFS radius are shown lighter.
 
-Example:
+Example (PlantUML output, rendered via the same local Kroki container as the
+overview examples above):
 
 ```bash
-bo4e graph single -i ./graph.json -o ./geschaeftspartner.dot --class Geschaeftspartner
-curl --data-binary @geschaeftspartner.dot http://localhost:8000/graphviz/svg > geschaeftspartner.svg
+bo4e graph single -i ./graph.json -o ./geschaeftspartner.puml \
+    --class Geschaeftspartner --format plantuml
+curl --data-binary @geschaeftspartner.puml http://localhost:8000/plantuml/svg \
+    > geschaeftspartner.svg
 ```
 
 ![Single-class diagram for Geschaeftspartner](diagrams/graph-single-geschaeftspartner.svg)
