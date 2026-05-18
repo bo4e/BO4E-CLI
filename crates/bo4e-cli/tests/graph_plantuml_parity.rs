@@ -46,9 +46,12 @@ fn run_parity(class: &str) {
     let golden_path = golden_dir().join(format!("{class}.puml"));
     let expected = std::fs::read_to_string(&golden_path)
         .unwrap_or_else(|e| panic!("Missing golden {}: {e}", golden_path.display()));
+    // Normalise CRLF -> LF so the test passes on Windows runners where git's
+    // `core.autocrlf` may have rewritten line endings in the checked-out
+    // golden file. The emitter always produces LF.
     assert_eq!(
-        actual.trim(),
-        expected.trim(),
+        actual.trim().replace("\r\n", "\n"),
+        expected.trim().replace("\r\n", "\n"),
         "PlantUML output drifted from golden for class {class}.\nTo regenerate, run:\n  cargo run -p bo4e-cli -- graph single -i <graph.json> --class {class} -o {}",
         golden_path.display(),
     );
