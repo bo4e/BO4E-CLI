@@ -619,13 +619,13 @@ curl --data-binary @overview.dot http://localhost:8000/graphviz/svg > overview.s
 
 Example 2 — subset reachable from a single class (forward BFS).
 `--reachable-from` matches on the dotted module path, so pass `bo.Vertrag`
-rather than just `Vertrag`. A small `--node-margin` keeps the rendered bounding
-box compact (the default `50` is calibrated for the dense full overview and is
-unnecessarily roomy on a 22-node subset):
+rather than just `Vertrag`. `--node-margin 0` omits the `sep` attribute
+altogether (the default `sep="+50"` is calibrated for the dense full overview
+and is unnecessarily roomy on a 22-node subset):
 
 ```bash
 bo4e graph overview -i ./graph.json -o ./vertrag.dot --detail full \
-    --reachable-from bo.Vertrag --node-margin 2
+    --reachable-from bo.Vertrag --node-margin 0
 curl --data-binary @vertrag.dot http://localhost:8000/graphviz/svg > vertrag.svg
 ```
 
