@@ -230,6 +230,12 @@ mod tests {
         assert_eq!(r.unwrap(), "bo/Angebot#bo.Angebot");
     }
 
+    // The fixture path `/home/user/proj` is POSIX-absolute. On Windows,
+    // `Url::from_file_path` rejects it (no drive letter), so the placeholder
+    // resolves to None and the literal `{cwd.uri}` survives substitution.
+    // Production code is fine on Windows — there `cwd` is always a real
+    // Windows path — this is purely a fixture-shape limitation.
+    #[cfg(unix)]
     #[test]
     fn cwd_uri_yields_file_url() {
         let r = render_link(
