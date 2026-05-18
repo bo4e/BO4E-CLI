@@ -37,7 +37,7 @@ url = { version = "2.5.6", features = ["serde"] }
 itertools = "0.14.0"
 bimap = { version = "0.6.3", features = ["serde"] }
 serde_regex = "1.1.0"
-octocrab = "0.44.1"
+octocrab = "0.51.0"
 http = "1.4.0"
 indicatif = { version = "0.18.0", features = ["tokio"] }
 console = { version = "0.16.3", features = ["windows-console-colors"] }
