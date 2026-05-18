@@ -590,23 +590,24 @@ includes/excludes or BFS from a named class).
 > `/setup/KROKI.md` for the GTS overlay used for the renderings below. For a
 > fully portable build, pass `--overlap scale`.
 
-Example 1 — full overview with per-field detail (extract once, then render the
-DOT via Graphviz or Kroki):
+Example 1 — full overview with per-class field-name labels (extract once, then
+render the DOT via Graphviz or Kroki):
 
 ```bash
 bo4e graph extract -i ./bo4e_schemas_latest -o ./graph.json
-bo4e graph overview -i ./graph.json -o ./overview.dot --detail full
+bo4e graph overview -i ./graph.json -o ./overview.dot --detail names
 curl --data-binary @overview.dot http://localhost:8000/graphviz/svg > overview.svg
 ```
 
 ![Full overview of all BO4E classes](diagrams/graph-overview-full.svg)
 
 Example 2 — subset reachable from a single class (forward BFS), with a tighter
-layout because the graph is much smaller:
+layout because the graph is much smaller. `--reachable-from` matches on the
+dotted module path, so pass `bo.Vertrag` rather than just `Vertrag`:
 
 ```bash
 bo4e graph overview -i ./graph.json -o ./vertrag.dot --detail full \
-    --reachable-from Vertrag --node-margin 10
+    --reachable-from bo.Vertrag --node-margin 10
 ```
 
 ![All classes reachable from Vertrag](diagrams/graph-overview-vertrag-subset.svg)
@@ -622,7 +623,7 @@ Flags:
 | `--clustering`             | `louvain` (default), `components`, `package`, or `none`.                                                               |
 | `--seed`                   | RNG seed for `--clustering louvain` (default: randomised each run; set for reproducible layouts).                      |
 | `--include` / `--exclude`  | Globs over dotted module paths (e.g. `bo.*`, `*.Angebot`). Repeatable; `exclude` is applied after `include`.           |
-| `--reachable-from`         | Restrict to nodes reachable from this class via forward BFS (bare name or dotted path).                                |
+| `--reachable-from`         | Restrict to nodes reachable from this class via forward BFS. Requires the dotted module path (e.g. `bo.Vertrag`).      |
 | `--layout`                 | Graphviz engine: `neato` (default), `dot`, `fdp`, `sfdp`, `circo`, `twopi`. Ignored for `--format plantuml`.           |
 | `--overlap`                | Overlap-removal strategy: `prism` (default; needs GTS), `scale`, `scalexy`, `true`, `false`.                           |
 | `--node-margin`            | Extra margin (points) around each node, for non-`dot` layouts. Default `50`; pass `0` to fall back to Graphviz's `+4`. |
