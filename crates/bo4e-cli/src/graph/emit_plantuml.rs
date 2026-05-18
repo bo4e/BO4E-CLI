@@ -1,4 +1,6 @@
-use crate::graph::emit_common::{format_cardinality, render_link};
+use crate::graph::emit_common::{
+    COLOUR_BO, COLOUR_COM, COLOUR_ENUM, format_cardinality, render_link,
+};
 use crate::graph::emit_dot::Detail;
 use crate::graph::extract::PetGraph;
 use crate::models::graph::GraphIR;
@@ -22,10 +24,6 @@ pub struct EmitOptions<'a> {
     /// `package "Cluster N"` blocks instead.
     pub package_grouping: bool,
 }
-
-const COLOUR_BO: &str = "#B6D7A8";
-const COLOUR_COM: &str = "#E0A86C";
-const COLOUR_ENUM: &str = "#d1c358";
 
 pub fn emit(g: &PetGraph, ir: &GraphIR, opts: &EmitOptions) -> String {
     let mut out = String::new();
@@ -278,10 +276,12 @@ mod tests {
                             is_reference: false,
                         },
                     ],
+                    enum_values: vec![],
                 },
                 Node {
                     module: vec!["com".into(), "Adresse".into()],
                     fields: vec![],
+                    enum_values: vec![],
                 },
             ],
             edges: vec![Edge {

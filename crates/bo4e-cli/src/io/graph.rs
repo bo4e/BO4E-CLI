@@ -96,6 +96,7 @@ mod tests {
                     },
                     is_reference: true,
                 }],
+                enum_values: vec![],
             }],
             edges: vec![Edge {
                 from: vec!["bo".into(), "Angebot".into()],

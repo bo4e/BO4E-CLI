@@ -14,8 +14,14 @@ pub struct GraphIR {
 pub struct Node {
     /// Module path, e.g. ["bo", "Angebot"].
     pub module: Vec<String>,
-    /// All fields the class declares, in declaration order.
+    /// All fields the class declares, in declaration order. Empty for nodes
+    /// that originate from a `StrEnum` / `Constant` root schema — see
+    /// `enum_values` instead.
     pub fields: Vec<Field>,
+    /// Variants of an external (class-backed) string enum, in declaration
+    /// order. Empty (and omitted on the wire) for class nodes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enum_values: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -67,6 +73,7 @@ mod tests {
                     },
                     is_reference: true,
                 }],
+                enum_values: vec![],
             }],
             edges: vec![Edge {
                 from: vec!["bo".into(), "Angebot".into()],

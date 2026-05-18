@@ -80,11 +80,43 @@ pub struct OverviewArgs {
     pub reachable_from: Option<String>,
     /// URL template for clickable class nodes. See `--help` for placeholders
     /// and worked examples.
-    #[arg(long = "link-base", long_help = LINK_BASE_LONG_HELP_OVERVIEW)]
-    pub link_base: Option<String>,
+    #[arg(long = "link-template", long_help = LINK_TEMPLATE_LONG_HELP_OVERVIEW)]
+    pub link_template: Option<String>,
+    /// Graphviz layout engine (only affects `--format dot`). `neato`
+    /// (default) is a spring-model force-directed layout that gives the
+    /// most readable overview on this dense graph. `dot` is the
+    /// hierarchical layered alternative — clean on trees and small DAGs
+    /// but cramped here. `fdp` / `sfdp` / `circo` / `twopi` are the other
+    /// engines. Ignored for `--format plantuml`.
+    #[arg(long = "layout", default_value = "neato")]
+    pub layout: DotLayout,
+    /// Graphviz `overlap` strategy for force-directed and circular layouts.
+    /// `prism` (default) produces the cleanest packing but needs a Graphviz
+    /// compiled with GTS (the upstream `yuzutech/kroki` image is not — use
+    /// the GTS overlay; see /setup/KROKI.md). `scale` is portable and
+    /// works against any Graphviz build. `true` skips overlap removal
+    /// entirely; `false` is an alias for `prism`. Ignored when
+    /// `--layout dot` (dot doesn't use overlap) and for `--format plantuml`.
+    #[arg(long = "overlap", default_value = "prism")]
+    pub overlap: DotOverlap,
+    /// Extra margin in points around every node, added on top of Graphviz's
+    /// default `sep` of `+4`. Default `50` loosens the otherwise tightly-
+    /// packed `neato + prism` layout. Only applied when `--layout != dot`
+    /// — for `dot`, the hierarchical engine uses different knobs
+    /// (`nodesep`/`ranksep`) which this flag does not touch. Ignored for
+    /// `--format plantuml`. Pass `0` to fall back to Graphviz's default
+    /// (sep=+4) without any extra margin.
+    #[arg(long = "node-margin", default_value_t = 50)]
+    pub node_margin: u32,
+    /// Render `fieldname [cardinality]` labels on every edge. Off by
+    /// default — labelled edges visibly clutter the dense overview and
+    /// the same information is available in the per-class diagrams via
+    /// `bo4e graph single`. Pass `--edge-labels` to re-enable.
+    #[arg(long = "edge-labels", default_value_t = false)]
+    pub edge_labels: bool,
 }
 
-const LINK_BASE_LONG_HELP_OVERVIEW: &str =
+const LINK_TEMPLATE_LONG_HELP_OVERVIEW: &str =
     "URL template for clickable class nodes. When set, each class node \
 becomes a hyperlink in the rendered diagram.
 
@@ -98,16 +130,16 @@ Placeholders (expanded per node):
 
 Examples:
   # Link to the official BO4E-Python API docs:
-  --link-base \"https://bo4e.github.io/BO4E-python/{version}/api/{module}.html\"
+  --link-template \"https://bo4e.github.io/BO4E-python/{version}/api/{module}.html\"
 
   # Link to a sibling SVG written next to the diagram:
-  --link-base \"{pkg}/{class}.svg\"
+  --link-template \"{pkg}/{class}.svg\"
 
   # Anchor into a single docs page:
-  --link-base \"https://docs.example.com/bo4e#{class}\"
+  --link-template \"https://docs.example.com/bo4e#{class}\"
 
   # Open locally rendered HTML by file URI:
-  --link-base \"{output_dir.uri}/{pkg}/{class}.html\"
+  --link-template \"{output_dir.uri}/{pkg}/{class}.html\"
 
 Pass `none` or an empty string to disable links explicitly.";
 
@@ -130,6 +162,61 @@ pub enum ClusteringMode {
     Components,
     Package,
     None,
+}
+
+#[derive(ValueEnum, Clone, Debug, Copy)]
+pub enum DotLayout {
+    /// Hierarchical / layered layout (Graphviz default).
+    Dot,
+    /// Spring-model force-directed layout (good for moderately sized graphs).
+    Neato,
+    /// Force-directed placement that respects clusters.
+    Fdp,
+    /// Scalable force-directed placement (faster on large graphs).
+    Sfdp,
+    /// Circular layout.
+    Circo,
+    /// Radial layout around a central node.
+    Twopi,
+}
+
+impl DotLayout {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DotLayout::Dot => "dot",
+            DotLayout::Neato => "neato",
+            DotLayout::Fdp => "fdp",
+            DotLayout::Sfdp => "sfdp",
+            DotLayout::Circo => "circo",
+            DotLayout::Twopi => "twopi",
+        }
+    }
+}
+
+#[derive(ValueEnum, Clone, Debug, Copy)]
+pub enum DotOverlap {
+    /// Uniform scaling. Portable across Graphviz builds.
+    Scale,
+    /// Per-axis scaling.
+    Scalexy,
+    /// Triangulation-based packing. Best visual result, needs GTS.
+    Prism,
+    /// Allow overlaps; no removal step.
+    True,
+    /// Alias for `prism` (Graphviz semantics).
+    False,
+}
+
+impl DotOverlap {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DotOverlap::Scale => "scale",
+            DotOverlap::Scalexy => "scalexy",
+            DotOverlap::Prism => "prism",
+            DotOverlap::True => "true",
+            DotOverlap::False => "false",
+        }
+    }
 }
 
 /// Render per-class diagrams. Outputs a file when --class names a single class,
@@ -178,8 +265,8 @@ pub struct SingleArgs {
     pub radius: usize,
     /// URL template for clickable class nodes. See `--help` for placeholders
     /// and worked examples.
-    #[arg(long = "link-base", long_help = LINK_BASE_LONG_HELP_SINGLE)]
-    pub link_base: Option<String>,
+    #[arg(long = "link-template", long_help = LINK_TEMPLATE_LONG_HELP_SINGLE)]
+    pub link_template: Option<String>,
     /// Don't clear the output directory before writing diagrams. Only
     /// relevant with `--class all`; for single-class targets the output file
     /// is overwritten in place regardless.
@@ -187,7 +274,7 @@ pub struct SingleArgs {
     pub no_clear_output: bool,
 }
 
-const LINK_BASE_LONG_HELP_SINGLE: &str =
+const LINK_TEMPLATE_LONG_HELP_SINGLE: &str =
     "URL template for clickable class nodes. When set, each class node \
 becomes a hyperlink in the rendered diagram.
 
@@ -202,16 +289,16 @@ or its parent
 
 Examples:
   # Cross-link every per-class SVG to its siblings:
-  --link-base \"{class}.svg\"
+  --link-template \"{class}.svg\"
 
   # Link to the official BO4E-Python API docs:
-  --link-base \"https://bo4e.github.io/BO4E-python/{version}/api/{module}.html\"
+  --link-template \"https://bo4e.github.io/BO4E-python/{version}/api/{module}.html\"
 
   # Anchor into a single docs page:
-  --link-base \"https://docs.example.com/bo4e#{class}\"
+  --link-template \"https://docs.example.com/bo4e#{class}\"
 
   # Open locally rendered HTML by file URI:
-  --link-base \"{output_dir.uri}/{pkg}/{class}.html\"
+  --link-template \"{output_dir.uri}/{pkg}/{class}.html\"
 
 Pass `none` or an empty string to disable links explicitly.";
 
@@ -349,10 +436,14 @@ fn run_overview(a: &OverviewArgs) -> Result<(), String> {
                 root_detail: None,
                 clusters: clusters.as_ref(),
                 root: None,
-                link_template: a.link_base.as_deref(),
+                link_template: a.link_template.as_deref(),
                 cwd: &cwd,
                 output_dir: &output_dir,
                 version: &version_str,
+                layout: a.layout.as_str(),
+                overlap: a.overlap.as_str(),
+                node_margin: a.node_margin,
+                edge_labels: a.edge_labels,
             },
         ),
         DiagramFormat::Plantuml => emit_plantuml::emit(
@@ -362,7 +453,7 @@ fn run_overview(a: &OverviewArgs) -> Result<(), String> {
                 detail,
                 clusters: clusters.as_ref(),
                 root: None,
-                link_template: a.link_base.as_deref(),
+                link_template: a.link_template.as_deref(),
                 cwd: &cwd,
                 output_dir: &output_dir,
                 version: &version_str,
@@ -481,10 +572,14 @@ fn run_single(a: &SingleArgs) -> Result<(), String> {
                         root_detail: Some(detail(a.detail_root)),
                         clusters: None,
                         root: Some(root_in_sub),
-                        link_template: a.link_base.as_deref(),
+                        link_template: a.link_template.as_deref(),
                         cwd: &cwd,
                         output_dir: &a.output_target,
                         version: &ir.version.to_string(),
+                        layout: "dot",
+                        overlap: "scale",
+                        node_margin: 0,
+                        edge_labels: true,
                     },
                 ),
                 "dot",
@@ -497,7 +592,7 @@ fn run_single(a: &SingleArgs) -> Result<(), String> {
                         detail: detail(a.detail_root),
                         clusters: None,
                         root: Some(module.as_slice()),
-                        link_template: a.link_base.as_deref(),
+                        link_template: a.link_template.as_deref(),
                         cwd: &cwd,
                         output_dir: &a.output_target,
                         version: &ir.version.to_string(),

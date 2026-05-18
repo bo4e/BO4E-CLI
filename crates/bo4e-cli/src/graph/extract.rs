@@ -115,11 +115,13 @@ pub fn extract(schemas: &Schemas) -> Result<GraphIR, String> {
 
         let object = match &owned_root {
             SchemaRootType::Object(o) => &o.object,
-            _ => {
-                // StrEnum / Constant root schemas contribute a node with no fields.
+            SchemaRootType::StrEnum(e) => {
+                // External (class-backed) StrEnum: carry its variants for
+                // emitters that render them with `--detail full`.
                 nodes.push(Node {
                     module,
                     fields: vec![],
+                    enum_values: e.str_enum.enum_values.clone(),
                 });
                 continue;
             }
@@ -154,7 +156,11 @@ pub fn extract(schemas: &Schemas) -> Result<GraphIR, String> {
             }
         }
 
-        nodes.push(Node { module, fields });
+        nodes.push(Node {
+            module,
+            fields,
+            enum_values: vec![],
+        });
     }
 
     if let Some(console) = CONSOLE.get() {
@@ -197,19 +203,20 @@ pub fn to_petgraph(g: &GraphIR) -> PetGraph {
 /// from the original GraphIR via module-path lookup. Used by filter/cluster
 /// passes to reconstruct a full IR for emit.
 pub fn from_petgraph_with_fields(pg: &PetGraph, original: &GraphIR) -> GraphIR {
-    let field_map: HashMap<&Vec<String>, &Vec<Field>> = original
-        .nodes
-        .iter()
-        .map(|n| (&n.module, &n.fields))
-        .collect();
+    let node_map: HashMap<&Vec<String>, &Node> =
+        original.nodes.iter().map(|n| (&n.module, n)).collect();
     let mut nodes: Vec<Node> = Vec::new();
     for nx in pg.node_indices() {
         let module = pg[nx].clone();
-        let fields = field_map
+        let (fields, enum_values) = node_map
             .get(&module)
-            .map(|f| (*f).clone())
+            .map(|n| (n.fields.clone(), n.enum_values.clone()))
             .unwrap_or_default();
-        nodes.push(Node { module, fields });
+        nodes.push(Node {
+            module,
+            fields,
+            enum_values,
+        });
     }
     let mut edges: Vec<Edge> = Vec::new();
     for ex in pg.edge_indices() {
