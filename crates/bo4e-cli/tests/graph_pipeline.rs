@@ -175,3 +175,58 @@ fn single_writes_root_level_class_at_output_dir_root() {
     );
     assert!(singles.join("bo").join("Foo.puml").is_file());
 }
+
+#[test]
+fn single_class_all_wipes_output_dir_by_default_and_preserves_with_flag() {
+    let tmp = tempfile::tempdir().unwrap();
+    let graph_json = tmp.path().join("graph.json");
+    Command::new(exe())
+        .args(["graph", "extract", "-i"])
+        .arg(fixture())
+        .args(["-o"])
+        .arg(&graph_json)
+        .output()
+        .unwrap();
+
+    let singles = tmp.path().join("singles");
+    std::fs::create_dir_all(&singles).unwrap();
+    let stale = singles.join("STALE.txt");
+
+    std::fs::write(&stale, b"old").unwrap();
+    let out = Command::new(exe())
+        .args(["graph", "single", "-i"])
+        .arg(&graph_json)
+        .args(["-o"])
+        .arg(&singles)
+        .args(["--class", "all", "--format", "plantuml"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(
+        !stale.exists(),
+        "default run should have wiped {}",
+        stale.display()
+    );
+
+    std::fs::write(&stale, b"old").unwrap();
+    let out = Command::new(exe())
+        .args(["graph", "single", "-i"])
+        .arg(&graph_json)
+        .args(["-o"])
+        .arg(&singles)
+        .args([
+            "--class",
+            "all",
+            "--format",
+            "plantuml",
+            "--no-clear-output",
+        ])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(
+        stale.exists(),
+        "--no-clear-output should have kept {}",
+        stale.display()
+    );
+}

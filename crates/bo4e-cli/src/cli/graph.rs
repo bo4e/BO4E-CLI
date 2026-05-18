@@ -1,5 +1,6 @@
 use crate::cli::base::Executable;
 use crate::graph::extract::extract;
+use crate::io::cleanse::clear_dir_if_needed;
 use crate::io::graph::{write_graph_graphml, write_graph_json};
 use clap::{Args, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -21,10 +22,12 @@ pub enum GraphSubcommand {
 /// Build a directed graph of BO4E class references and write it as JSON or GraphML.
 #[derive(Args)]
 pub struct ExtractArgs {
-    /// BO4E schemas directory (the kind written by `bo4e pull`).
+    /// Directory of BO4E JSON schemas (typically the output of `bo4e pull`).
     #[arg(short = 'i', long = "input", required = true)]
     pub input_dir: PathBuf,
-    /// Output file.
+    /// Output file path. The suffix is not enforced — use `.json` for the
+    /// internal GraphIR (consumed by `overview` / `single`) or `.graphml`
+    /// for external tools such as Gephi or yEd.
     #[arg(short = 'o', long = "output", required = true)]
     pub output_file: PathBuf,
     /// Output format.
@@ -41,27 +44,72 @@ pub enum GraphFormat {
 /// Render the big-picture overview diagram for all classes in a graph.json.
 #[derive(Args)]
 pub struct OverviewArgs {
+    /// GraphIR JSON file produced by `bo4e graph extract`.
     #[arg(short = 'i', long = "input", required = true)]
     pub input_graph: PathBuf,
+    /// Output file for the rendered diagram (DOT or PlantUML source).
     #[arg(short = 'o', long = "output", required = true)]
     pub output_file: PathBuf,
+    /// Rendering language: `dot` (Graphviz) or `plantuml`.
     #[arg(long = "format", default_value = "dot")]
     pub format: DiagramFormat,
+    /// Per-class detail: `none` (just the name), `names` (field names),
+    /// or `full` (field names + types).
     #[arg(long = "detail", default_value = "none")]
     pub detail: DetailLevel,
+    /// Visual grouping. `louvain` detects communities by modularity;
+    /// `components` colours weakly-connected components; `package` groups
+    /// nodes by BO4E package (bo, com, enum, …); `none` disables grouping.
     #[arg(long = "clustering", default_value = "louvain")]
     pub clustering: ClusteringMode,
+    /// RNG seed for `--clustering louvain`. Default: randomised each run.
+    /// Set this for reproducible layouts.
     #[arg(long = "seed")]
     pub seed: Option<u64>,
+    /// Include-only glob over dotted module paths (e.g. `bo.*`,
+    /// `*.Angebot`). Repeatable; a node is kept if it matches any pattern.
     #[arg(long = "include")]
     pub include: Vec<String>,
+    /// Exclude glob over dotted module paths. Applied after `--include`.
+    /// Repeatable.
     #[arg(long = "exclude")]
     pub exclude: Vec<String>,
+    /// Restrict the graph to nodes reachable from this class (forward BFS).
+    /// Accepts a bare name (`Angebot`) or dotted path (`bo.Angebot`).
     #[arg(long = "reachable-from")]
     pub reachable_from: Option<String>,
-    #[arg(long = "link-base")]
+    /// URL template for clickable class nodes. See `--help` for placeholders
+    /// and worked examples.
+    #[arg(long = "link-base", long_help = LINK_BASE_LONG_HELP_OVERVIEW)]
     pub link_base: Option<String>,
 }
+
+const LINK_BASE_LONG_HELP_OVERVIEW: &str =
+    "URL template for clickable class nodes. When set, each class node \
+becomes a hyperlink in the rendered diagram.
+
+Placeholders (expanded per node):
+  {pkg}         BO4E package, e.g. `bo`
+  {module}      dotted module path, e.g. `bo.Angebot`
+  {class}       class name, e.g. `Angebot`
+  {version}     BO4E version of the source schemas
+  {cwd[.abs|.rel|.uri|.posix|.name]}         current working directory
+  {output_dir[.abs|.rel|.uri|.posix|.name]}  parent directory of `-o`
+
+Examples:
+  # Link to the official BO4E-Python API docs:
+  --link-base \"https://bo4e.github.io/BO4E-python/{version}/api/{module}.html\"
+
+  # Link to a sibling SVG written next to the diagram:
+  --link-base \"{pkg}/{class}.svg\"
+
+  # Anchor into a single docs page:
+  --link-base \"https://docs.example.com/bo4e#{class}\"
+
+  # Open locally rendered HTML by file URI:
+  --link-base \"{output_dir.uri}/{pkg}/{class}.html\"
+
+Pass `none` or an empty string to disable links explicitly.";
 
 #[derive(ValueEnum, Clone, Debug, Copy)]
 pub enum DiagramFormat {
@@ -88,32 +136,84 @@ pub enum ClusteringMode {
 /// or a directory of files when --class all.
 #[derive(Args)]
 pub struct SingleArgs {
+    /// GraphIR JSON file produced by `bo4e graph extract`.
     #[arg(short = 'i', long = "input", required = true)]
     pub input_graph: PathBuf,
-    /// Class name (e.g. "Angebot" or "bo.Angebot") or the literal "all".
+    /// Class to render. Use a bare name (`Angebot`) or a dotted module path
+    /// (`bo.Angebot`). Pass `all` to render every class in the graph.
     #[arg(long = "class", default_value = "all")]
     pub class: String,
-    /// Output target. File when --class names a single class; directory when
-    /// --class all.
+    /// Output target. With `--class <NAME>`: path to the single output file.
+    /// With `--class all`: directory to populate with one file per class
+    /// (mirroring the BO4E package layout: `bo/`, `com/`, `enum/`, …).
     #[arg(short = 'o', long = "output", required = true)]
     pub output_target: PathBuf,
+    /// Rendering language: `dot` (Graphviz) or `plantuml`.
     #[arg(long = "format", default_value = "dot")]
     pub format: DiagramFormat,
+    /// Detail level for the focused class: `none`, `names`, or `full`
+    /// (field names + types).
     #[arg(long = "detail-root", default_value = "full")]
     pub detail_root: DetailLevel,
+    /// Detail level for neighbour classes: `none`, `names`, or `full`.
     #[arg(long = "detail-neighbours", default_value = "none")]
     pub detail_neighbours: DetailLevel,
+    /// Visual grouping inside the per-class diagram. `package` groups
+    /// neighbours by BO4E package; `none` disables grouping.
+    /// (`louvain` / `components` are rejected — the per-class ego graph is
+    /// too small for them to be meaningful.)
     #[arg(long = "clustering", default_value = "package", value_parser = single_clustering_parser)]
     pub clustering: ClusteringMode,
+    /// Include-only glob over dotted module paths. Overrides the default
+    /// per-package scope (which keeps siblings in the same package). Repeatable.
     #[arg(long = "include")]
     pub include: Vec<String>,
+    /// Exclude glob over dotted module paths. Applied after `--include`.
+    /// Repeatable.
     #[arg(long = "exclude")]
     pub exclude: Vec<String>,
+    /// BFS radius around the focused class: 1 = direct neighbours,
+    /// 2 = neighbours-of-neighbours, and so on.
     #[arg(long = "radius", default_value = "1")]
     pub radius: usize,
-    #[arg(long = "link-base")]
+    /// URL template for clickable class nodes. See `--help` for placeholders
+    /// and worked examples.
+    #[arg(long = "link-base", long_help = LINK_BASE_LONG_HELP_SINGLE)]
     pub link_base: Option<String>,
+    /// Don't clear the output directory before writing diagrams. Only
+    /// relevant with `--class all`; for single-class targets the output file
+    /// is overwritten in place regardless.
+    #[arg(short = 'c', long = "no-clear-output", default_value_t = false)]
+    pub no_clear_output: bool,
 }
+
+const LINK_BASE_LONG_HELP_SINGLE: &str =
+    "URL template for clickable class nodes. When set, each class node \
+becomes a hyperlink in the rendered diagram.
+
+Placeholders (expanded per node):
+  {pkg}         BO4E package, e.g. `bo`
+  {module}      dotted module path, e.g. `bo.Angebot`
+  {class}       class name, e.g. `Angebot`
+  {version}     BO4E version of the source schemas
+  {cwd[.abs|.rel|.uri|.posix|.name]}         current working directory
+  {output_dir[.abs|.rel|.uri|.posix|.name]}  `-o` (in `--class all` mode) \
+or its parent
+
+Examples:
+  # Cross-link every per-class SVG to its siblings:
+  --link-base \"{class}.svg\"
+
+  # Link to the official BO4E-Python API docs:
+  --link-base \"https://bo4e.github.io/BO4E-python/{version}/api/{module}.html\"
+
+  # Anchor into a single docs page:
+  --link-base \"https://docs.example.com/bo4e#{class}\"
+
+  # Open locally rendered HTML by file URI:
+  --link-base \"{output_dir.uri}/{pkg}/{class}.html\"
+
+Pass `none` or an empty string to disable links explicitly.";
 
 fn single_clustering_parser(s: &str) -> Result<ClusteringMode, String> {
     match s {
@@ -332,6 +432,10 @@ fn run_single(a: &SingleArgs) -> Result<(), String> {
             "--class all expects -o to be a directory, but {} is a file",
             a.output_target.display()
         ));
+    }
+
+    if !single_target {
+        clear_dir_if_needed(&a.output_target, !a.no_clear_output).map_err(|e| e.to_string())?;
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
