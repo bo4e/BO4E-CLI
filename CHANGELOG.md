@@ -1,3 +1,21 @@
+
+## 1.1.0 - 2026-05-18
+
+### Added
+
+- **graph**: Accept bare class name on overview --reachable-from (#150)
+- **graph**: Add extract / overview / single subcommands (#148)
+- **generate**: Add rust-plain and rust-crate output flavours (#136)
+
+### Changed
+
+- **codegen**: Lift language-neutral helpers into shared modules (#135)
+
+### Documentation
+
+- **readme**: Document bo4e graph extract / overview / single (#149)
+- Add AGENTS.md playbook and per-crate STRUCTURE.md files (#134)
+
 ## 1.0.0 - 2026-05-11
 
 ### Documentation
