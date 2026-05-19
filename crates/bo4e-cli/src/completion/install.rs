@@ -5,7 +5,7 @@ use crate::completion::shells::Selected;
 use clap::Command;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Outcome reported back to the caller for printing.
 #[derive(Debug)]
@@ -28,13 +28,14 @@ pub fn install(
     if shell == Selected::Powershell {
         let rc = sp.rc.as_ref().expect("powershell always has an rc");
         let original = read_or_empty(rc)?;
-        if !force && marker::is_installed(&original, shell.comment_leader()) {
+        let rc_present = marker::is_installed(&original, shell.comment_leader());
+        if !force && rc_present {
             return Ok(Outcome::AlreadyInstalled { script: None, rc: Some(rc.clone()) });
         }
         let body = shell.script(cmd);
         let new = marker::splice(&original, &body, shell.comment_leader());
         write_with_parents(rc, &new)?;
-        return Ok(if force {
+        return Ok(if force && rc_present {
             Outcome::Replaced { script: None, rc: Some(rc.clone()) }
         } else {
             Outcome::Installed { script: None, rc: Some(rc.clone()) }
@@ -95,7 +96,7 @@ pub(crate) fn paths_for_selected(s: Selected, p: &dyn Paths) -> crate::completio
     paths_for(cs, p)
 }
 
-fn read_or_empty(p: &PathBuf) -> io::Result<String> {
+fn read_or_empty(p: &Path) -> io::Result<String> {
     match fs::read_to_string(p) {
         Ok(s) => Ok(s),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::new()),
@@ -103,7 +104,7 @@ fn read_or_empty(p: &PathBuf) -> io::Result<String> {
     }
 }
 
-fn write_with_parents(p: &PathBuf, body: &str) -> io::Result<()> {
+fn write_with_parents(p: &Path, body: &str) -> io::Result<()> {
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -200,5 +201,26 @@ mod tests {
         assert!(script.exists());
         let rc_body = fs::read_to_string(&rc).unwrap();
         assert!(rc_body.contains("source"));
+    }
+
+    #[test]
+    fn powershell_install_force_on_fresh_returns_installed() {
+        let home = TempDir::new().unwrap();
+        let p = fake(&home);
+        let mut cmd = Cli::command();
+        let outcome = install(&mut cmd, Selected::Powershell, &p, true).unwrap();
+        assert!(matches!(outcome, Outcome::Installed { .. }),
+            "force=true on fresh install must return Installed, got: {:?}", outcome);
+    }
+
+    #[test]
+    fn powershell_install_force_after_existing_returns_replaced() {
+        let home = TempDir::new().unwrap();
+        let p = fake(&home);
+        let mut cmd = Cli::command();
+        install(&mut cmd, Selected::Powershell, &p, false).unwrap();
+        let outcome = install(&mut cmd, Selected::Powershell, &p, true).unwrap();
+        assert!(matches!(outcome, Outcome::Replaced { .. }),
+            "force=true after prior install must return Replaced, got: {:?}", outcome);
     }
 }
