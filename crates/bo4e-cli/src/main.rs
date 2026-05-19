@@ -3,10 +3,15 @@ use bo4e_cli::cli::base::Executable;
 use bo4e_cli::console::console::{CONSOLE, Console, Level};
 use bo4e_cli::console::highlighter::Highlighter;
 
+#[cfg(feature = "dynamic-completion")]
+use clap::CommandFactory as _;
 use clap::Parser;
 use clap::error::ErrorKind;
 
 fn main() -> Result<(), String> {
+    #[cfg(feature = "dynamic-completion")]
+    clap_complete::CompleteEnv::with_factory(cli::base::Cli::command).complete();
+
     match cli::base::Cli::try_parse() {
         Ok(args) => {
             if args.show_version {

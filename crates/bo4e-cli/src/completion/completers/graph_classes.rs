@@ -1,6 +1,30 @@
 use clap_complete::CompletionCandidate;
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Scan `std::env::args_os()` for `-i <path>` or `--input <path>` and return
+/// the value if found. Used by the shell-completion hook where no parsed
+/// `ArgMatches` is available.
+pub fn find_input_from_env_args() -> Option<PathBuf> {
+    let mut args = std::env::args_os();
+    while let Some(arg) = args.next() {
+        let s = arg.to_string_lossy();
+        if s == "-i" || s == "--input" {
+            return args.next().map(PathBuf::from);
+        }
+        // Also handle `--input=<path>` form.
+        if let Some(val) = s.strip_prefix("--input=") {
+            return Some(PathBuf::from(val));
+        }
+    }
+    None
+}
+
+/// Entry point for `ArgValueCompleter` on graph args that need the `-i` path.
+pub fn complete(prefix: &OsStr) -> Vec<CompletionCandidate> {
+    let input_path = find_input_from_env_args();
+    complete_with_input(prefix, input_path.as_deref())
+}
 
 /// Pure function: given the prefix and an optional `-i` path, return the
 /// candidates. This is the testable shape.

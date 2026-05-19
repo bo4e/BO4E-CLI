@@ -36,6 +36,12 @@ pub struct VersionsArgs {
     /// itself won't be included in the output. If the reference is neither a tag, branch nor a
     /// commit, all versions prior to the current checkout commit (i.e. "HEAD") will be retrieved.
     #[arg(short = 'r', long = "ref", default_value = "main")]
+    #[cfg_attr(
+        feature = "dynamic-completion",
+        arg(add = clap_complete::engine::ArgValueCompleter::new(
+            crate::completion::completers::git_refs::complete
+        ))
+    )]
     pub reference: String,
 
     /// Exclude release candidates from the output. If set to False, release candidates will be

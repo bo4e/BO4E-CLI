@@ -79,10 +79,22 @@ pub struct OverviewArgs {
     /// A bare name that matches multiple classes (across packages) is
     /// rejected — pass the dotted form to disambiguate.
     #[arg(long = "reachable-from")]
+    #[cfg_attr(
+        feature = "dynamic-completion",
+        arg(add = clap_complete::engine::ArgValueCompleter::new(
+            crate::completion::completers::graph_classes::complete
+        ))
+    )]
     pub reachable_from: Option<String>,
     /// URL template for clickable class nodes. See `--help` for placeholders
     /// and worked examples.
     #[arg(long = "link-template", long_help = LINK_TEMPLATE_LONG_HELP_OVERVIEW)]
+    #[cfg_attr(
+        feature = "dynamic-completion",
+        arg(add = clap_complete::engine::ArgValueCompleter::new(
+            crate::completion::completers::link_template::complete
+        ))
+    )]
     pub link_template: Option<String>,
     /// Graphviz layout engine (only affects `--format dot`). `neato`
     /// (default) is a spring-model force-directed layout that gives the
@@ -231,6 +243,12 @@ pub struct SingleArgs {
     /// Class to render. Use a bare name (`Angebot`) or a dotted module path
     /// (`bo.Angebot`). Pass `all` to render every class in the graph.
     #[arg(long = "class", default_value = "all")]
+    #[cfg_attr(
+        feature = "dynamic-completion",
+        arg(add = clap_complete::engine::ArgValueCompleter::new(
+            crate::completion::completers::graph_classes::complete
+        ))
+    )]
     pub class: String,
     /// Output target. With `--class <NAME>`: path to the single output file.
     /// With `--class all`: directory to populate with one file per class
@@ -268,6 +286,12 @@ pub struct SingleArgs {
     /// URL template for clickable class nodes. See `--help` for placeholders
     /// and worked examples.
     #[arg(long = "link-template", long_help = LINK_TEMPLATE_LONG_HELP_SINGLE)]
+    #[cfg_attr(
+        feature = "dynamic-completion",
+        arg(add = clap_complete::engine::ArgValueCompleter::new(
+            crate::completion::completers::link_template::complete
+        ))
+    )]
     pub link_template: Option<String>,
     /// Don't clear the output directory before writing diagrams. Only
     /// relevant with `--class all`; for single-class targets the output file
