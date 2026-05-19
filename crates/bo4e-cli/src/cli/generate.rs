@@ -1,5 +1,6 @@
 use crate::cli::base::Executable;
 use clap::{Args, Subcommand, ValueHint};
+#[cfg(feature = "rust-crate")]
 use clap_complete::{ArgValueCandidates, CompletionCandidate};
 use std::path::PathBuf;
 

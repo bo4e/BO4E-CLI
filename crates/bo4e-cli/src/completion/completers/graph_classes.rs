@@ -2,9 +2,13 @@ use clap_complete::CompletionCandidate;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-/// Scan `std::env::args_os()` for `-i <path>` or `--input <path>` and return
-/// the value if found. Used by the shell-completion hook where no parsed
-/// `ArgMatches` is available.
+/// Best-effort scan of `std::env::args_os()` looking for `-i <path>`,
+/// `-i=<path>`, `--input <path>`, or `--input=<path>`. Returns the first
+/// match found. NOTE: callers must place `-i` BEFORE the completion-target
+/// arg in their command line; if a user types `--reachable-from Foo -i graph.json`,
+/// the scan reaches `--reachable-from` first and the completer is invoked
+/// without an input path. In practice users type `-i` first because graph
+/// commands require it.
 pub fn find_input_from_env_args() -> Option<PathBuf> {
     let mut args = std::env::args_os();
     while let Some(arg) = args.next() {
@@ -12,8 +16,8 @@ pub fn find_input_from_env_args() -> Option<PathBuf> {
         if s == "-i" || s == "--input" {
             return args.next().map(PathBuf::from);
         }
-        // Also handle `--input=<path>` form.
-        if let Some(val) = s.strip_prefix("--input=") {
+        // Also handle `-i=<path>` and `--input=<path>` forms.
+        if let Some(val) = s.strip_prefix("--input=").or_else(|| s.strip_prefix("-i=")) {
             return Some(PathBuf::from(val));
         }
     }
