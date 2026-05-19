@@ -52,6 +52,7 @@ repo           : a BO4E-python checkout ─▶ list of version tags (CI helper)
 graph extract  : schemas dir            ─▶ graph.json (machine-readable) or .graphml
 graph overview : graph.json             ─▶ big-picture DOT/PlantUML (Louvain clusters by default)
 graph single   : graph.json             ─▶ per-class DOT/PlantUML diagrams (one file or a dir)
+completions    : TAB key (shell hook) → bo4e completion-mode → candidates
 ```
 
 Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a thin shim that parses args, initialises the `CONSOLE` singleton, then calls `Executable::run`.
@@ -131,3 +132,4 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 | New code-generation output type   | `crates/bo4e-codegen/` (see `AGENTS.md` §6 and the codegen STRUCTURE.md). |
 | New schema-model type or visitor  | `crates/bo4e-schemas/src/models/` + `visitable.rs`.                      |
 | New graph emitter / clustering pass | `crates/bo4e-cli/src/graph/` (`emit_*.rs` / `cluster.rs` / `filter.rs`). Wire into `cli/graph.rs`. |
+| New dynamic completer               | `crates/bo4e-cli/src/completion/completers/`. Wire to the arg via `add = ArgValueCompleter::new(...)` in `cli/`. |

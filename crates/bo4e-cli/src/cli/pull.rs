@@ -7,7 +7,7 @@ use crate::models::cli::{Token, get_token_as_string};
 use crate::utils::tokio::get_runtime;
 use bo4e_schemas::io::schemas::write_schemas;
 use bo4e_schemas::models::version::Version;
-use clap::{Args, value_parser};
+use clap::{Args, ValueHint, value_parser};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -19,7 +19,23 @@ use std::str::FromStr;
 pub struct Pull {
     /// The BO4E-version tag to pull the data for. If none is provided, the latest version will
     /// be queried from GitHub. They will be pulled from https://github.com/bo4e/BO4E-Schemas.
-    #[arg(short = 't', long, default_value = "latest")]
+    #[arg(
+        short = 't',
+        long,
+        default_value = "latest",
+        long_help = "The BO4E-version tag to pull the data for. If none is provided, the latest \
+version will be queried from GitHub. They will be pulled from \
+https://github.com/bo4e/BO4E-Schemas.\n\nTab completion fetches tags from GitHub on demand and \
+caches them at $XDG_CACHE_HOME/bo4e/versions.json for 60 s. Past the TTL the cache is \
+revalidated via HTTP conditional GET (If-None-Match/ETag), which does not consume your GitHub \
+API rate-limit budget."
+    )]
+    #[cfg_attr(
+        feature = "dynamic-completion",
+        arg(add = clap_complete::engine::ArgValueCompleter::new(
+            crate::completion::completers::version_tags::complete
+        ))
+    )]
     pub version_tag: String,
 
     /// The directory to save the JSON-schemas to.
@@ -27,7 +43,8 @@ pub struct Pull {
         short = 'o',
         long = "output",
         required = true,
-        value_name = "OUTPUT_DIRECTORY"
+        value_name = "OUTPUT_DIRECTORY",
+        value_hint = ValueHint::DirPath,
     )]
     pub output_dir: PathBuf,
 

@@ -2,6 +2,7 @@
 //! The binary entrypoint remains in `main.rs`.
 
 pub mod cli;
+pub mod completion;
 pub mod console;
 pub mod diff;
 pub mod edit;

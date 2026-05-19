@@ -1,3 +1,4 @@
+use crate::cli::completions::Completions;
 use crate::cli::diff::Diff;
 use crate::cli::edit::Edit;
 use crate::cli::generate::Generate;
@@ -24,6 +25,7 @@ const HELP_STYLES: Styles = Styles::styled()
 
 #[derive(Parser)]
 #[command(
+    name = "bo4e",
     author,
     about = "BO4E - Business Objects for Energy",
     long_about = "BO4E - Business Objects for Energy\n\n\
@@ -70,6 +72,7 @@ pub enum SubcommandsLevel1 {
     Repo(Repo),
     Generate(Generate),
     Graph(Graph),
+    Completions(Completions),
 }
 
 impl Executable for SubcommandsLevel1 {
@@ -81,6 +84,7 @@ impl Executable for SubcommandsLevel1 {
             SubcommandsLevel1::Repo(repo) => repo.run(),
             SubcommandsLevel1::Generate(generate) => generate.run(),
             SubcommandsLevel1::Graph(graph) => graph.run(),
+            SubcommandsLevel1::Completions(c) => c.run(),
         }
     }
 }
@@ -127,7 +131,15 @@ mod tests {
     #[test]
     fn each_subcommand_help_contains_ansi() {
         let mut cmd = Cli::command();
-        for name in ["pull", "edit", "diff", "repo", "generate", "graph"] {
+        for name in [
+            "pull",
+            "edit",
+            "diff",
+            "repo",
+            "generate",
+            "graph",
+            "completions",
+        ] {
             let sub = cmd
                 .find_subcommand_mut(name)
                 .unwrap_or_else(|| panic!("subcommand {} missing", name));
