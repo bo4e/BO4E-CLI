@@ -1,5 +1,6 @@
 // crates/bo4e-cli/src/completion/completers/cache.rs
 use chrono::{DateTime, Duration, Utc};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
@@ -39,9 +40,14 @@ pub struct Cache<T> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Serialize + for<'de> Deserialize<'de> + Clone> Cache<T> {
+impl<T: Serialize + DeserializeOwned + Clone> Cache<T> {
     pub fn new(path: PathBuf, ttl: Duration, hard_expiry: Duration) -> Self {
-        Self { path, ttl, hard_expiry, _phantom: std::marker::PhantomData }
+        Self {
+            path,
+            ttl,
+            hard_expiry,
+            _phantom: std::marker::PhantomData,
+        }
     }
 
     /// Read the cached entry from disk, or None on any error.
@@ -75,7 +81,11 @@ impl<T: Serialize + for<'de> Deserialize<'de> + Clone> Cache<T> {
         let etag = cached.as_ref().and_then(|e| e.etag.clone());
         match fetch(etag.as_deref()) {
             Ok(FetchResult::Replaced(body, new_etag)) => {
-                let entry = CacheEntry { etag: new_etag, fetched_at: now, body: body.clone() };
+                let entry = CacheEntry {
+                    etag: new_etag,
+                    fetched_at: now,
+                    body: body.clone(),
+                };
                 let _ = self.write(&entry);
                 Some(body)
             }
@@ -128,7 +138,9 @@ mod tests {
             body: vec!["v1".into()],
         })
         .unwrap();
-        let v = c.get_or_fetch(now, |_etag| panic!("should not fetch")).unwrap();
+        let v = c
+            .get_or_fetch(now, |_etag| panic!("should not fetch"))
+            .unwrap();
         assert_eq!(v, vec!["v1".to_string()]);
     }
 
@@ -150,6 +162,11 @@ mod tests {
             })
             .unwrap();
         assert_eq!(v, vec!["v1".to_string()]);
+        let entry = c.read().unwrap();
+        assert_eq!(
+            entry.fetched_at, now,
+            "304 path should refresh fetched_at to now"
+        );
     }
 
     #[test]
