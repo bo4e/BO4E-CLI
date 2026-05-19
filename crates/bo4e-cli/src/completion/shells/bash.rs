@@ -1,9 +1,12 @@
 use clap::Command;
+use clap_complete::env::Bash;
+use clap_complete::env::EnvCompleter as _;
 use std::path::Path;
 
-pub fn script(cmd: &mut Command) -> String {
+pub fn script(_cmd: &mut Command) -> String {
     let mut buf = Vec::new();
-    clap_complete::generate(clap_complete::Shell::Bash, cmd, "bo4e", &mut buf);
+    Bash.write_registration("COMPLETE", "bo4e", "bo4e", "bo4e", &mut buf)
+        .expect("write_registration");
     String::from_utf8(buf).expect("clap_complete output is valid UTF-8")
 }
 
@@ -17,12 +20,22 @@ mod tests {
     use clap::CommandFactory;
 
     #[test]
-    fn script_includes_completion_function() {
+    fn script_emits_complete_command_registering_bo4e() {
         let mut cmd = crate::cli::base::Cli::command();
         let s = script(&mut cmd);
         assert!(
-            s.contains("_bo4e()"),
-            "expected bash completion function: {}",
+            s.contains("complete"),
+            "expected `complete` invocation: {}",
+            &s[..200.min(s.len())]
+        );
+        assert!(
+            s.contains("bo4e"),
+            "expected `bo4e` registration: {}",
+            &s[..200.min(s.len())]
+        );
+        assert!(
+            s.contains("COMPLETE"),
+            "expected COMPLETE env-var wiring: {}",
             &s[..200.min(s.len())]
         );
     }

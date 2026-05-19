@@ -1,9 +1,13 @@
 use clap::Command;
+use clap_complete::env::Elvish;
+use clap_complete::env::EnvCompleter as _;
 use std::path::Path;
 
-pub fn script(cmd: &mut Command) -> String {
+pub fn script(_cmd: &mut Command) -> String {
     let mut buf = Vec::new();
-    clap_complete::generate(clap_complete::Shell::Elvish, cmd, "bo4e", &mut buf);
+    Elvish
+        .write_registration("COMPLETE", "bo4e", "bo4e", "bo4e", &mut buf)
+        .expect("write_registration");
     String::from_utf8(buf).expect("clap_complete output is valid UTF-8")
 }
 
@@ -21,10 +25,15 @@ mod tests {
     use clap::CommandFactory;
 
     #[test]
-    fn script_contains_edit_completion() {
+    fn script_emits_edit_completion() {
         let mut cmd = crate::cli::base::Cli::command();
         let s = script(&mut cmd);
-        assert!(s.contains("edit:completion:arg-completer"));
+        assert!(
+            s.contains("edit:completion") || s.contains("set @"),
+            "expected elvish completion hook: {}",
+            &s[..200.min(s.len())]
+        );
+        assert!(s.contains("bo4e"));
     }
 
     #[test]

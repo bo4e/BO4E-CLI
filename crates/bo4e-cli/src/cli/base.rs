@@ -25,6 +25,7 @@ const HELP_STYLES: Styles = Styles::styled()
 
 #[derive(Parser)]
 #[command(
+    name = "bo4e",
     author,
     about = "BO4E - Business Objects for Energy",
     long_about = "BO4E - Business Objects for Energy\n\n\

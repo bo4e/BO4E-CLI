@@ -45,6 +45,11 @@ impl Executable for Completions {
                 let outcome = install::install(&mut cmd, sh, &p, *force)
                     .map_err(|e| format!("install failed: {e}"))?;
                 report_install_outcome(outcome);
+                if sh == shells::Selected::Nushell {
+                    cprint_normal!(
+                        "Note: dynamic completers (live version tags, class names, etc.) are not available on nushell — only static completion (subcommands, flags, enum values) will be provided."
+                    );
+                }
                 Ok(())
             }
             CompletionsAction::Uninstall { shell } => {
