@@ -152,6 +152,10 @@ mod tests {
         fn home(&self) -> PathBuf {
             self.home.clone()
         }
+        fn powershell_profile(&self) -> PathBuf {
+            self.home()
+                .join("Documents/PowerShell/Microsoft.PowerShell_profile.ps1")
+        }
     }
 
     fn fake(home: &TempDir) -> FakePaths {

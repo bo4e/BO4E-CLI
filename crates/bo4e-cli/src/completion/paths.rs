@@ -6,6 +6,14 @@ pub trait Paths {
     fn config(&self) -> PathBuf {
         self.home().join(".config")
     }
+    /// Where the PowerShell profile lives. Default impl shells out to
+    /// `pwsh -NoProfile -Command '$PROFILE'`, then falls back to PS7's
+    /// hard-coded default. Tests can override this to avoid the subprocess
+    /// (which on macOS/Windows runners returns the real user's profile,
+    /// outside any test sandbox).
+    fn powershell_profile(&self) -> PathBuf {
+        detect_powershell_profile(self)
+    }
 }
 
 pub struct RealPaths;
@@ -45,7 +53,7 @@ pub fn paths_for(shell: Shell, p: &dyn Paths) -> ShellPaths {
         },
         Shell::PowerShell => ShellPaths {
             script: None,
-            rc: Some(detect_powershell_profile(p)),
+            rc: Some(p.powershell_profile()),
         },
         Shell::Elvish => ShellPaths {
             script: Some(p.config().join("elvish/lib/bo4e.elv")),
@@ -57,7 +65,7 @@ pub fn paths_for(shell: Shell, p: &dyn Paths) -> ShellPaths {
     }
 }
 
-fn detect_powershell_profile(p: &dyn Paths) -> PathBuf {
+fn detect_powershell_profile(p: &(impl Paths + ?Sized)) -> PathBuf {
     use std::process::Command;
     if let Ok(out) = Command::new("pwsh")
         .args(["-NoProfile", "-Command", "$PROFILE"])
@@ -94,6 +102,12 @@ mod tests {
     impl Paths for FakePaths {
         fn home(&self) -> PathBuf {
             self.home.clone()
+        }
+        fn powershell_profile(&self) -> PathBuf {
+            // Force deterministic, in-tempdir path. Matches the fallback the
+            // production code uses when pwsh/powershell aren't available.
+            self.home()
+                .join("Documents/PowerShell/Microsoft.PowerShell_profile.ps1")
         }
     }
 
