@@ -7,7 +7,7 @@ use crate::models::cli::{Token, get_token_as_string};
 use crate::utils::tokio::get_runtime;
 use bo4e_schemas::io::schemas::write_schemas;
 use bo4e_schemas::models::version::Version;
-use clap::{Args, value_parser};
+use clap::{Args, ValueHint, value_parser};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -27,7 +27,8 @@ pub struct Pull {
         short = 'o',
         long = "output",
         required = true,
-        value_name = "OUTPUT_DIRECTORY"
+        value_name = "OUTPUT_DIRECTORY",
+        value_hint = ValueHint::DirPath,
     )]
     pub output_dir: PathBuf,
 

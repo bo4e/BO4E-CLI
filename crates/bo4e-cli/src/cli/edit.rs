@@ -8,7 +8,7 @@ use crate::io::config::{get_additional_schemas, load_config};
 use crate::{cprint_normal, cprint_verbose, cwarn};
 use bo4e_schemas::io::schemas::{read_schemas, write_schemas};
 use bo4e_schemas::models::json_schema::{PrimitiveValue, SchemaRootType};
-use clap::Args;
+use clap::{Args, ValueHint};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -46,7 +46,8 @@ pub struct Edit {
         short = 'i',
         long = "input",
         required = true,
-        value_name = "INPUT_DIRECTORY"
+        value_name = "INPUT_DIRECTORY",
+        value_hint = ValueHint::DirPath,
     )]
     pub input_dir: PathBuf,
 
@@ -55,12 +56,13 @@ pub struct Edit {
         short = 'o',
         long = "output",
         required = true,
-        value_name = "OUTPUT_DIRECTORY"
+        value_name = "OUTPUT_DIRECTORY",
+        value_hint = ValueHint::DirPath,
     )]
     pub output_dir: PathBuf,
 
-    /// The configuration file to use for editing the JSON-schemas.
-    #[arg(short = 'c', long = "config", value_name = "CONFIG_FILE")]
+    /// The configuration file to use for editing the JSON-schemas. Configuration file in JSON format.
+    #[arg(short = 'c', long = "config", value_name = "CONFIG_FILE", value_hint = ValueHint::FilePath)]
     pub config_file: Option<PathBuf>,
 
     /// Don't set the default value of the `_version` field of all schemas to the BO4E version.

@@ -8,7 +8,7 @@ use crate::io::changes::{read_changes_from_diff_files, write_changes};
 use crate::io::matrix::{write_compatibility_matrix_csv, write_compatibility_matrix_json};
 use crate::{cerror, cprint_normal, cprint_verbose};
 use bo4e_schemas::io::schemas::read_schemas;
-use clap::{Args, Subcommand, ValueEnum};
+use clap::{Args, Subcommand, ValueEnum, ValueHint};
 use std::path::PathBuf;
 
 /// Command group for comparing JSON-schemas of different BO4E versions.
@@ -33,10 +33,12 @@ pub enum DiffSubcommand {
 /// about the compared versions.
 #[derive(Args)]
 pub struct DiffSchemasArgs {
+    #[arg(value_hint = ValueHint::DirPath)]
     pub input_dir_base: PathBuf,
+    #[arg(value_hint = ValueHint::DirPath)]
     pub input_dir_comp: PathBuf,
     /// The JSON-file to save the differences to.
-    #[arg(short = 'o', long = "output", required = true)]
+    #[arg(short = 'o', long = "output", required = true, value_hint = ValueHint::FilePath)]
     pub output_file: PathBuf,
 }
 
@@ -58,10 +60,10 @@ pub struct DiffMatrixArgs {
     /// |      file 3      | -> |      file 1      | -> |      file 2      |
     ///
     /// | v1.0.0 -> v1.0.2 |    | v1.0.2 -> v1.3.0 |    | v1.3.0 -> v2.0.0 |
-    #[arg(required = true)]
+    #[arg(required = true, value_hint = ValueHint::FilePath)]
     pub input_diff_files: Vec<PathBuf>,
     /// The file to save the difference matrix to.
-    #[arg(short = 'o', long = "output", required = true)]
+    #[arg(short = 'o', long = "output", required = true, value_hint = ValueHint::FilePath)]
     pub output_file: PathBuf,
     /// The type of the output file.
     #[arg(short = 't', long = "output-type", default_value = "csv")]
@@ -85,6 +87,7 @@ pub enum MatrixOutputType {
 /// to the corresponding versions inside the diff file.
 #[derive(Args)]
 pub struct VersionBumpArgs {
+    #[arg(value_hint = ValueHint::FilePath)]
     pub diff_file: PathBuf,
     /// Reject major version bumps.
     #[arg(long = "no-major", action = clap::ArgAction::SetFalse, default_value_t = true)]

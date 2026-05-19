@@ -1,5 +1,6 @@
 use crate::cli::base::Executable;
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueHint};
+use clap_complete::{ArgValueCandidates, CompletionCandidate};
 use std::path::PathBuf;
 
 /// Generate BO4E models from the JSON-schemas in the input directory and save them in the
@@ -18,11 +19,11 @@ pub struct Generate {
 #[derive(Args)]
 pub struct GenerateCommon {
     /// The directory to read the JSON-schemas from.
-    #[arg(short = 'i', long = "input")]
+    #[arg(short = 'i', long = "input", value_hint = ValueHint::DirPath)]
     pub input: PathBuf,
 
     /// The directory to save the generated code to.
-    #[arg(short = 'o', long = "output")]
+    #[arg(short = 'o', long = "output", value_hint = ValueHint::DirPath)]
     pub output: PathBuf,
 
     /// Don't clear the output directory before saving the generated code.
@@ -30,7 +31,7 @@ pub struct GenerateCommon {
     pub clear_output: bool,
 
     /// Override embedded templates with a directory of Jinja templates.
-    #[arg(long = "templates-dir")]
+    #[arg(long = "templates-dir", value_hint = ValueHint::DirPath)]
     pub templates_dir: Option<PathBuf>,
 }
 
@@ -54,7 +55,19 @@ pub enum GenerateFlavour {
 #[derive(Args)]
 pub struct RustCrateArgs {
     /// Cargo package name written into the generated Cargo.toml.
-    #[arg(long = "crate-name", default_value = "bo4e", value_parser = parse_crate_name)]
+    #[arg(
+        long = "crate-name",
+        default_value = "bo4e",
+        value_parser = parse_crate_name,
+        add = ArgValueCandidates::new(|| {
+            vec![
+                CompletionCandidate::new("bo4e").help(Some("default".into())),
+                CompletionCandidate::new("bo4e-local"),
+                CompletionCandidate::new("bo4e-models"),
+                CompletionCandidate::new("bo4e-edited"),
+            ]
+        }),
+    )]
     pub crate_name: String,
 }
 

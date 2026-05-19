@@ -2,7 +2,7 @@ use crate::cli::base::Executable;
 use crate::graph::extract::extract;
 use crate::io::cleanse::clear_dir_if_needed;
 use crate::io::graph::{write_graph_graphml, write_graph_json};
-use clap::{Args, Subcommand, ValueEnum};
+use clap::{Args, Subcommand, ValueEnum, ValueHint};
 use std::path::PathBuf;
 
 /// Generate diagrams and machine-readable graphs from BO4E schemas.
@@ -23,12 +23,12 @@ pub enum GraphSubcommand {
 #[derive(Args)]
 pub struct ExtractArgs {
     /// Directory of BO4E JSON schemas (typically the output of `bo4e pull`).
-    #[arg(short = 'i', long = "input", required = true)]
+    #[arg(short = 'i', long = "input", required = true, value_hint = ValueHint::DirPath)]
     pub input_dir: PathBuf,
     /// Output file path. The suffix is not enforced — use `.json` for the
     /// internal GraphIR (consumed by `overview` / `single`) or `.graphml`
     /// for external tools such as Gephi or yEd.
-    #[arg(short = 'o', long = "output", required = true)]
+    #[arg(short = 'o', long = "output", required = true, value_hint = ValueHint::FilePath)]
     pub output_file: PathBuf,
     /// Output format.
     #[arg(long = "format", default_value = "json")]
@@ -45,10 +45,10 @@ pub enum GraphFormat {
 #[derive(Args)]
 pub struct OverviewArgs {
     /// GraphIR JSON file produced by `bo4e graph extract`.
-    #[arg(short = 'i', long = "input", required = true)]
+    #[arg(short = 'i', long = "input", required = true, value_hint = ValueHint::FilePath)]
     pub input_graph: PathBuf,
     /// Output file for the rendered diagram (DOT or PlantUML source).
-    #[arg(short = 'o', long = "output", required = true)]
+    #[arg(short = 'o', long = "output", required = true, value_hint = ValueHint::FilePath)]
     pub output_file: PathBuf,
     /// Rendering language: `dot` (Graphviz) or `plantuml`.
     #[arg(long = "format", default_value = "dot")]
@@ -226,7 +226,7 @@ impl DotOverlap {
 #[derive(Args)]
 pub struct SingleArgs {
     /// GraphIR JSON file produced by `bo4e graph extract`.
-    #[arg(short = 'i', long = "input", required = true)]
+    #[arg(short = 'i', long = "input", required = true, value_hint = ValueHint::FilePath)]
     pub input_graph: PathBuf,
     /// Class to render. Use a bare name (`Angebot`) or a dotted module path
     /// (`bo.Angebot`). Pass `all` to render every class in the graph.
@@ -235,7 +235,7 @@ pub struct SingleArgs {
     /// Output target. With `--class <NAME>`: path to the single output file.
     /// With `--class all`: directory to populate with one file per class
     /// (mirroring the BO4E package layout: `bo/`, `com/`, `enum/`, …).
-    #[arg(short = 'o', long = "output", required = true)]
+    #[arg(short = 'o', long = "output", required = true, value_hint = ValueHint::AnyPath)]
     pub output_target: PathBuf,
     /// Rendering language: `dot` (Graphviz) or `plantuml`.
     #[arg(long = "format", default_value = "dot")]
