@@ -52,6 +52,7 @@ bo4e-codegen = { path = "../bo4e-codegen", default-features = false }
 petgraph = "0.6"
 globset = "0.4"
 rand = "0.8"
+thiserror = "2"
 
 [features]
 default = [
