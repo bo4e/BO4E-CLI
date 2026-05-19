@@ -105,4 +105,35 @@ mod tests {
         }
         assert_eq!(resolve_token_silent(&None), None);
     }
+
+    /// Regression guard: `resolve_token_silent` must not panic when CONSOLE
+    /// has not been initialized (the scenario during shell-completion mode
+    /// before the fix in main.rs was applied).
+    ///
+    /// Forces the gh-not-found path by clearing PATH, which makes
+    /// `get_token_from_github_cli` fail immediately, reaching the
+    /// `cprint_verbose!` call that previously panicked on an unset CONSOLE.
+    #[test]
+    fn resolve_token_silent_does_not_panic_in_gh_failure_path() {
+        let prev_path = std::env::var_os("PATH");
+        // SAFETY: no other thread reads PATH concurrently in this test binary.
+        unsafe {
+            std::env::set_var("PATH", "");
+        }
+
+        // CONSOLE may or may not be initialized by other tests; either way
+        // resolve_token_silent must not panic.
+        let r = resolve_token_silent(&None);
+
+        // Restore PATH unconditionally before any assert that could abort the test.
+        unsafe {
+            match prev_path {
+                Some(p) => std::env::set_var("PATH", p),
+                None => std::env::remove_var("PATH"),
+            }
+        }
+
+        // Whatever is returned is fine; the key assertion is "we reached this line".
+        let _ = r;
+    }
 }

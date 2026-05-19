@@ -10,7 +10,17 @@ use clap::error::ErrorKind;
 
 fn main() -> Result<(), String> {
     #[cfg(feature = "dynamic-completion")]
-    clap_complete::CompleteEnv::with_factory(cli::base::Cli::command).complete();
+    {
+        // Completion-mode shell hooks invoke us with the COMPLETE env var
+        // set. Initialize CONSOLE silently so any cprint_* calls during
+        // completion don't panic on an uninitialized CONSOLE. (Completion
+        // output goes to stdout via clap_complete; cprint_* output is
+        // suppressed at Quiet level.)
+        if std::env::var_os("COMPLETE").is_some() {
+            let _ = CONSOLE.set(Console::new(Level::Quiet));
+        }
+        clap_complete::CompleteEnv::with_factory(cli::base::Cli::command).complete();
+    }
 
     match cli::base::Cli::try_parse() {
         Ok(args) => {
