@@ -17,18 +17,14 @@ pub fn splice(original: &str, body: &str, comment_leader: &str) -> String {
         out.push_str(body.trim_end());
         out.push('\n');
         out.push_str(&close);
+        out.push('\n');
         out.push_str(&original[block.end..]);
         out
+    } else if original.is_empty() {
+        format!("{}\n{}\n{}\n", &open, body.trim_end(), &close)
     } else {
-        let needs_nl = !original.is_empty() && !original.ends_with('\n');
-        format!(
-            "{}{}\n{}\n{}\n{}\n",
-            original,
-            if needs_nl { "\n" } else { "" },
-            &open,
-            body.trim_end(),
-            &close,
-        )
+        let prefix = if original.ends_with('\n') { "" } else { "\n" };
+        format!("{}{}{}\n{}\n{}\n", original, prefix, &open, body.trim_end(), &close)
     }
 }
 
@@ -118,5 +114,20 @@ mod tests {
         let s = "# >>> bo4e completion >>>\nx\n# <<< bo4e completion <<<\n";
         assert!(is_installed(s, "#"));
         assert!(!is_installed("nothing here", "#"));
+    }
+
+    #[test]
+    fn splice_is_idempotent_in_replace_branch() {
+        let initial = "before\n# >>> bo4e completion >>>\nOLD\n# <<< bo4e completion <<<\nafter\n";
+        let once = splice(initial, "NEW", "#");
+        let twice = splice(&once, "NEW", "#");
+        assert_eq!(once, twice, "splice must be idempotent when args are unchanged");
+    }
+
+    #[test]
+    fn splice_into_empty_does_not_leak_leading_newline() {
+        let out = splice("", "body", "#");
+        assert!(!out.starts_with('\n'), "no spurious leading newline for empty input, got: {:?}", out);
+        assert!(out.contains("# >>> bo4e completion >>>"));
     }
 }
