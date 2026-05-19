@@ -24,7 +24,14 @@ pub fn splice(original: &str, body: &str, comment_leader: &str) -> String {
         format!("{}\n{}\n{}\n", &open, body.trim_end(), &close)
     } else {
         let prefix = if original.ends_with('\n') { "" } else { "\n" };
-        format!("{}{}{}\n{}\n{}\n", original, prefix, &open, body.trim_end(), &close)
+        format!(
+            "{}{}{}\n{}\n{}\n",
+            original,
+            prefix,
+            &open,
+            body.trim_end(),
+            &close
+        )
     }
 }
 
@@ -52,7 +59,10 @@ pub fn is_installed(original: &str, comment_leader: &str) -> bool {
     find_block(original, &open, &close).is_some()
 }
 
-struct Block { start: usize, end: usize }
+struct Block {
+    start: usize,
+    end: usize,
+}
 
 fn find_block(s: &str, open: &str, close: &str) -> Option<Block> {
     let start = s.find(open)?;
@@ -62,7 +72,10 @@ fn find_block(s: &str, open: &str, close: &str) -> Option<Block> {
     let end = close_pos + close.len();
     let line_start = s[..start].rfind('\n').map(|p| p + 1).unwrap_or(0);
     let line_end = s[end..].find('\n').map(|p| end + p + 1).unwrap_or(s.len());
-    Some(Block { start: line_start, end: line_end })
+    Some(Block {
+        start: line_start,
+        end: line_end,
+    })
 }
 
 #[cfg(test)]
@@ -121,13 +134,20 @@ mod tests {
         let initial = "before\n# >>> bo4e completion >>>\nOLD\n# <<< bo4e completion <<<\nafter\n";
         let once = splice(initial, "NEW", "#");
         let twice = splice(&once, "NEW", "#");
-        assert_eq!(once, twice, "splice must be idempotent when args are unchanged");
+        assert_eq!(
+            once, twice,
+            "splice must be idempotent when args are unchanged"
+        );
     }
 
     #[test]
     fn splice_into_empty_does_not_leak_leading_newline() {
         let out = splice("", "body", "#");
-        assert!(!out.starts_with('\n'), "no spurious leading newline for empty input, got: {:?}", out);
+        assert!(
+            !out.starts_with('\n'),
+            "no spurious leading newline for empty input, got: {:?}",
+            out
+        );
         assert!(out.contains("# >>> bo4e completion >>>"));
     }
 }

@@ -28,7 +28,7 @@ version will be queried from GitHub. They will be pulled from \
 https://github.com/bo4e/BO4E-Schemas.\n\nTab completion fetches tags from GitHub on demand and \
 caches them at $XDG_CACHE_HOME/bo4e/versions.json for 60 s. Past the TTL the cache is \
 revalidated via HTTP conditional GET (If-None-Match/ETag), which does not consume your GitHub \
-API rate-limit budget.",
+API rate-limit budget."
     )]
     #[cfg_attr(
         feature = "dynamic-completion",

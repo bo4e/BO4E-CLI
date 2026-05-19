@@ -84,7 +84,9 @@ mod tests {
 
     #[test]
     fn resolve_token_silent_uses_arg_when_present() {
-        let arg = Token { token: "ghp_aaa".to_string() };
+        let arg = Token {
+            token: "ghp_aaa".to_string(),
+        };
         assert_eq!(
             resolve_token_silent(&Some(arg)),
             Some("ghp_aaa".to_string()),

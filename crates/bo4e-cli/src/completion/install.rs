@@ -10,9 +10,18 @@ use std::path::{Path, PathBuf};
 /// Outcome reported back to the caller for printing.
 #[derive(Debug)]
 pub enum Outcome {
-    Installed { script: Option<PathBuf>, rc: Option<PathBuf> },
-    AlreadyInstalled { script: Option<PathBuf>, rc: Option<PathBuf> },
-    Replaced { script: Option<PathBuf>, rc: Option<PathBuf> },
+    Installed {
+        script: Option<PathBuf>,
+        rc: Option<PathBuf>,
+    },
+    AlreadyInstalled {
+        script: Option<PathBuf>,
+        rc: Option<PathBuf>,
+    },
+    Replaced {
+        script: Option<PathBuf>,
+        rc: Option<PathBuf>,
+    },
 }
 
 pub fn install(
@@ -30,15 +39,24 @@ pub fn install(
         let original = read_or_empty(rc)?;
         let rc_present = marker::is_installed(&original, shell.comment_leader());
         if !force && rc_present {
-            return Ok(Outcome::AlreadyInstalled { script: None, rc: Some(rc.clone()) });
+            return Ok(Outcome::AlreadyInstalled {
+                script: None,
+                rc: Some(rc.clone()),
+            });
         }
         let body = shell.script(cmd);
         let new = marker::splice(&original, &body, shell.comment_leader());
         write_with_parents(rc, &new)?;
         return Ok(if force && rc_present {
-            Outcome::Replaced { script: None, rc: Some(rc.clone()) }
+            Outcome::Replaced {
+                script: None,
+                rc: Some(rc.clone()),
+            }
         } else {
-            Outcome::Installed { script: None, rc: Some(rc.clone()) }
+            Outcome::Installed {
+                script: None,
+                rc: Some(rc.clone()),
+            }
         });
     }
 
@@ -71,13 +89,22 @@ pub fn install(
     }
 
     Ok(if force && (script_existed || rc_present) {
-        Outcome::Replaced { script: Some(script_path.clone()), rc: sp.rc.clone() }
+        Outcome::Replaced {
+            script: Some(script_path.clone()),
+            rc: sp.rc.clone(),
+        }
     } else {
-        Outcome::Installed { script: Some(script_path.clone()), rc: sp.rc.clone() }
+        Outcome::Installed {
+            script: Some(script_path.clone()),
+            rc: sp.rc.clone(),
+        }
     })
 }
 
-pub(crate) fn paths_for_selected(s: Selected, p: &dyn Paths) -> crate::completion::paths::ShellPaths {
+pub(crate) fn paths_for_selected(
+    s: Selected,
+    p: &dyn Paths,
+) -> crate::completion::paths::ShellPaths {
     let cs = match s {
         Selected::Bash => clap_complete::Shell::Bash,
         Selected::Zsh => clap_complete::Shell::Zsh,
@@ -118,13 +145,19 @@ mod tests {
     use clap::CommandFactory;
     use tempfile::TempDir;
 
-    struct FakePaths { home: PathBuf }
+    struct FakePaths {
+        home: PathBuf,
+    }
     impl Paths for FakePaths {
-        fn home(&self) -> PathBuf { self.home.clone() }
+        fn home(&self) -> PathBuf {
+            self.home.clone()
+        }
     }
 
     fn fake(home: &TempDir) -> FakePaths {
-        FakePaths { home: home.path().to_path_buf() }
+        FakePaths {
+            home: home.path().to_path_buf(),
+        }
     }
 
     #[test]
@@ -209,8 +242,11 @@ mod tests {
         let p = fake(&home);
         let mut cmd = Cli::command();
         let outcome = install(&mut cmd, Selected::Powershell, &p, true).unwrap();
-        assert!(matches!(outcome, Outcome::Installed { .. }),
-            "force=true on fresh install must return Installed, got: {:?}", outcome);
+        assert!(
+            matches!(outcome, Outcome::Installed { .. }),
+            "force=true on fresh install must return Installed, got: {:?}",
+            outcome
+        );
     }
 
     #[test]
@@ -220,7 +256,10 @@ mod tests {
         let mut cmd = Cli::command();
         install(&mut cmd, Selected::Powershell, &p, false).unwrap();
         let outcome = install(&mut cmd, Selected::Powershell, &p, true).unwrap();
-        assert!(matches!(outcome, Outcome::Replaced { .. }),
-            "force=true after prior install must return Replaced, got: {:?}", outcome);
+        assert!(
+            matches!(outcome, Outcome::Replaced { .. }),
+            "force=true after prior install must return Replaced, got: {:?}",
+            outcome
+        );
     }
 }

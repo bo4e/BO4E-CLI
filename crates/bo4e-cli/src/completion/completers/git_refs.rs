@@ -5,7 +5,12 @@ pub fn complete(prefix: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
     let prefix = prefix.to_string_lossy().to_string();
     let mut candidates: Vec<String> = vec!["HEAD".to_string()];
     if let Ok(out) = Command::new("git")
-        .args(["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/tags"])
+        .args([
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/heads",
+            "refs/tags",
+        ])
         .output()
         && out.status.success()
     {
@@ -29,7 +34,9 @@ mod tests {
     use tempfile::TempDir;
 
     fn names(cs: Vec<CompletionCandidate>) -> Vec<String> {
-        cs.iter().map(|c| c.get_value().to_string_lossy().to_string()).collect()
+        cs.iter()
+            .map(|c| c.get_value().to_string_lossy().to_string())
+            .collect()
     }
 
     /// Run a closure with cwd set to `dir`, restoring the original cwd after.
@@ -50,7 +57,10 @@ mod tests {
     #[test]
     fn returns_head_at_minimum_when_in_git_repo() {
         let td = TempDir::new().unwrap();
-        let _ = Command::new("git").arg("init").current_dir(td.path()).output();
+        let _ = Command::new("git")
+            .arg("init")
+            .current_dir(td.path())
+            .output();
         with_cwd(td.path(), || {
             let names = names(complete(&OsString::from("")));
             assert!(names.contains(&"HEAD".to_string()));
@@ -60,7 +70,10 @@ mod tests {
     #[test]
     fn prefix_filter_works() {
         let td = TempDir::new().unwrap();
-        let _ = Command::new("git").arg("init").current_dir(td.path()).output();
+        let _ = Command::new("git")
+            .arg("init")
+            .current_dir(td.path())
+            .output();
         with_cwd(td.path(), || {
             let names = names(complete(&OsString::from("HEA")));
             assert!(names.iter().all(|n| n.starts_with("HEA")));

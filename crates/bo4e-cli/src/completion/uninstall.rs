@@ -9,9 +9,15 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub enum Outcome {
     /// Both script + rc-block were absent.
-    NothingToRemove { script: Option<PathBuf>, rc: Option<PathBuf> },
+    NothingToRemove {
+        script: Option<PathBuf>,
+        rc: Option<PathBuf>,
+    },
     /// Removed at least one of script / rc-block; lists what was removed.
-    Removed { script_removed: Option<PathBuf>, rc_changed: Option<PathBuf> },
+    Removed {
+        script_removed: Option<PathBuf>,
+        rc_changed: Option<PathBuf>,
+    },
 }
 
 pub fn uninstall(shell: Selected, paths: &dyn Paths) -> io::Result<Outcome> {
@@ -37,9 +43,15 @@ pub fn uninstall(shell: Selected, paths: &dyn Paths) -> io::Result<Outcome> {
     }
 
     if script_removed.is_none() && rc_changed.is_none() {
-        Ok(Outcome::NothingToRemove { script: sp.script, rc: sp.rc })
+        Ok(Outcome::NothingToRemove {
+            script: sp.script,
+            rc: sp.rc,
+        })
     } else {
-        Ok(Outcome::Removed { script_removed, rc_changed })
+        Ok(Outcome::Removed {
+            script_removed,
+            rc_changed,
+        })
     }
 }
 
@@ -51,15 +63,21 @@ mod tests {
     use clap::CommandFactory;
     use tempfile::TempDir;
 
-    struct FakePaths { home: PathBuf }
+    struct FakePaths {
+        home: PathBuf,
+    }
     impl Paths for FakePaths {
-        fn home(&self) -> PathBuf { self.home.clone() }
+        fn home(&self) -> PathBuf {
+            self.home.clone()
+        }
     }
 
     #[test]
     fn uninstall_removes_script_and_rc_block() {
         let home = TempDir::new().unwrap();
-        let p = FakePaths { home: home.path().to_path_buf() };
+        let p = FakePaths {
+            home: home.path().to_path_buf(),
+        };
         let mut cmd = Cli::command();
         install(&mut cmd, Selected::Bash, &p, false).unwrap();
         let outcome = uninstall(Selected::Bash, &p).unwrap();
@@ -72,7 +90,9 @@ mod tests {
     #[test]
     fn uninstall_reports_nothing_when_absent() {
         let home = TempDir::new().unwrap();
-        let p = FakePaths { home: home.path().to_path_buf() };
+        let p = FakePaths {
+            home: home.path().to_path_buf(),
+        };
         let outcome = uninstall(Selected::Bash, &p).unwrap();
         assert!(matches!(outcome, Outcome::NothingToRemove { .. }));
     }

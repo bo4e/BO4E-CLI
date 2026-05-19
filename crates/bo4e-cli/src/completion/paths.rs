@@ -59,7 +59,9 @@ pub fn paths_for(shell: Shell, p: &dyn Paths) -> ShellPaths {
 
 fn detect_powershell_profile(p: &dyn Paths) -> PathBuf {
     use std::process::Command;
-    if let Ok(out) = Command::new("pwsh").args(["-NoProfile", "-Command", "$PROFILE"]).output()
+    if let Ok(out) = Command::new("pwsh")
+        .args(["-NoProfile", "-Command", "$PROFILE"])
+        .output()
         && out.status.success()
     {
         let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -67,7 +69,9 @@ fn detect_powershell_profile(p: &dyn Paths) -> PathBuf {
             return PathBuf::from(path);
         }
     }
-    if let Ok(out) = Command::new("powershell").args(["-NoProfile", "-Command", "$PROFILE"]).output()
+    if let Ok(out) = Command::new("powershell")
+        .args(["-NoProfile", "-Command", "$PROFILE"])
+        .output()
         && out.status.success()
     {
         let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -76,7 +80,8 @@ fn detect_powershell_profile(p: &dyn Paths) -> PathBuf {
         }
     }
     // Fallback: PS7's default profile location
-    p.home().join("Documents/PowerShell/Microsoft.PowerShell_profile.ps1")
+    p.home()
+        .join("Documents/PowerShell/Microsoft.PowerShell_profile.ps1")
 }
 
 #[cfg(test)]
@@ -94,15 +99,25 @@ mod tests {
 
     #[test]
     fn bash_paths_under_home() {
-        let p = FakePaths { home: PathBuf::from("/tmp/home") };
+        let p = FakePaths {
+            home: PathBuf::from("/tmp/home"),
+        };
         let sp = paths_for(Shell::Bash, &p);
-        assert_eq!(sp.script.as_deref(), Some(std::path::Path::new("/tmp/home/.bash_completions/bo4e.sh")));
-        assert_eq!(sp.rc.as_deref(), Some(std::path::Path::new("/tmp/home/.bashrc")));
+        assert_eq!(
+            sp.script.as_deref(),
+            Some(std::path::Path::new("/tmp/home/.bash_completions/bo4e.sh"))
+        );
+        assert_eq!(
+            sp.rc.as_deref(),
+            Some(std::path::Path::new("/tmp/home/.bashrc"))
+        );
     }
 
     #[test]
     fn zsh_paths_under_home() {
-        let p = FakePaths { home: PathBuf::from("/tmp/home") };
+        let p = FakePaths {
+            home: PathBuf::from("/tmp/home"),
+        };
         let sp = paths_for(Shell::Zsh, &p);
         assert!(sp.script.unwrap().ends_with(".zfunc/_bo4e"));
         assert!(sp.rc.unwrap().ends_with(".zshrc"));
@@ -110,7 +125,9 @@ mod tests {
 
     #[test]
     fn fish_has_no_rc() {
-        let p = FakePaths { home: PathBuf::from("/tmp/home") };
+        let p = FakePaths {
+            home: PathBuf::from("/tmp/home"),
+        };
         let sp = paths_for(Shell::Fish, &p);
         assert!(sp.script.is_some());
         assert!(sp.rc.is_none());
@@ -118,7 +135,9 @@ mod tests {
 
     #[test]
     fn powershell_has_rc_only() {
-        let p = FakePaths { home: PathBuf::from("/tmp/home") };
+        let p = FakePaths {
+            home: PathBuf::from("/tmp/home"),
+        };
         let sp = paths_for(Shell::PowerShell, &p);
         assert!(sp.script.is_none());
         assert!(sp.rc.is_some());
@@ -126,7 +145,9 @@ mod tests {
 
     #[test]
     fn elvish_has_both() {
-        let p = FakePaths { home: PathBuf::from("/tmp/home") };
+        let p = FakePaths {
+            home: PathBuf::from("/tmp/home"),
+        };
         let sp = paths_for(Shell::Elvish, &p);
         assert!(sp.script.is_some());
         assert!(sp.rc.is_some());

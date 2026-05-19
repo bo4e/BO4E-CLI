@@ -49,8 +49,8 @@ impl Executable for Completions {
             }
             CompletionsAction::Uninstall { shell } => {
                 let sh = resolve_shell(*shell)?;
-                let outcome = uninstall::uninstall(sh, &p)
-                    .map_err(|e| format!("uninstall failed: {e}"))?;
+                let outcome =
+                    uninstall::uninstall(sh, &p).map_err(|e| format!("uninstall failed: {e}"))?;
                 report_uninstall_outcome(outcome);
                 Ok(())
             }
@@ -84,7 +84,10 @@ fn report_install_outcome(o: install::Outcome) {
             cprint_normal!("Restart your shell to activate completion.");
         }
         install::Outcome::AlreadyInstalled { script, rc } => {
-            let target = script.or(rc).map(|p| p.display().to_string()).unwrap_or_default();
+            let target = script
+                .or(rc)
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
             cprint_normal!("bo4e completion already installed at {target}");
             cprint_normal!("(pass --force to overwrite)");
         }
@@ -102,7 +105,10 @@ fn report_install_outcome(o: install::Outcome) {
 
 fn report_uninstall_outcome(o: uninstall::Outcome) {
     match o {
-        uninstall::Outcome::Removed { script_removed, rc_changed } => {
+        uninstall::Outcome::Removed {
+            script_removed,
+            rc_changed,
+        } => {
             if let Some(s) = &script_removed {
                 cprint_normal!("Removed {}", s.display());
             }
@@ -112,7 +118,10 @@ fn report_uninstall_outcome(o: uninstall::Outcome) {
         }
         uninstall::Outcome::NothingToRemove { script, rc } => {
             if let Some(s) = &script {
-                cprint_normal!("No completion script found at {}; nothing to remove.", s.display());
+                cprint_normal!(
+                    "No completion script found at {}; nothing to remove.",
+                    s.display()
+                );
             }
             if let Some(r) = &rc {
                 cprint_normal!("No bo4e block found in {}; nothing to remove.", r.display());
@@ -144,7 +153,14 @@ mod tests {
 
     #[test]
     fn parses_install_with_shell_and_force() {
-        cli(&["bo4e", "completions", "install", "--shell", "zsh", "--force"]);
+        cli(&[
+            "bo4e",
+            "completions",
+            "install",
+            "--shell",
+            "zsh",
+            "--force",
+        ]);
     }
 
     #[test]

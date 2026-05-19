@@ -32,10 +32,7 @@ pub fn complete(prefix: &OsStr) -> Vec<CompletionCandidate> {
 
 /// Pure function: given the prefix and an optional `-i` path, return the
 /// candidates. This is the testable shape.
-pub fn complete_with_input(
-    prefix: &OsStr,
-    input_path: Option<&Path>,
-) -> Vec<CompletionCandidate> {
+pub fn complete_with_input(prefix: &OsStr, input_path: Option<&Path>) -> Vec<CompletionCandidate> {
     let Some(path) = input_path else {
         return Vec::new();
     };
@@ -93,9 +90,13 @@ mod tests {
                 { "id": "Vertrag", "package": "bo" },
             ]
         });
-        f.write_all(serde_json::to_string(&graph).unwrap().as_bytes()).unwrap();
+        f.write_all(serde_json::to_string(&graph).unwrap().as_bytes())
+            .unwrap();
         let r = complete_with_input(&OsString::from(""), Some(f.path()));
-        let names: Vec<_> = r.iter().map(|c| c.get_value().to_string_lossy().to_string()).collect();
+        let names: Vec<_> = r
+            .iter()
+            .map(|c| c.get_value().to_string_lossy().to_string())
+            .collect();
         assert!(names.contains(&"Angebot".to_string()));
         assert!(names.contains(&"bo.Angebot".to_string()));
         assert!(names.contains(&"Vertrag".to_string()));
@@ -118,9 +119,13 @@ mod tests {
                 { "id": "Vertrag", "package": "bo" },
             ]
         });
-        f.write_all(serde_json::to_string(&graph).unwrap().as_bytes()).unwrap();
+        f.write_all(serde_json::to_string(&graph).unwrap().as_bytes())
+            .unwrap();
         let r = complete_with_input(&OsString::from("Ver"), Some(f.path()));
-        let names: Vec<_> = r.iter().map(|c| c.get_value().to_string_lossy().to_string()).collect();
+        let names: Vec<_> = r
+            .iter()
+            .map(|c| c.get_value().to_string_lossy().to_string())
+            .collect();
         assert!(names.contains(&"Vertrag".to_string()));
         assert!(!names.contains(&"Angebot".to_string()));
     }

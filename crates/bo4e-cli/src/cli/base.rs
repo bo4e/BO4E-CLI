@@ -130,7 +130,15 @@ mod tests {
     #[test]
     fn each_subcommand_help_contains_ansi() {
         let mut cmd = Cli::command();
-        for name in ["pull", "edit", "diff", "repo", "generate", "graph", "completions"] {
+        for name in [
+            "pull",
+            "edit",
+            "diff",
+            "repo",
+            "generate",
+            "graph",
+            "completions",
+        ] {
             let sub = cmd
                 .find_subcommand_mut(name)
                 .unwrap_or_else(|| panic!("subcommand {} missing", name));

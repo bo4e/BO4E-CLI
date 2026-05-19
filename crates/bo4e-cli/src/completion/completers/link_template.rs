@@ -2,7 +2,12 @@ use clap_complete::CompletionCandidate;
 use std::ffi::OsStr;
 
 const PLACEHOLDERS: &[&str] = &[
-    "{pkg}", "{module}", "{class}", "{version}", "{cwd}", "{output_dir}",
+    "{pkg}",
+    "{module}",
+    "{class}",
+    "{version}",
+    "{cwd}",
+    "{output_dir}",
 ];
 
 pub fn complete(prefix: &OsStr) -> Vec<CompletionCandidate> {
@@ -39,7 +44,9 @@ mod tests {
     use std::ffi::OsString;
 
     fn names(cs: Vec<CompletionCandidate>) -> Vec<String> {
-        cs.iter().map(|c| c.get_value().to_string_lossy().to_string()).collect()
+        cs.iter()
+            .map(|c| c.get_value().to_string_lossy().to_string())
+            .collect()
     }
 
     #[test]
