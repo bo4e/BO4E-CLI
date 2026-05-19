@@ -50,6 +50,16 @@ Download the latest `bo4e-cli-x86_64-pc-windows-msvc.msi` from the
 [Releases page](https://github.com/bo4e/BO4E-CLI/releases/latest) and double-click it.
 The CLI then appears under *Apps & Features*.
 
+### macOS / Linux — Homebrew
+
+```bash
+brew install bo4e/tap/bo4e-cli
+```
+
+The first run automatically taps `bo4e/homebrew-tap` (equivalent to
+`brew tap bo4e/tap && brew install bo4e-cli`). Works on macOS (Intel and Apple
+Silicon) and on x86_64 Linux via [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux).
+
 ### Manual download
 
 Each release also ships raw tarballs (`.tar.xz` / `.zip`) for every supported target —
@@ -71,8 +81,8 @@ bo4e --version
 bo4e --help
 ```
 
-> Homebrew tap and Scoop bucket distribution may be added later; until then please use
-> one of the channels above.
+> Scoop bucket distribution may be added later; until then Windows users should use
+> the PowerShell or MSI installer above.
 
 ### Slim install with only the generators you need
 
@@ -98,6 +108,7 @@ The binary is removable in one step from every channel it shipped with:
 | Linux / macOS shell installer | run the `uninstall` script that the installer placed next to the binary, or simply `rm $(which bo4e)`           |
 | Windows PowerShell installer  | re-run the installer URL with `-Uninstall`, or delete `bo4e.exe` from the install prefix shown by the installer |
 | Windows MSI                   | *Apps & Features* → *bo4e-cli* → *Uninstall*                                                                    |
+| Homebrew (macOS / Linux)      | `brew uninstall bo4e-cli` (optionally `brew untap bo4e/tap`)                                                    |
 | Manual download               | delete the binary you copied out of the tarball                                                                 |
 | `cargo install` / `binstall`  | `cargo uninstall bo4e-cli`                                                                                      |
 

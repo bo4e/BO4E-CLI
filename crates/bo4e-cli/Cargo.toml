@@ -6,6 +6,7 @@ authors = ["Leon Haffmans <leon.haffmans@hochfrequenz.de>"]
 license = "MIT"
 edition = "2024"
 repository.workspace = true
+homepage = "https://github.com/bo4e/BO4E-CLI"
 
 [package.metadata.wix]
 upgrade-guid = "8830C354-0DA5-4EA8-B8E5-9C4EEC5CD4C9"

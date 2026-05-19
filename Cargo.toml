@@ -17,12 +17,19 @@ lto = "thin"
 
 # cargo-dist release pipeline.
 #   * `installers` lists the user-facing install methods generated as release artifacts.
-#     We're starting with the no-PAT shape: shell installer (curl-pipe-sh),
-#     PowerShell installer (irm-pipe-iex), and a Windows MSI. Tarballs/zips for
-#     every target are emitted automatically. Homebrew tap + Scoop bucket can be
-#     added later once those repos exist.
+#     Shell installer (curl-pipe-sh), PowerShell installer (irm-pipe-iex), Windows MSI,
+#     and a Homebrew formula published to a tap (see `tap` / `publish-jobs` below).
+#     Tarballs/zips for every target are emitted automatically. Scoop bucket can be
+#     added later once that repo exists.
 #   * `targets` defines the cross-compile matrix. We cover the major desktop
 #     platforms; add aarch64-unknown-linux-gnu later if ARM Linux users show up.
+#   * `tap` is the GitHub repo cargo-dist commits the generated Homebrew formula
+#     into on every tagged release. The tap must exist under `bo4e/homebrew-tap`
+#     and the release workflow needs a `HOMEBREW_TAP_TOKEN` secret with write
+#     access to it (see release.yml).
+#   * `publish-jobs = ["homebrew"]` opts the Homebrew formula push into the
+#     publish phase. macOS + linux-gnu bottles fall out of the existing target
+#     matrix, so `brew install bo4e/tap/bo4e-cli` works on both.
 #   * `pr-run-mode = "plan"` makes release.yml only *plan* on PRs (no upload),
 #     so opening a PR doesn't burn artifact storage. Uploads happen on tag push.
 #   * `install-path` chooses the binary install location for the shell/PS scripts
@@ -30,7 +37,9 @@ lto = "thin"
 [workspace.metadata.dist]
 cargo-dist-version = "0.31.0"
 ci = "github"
-installers = ["shell", "powershell", "msi"]
+installers = ["shell", "powershell", "msi", "homebrew"]
+tap = "bo4e/homebrew-tap"
+publish-jobs = ["homebrew"]
 targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
@@ -42,4 +51,6 @@ install-path = "CARGO_HOME"
 # release.yml carries a hand-edited CHANGELOG pre-flight check (see the
 # `HAND-EDITED` markers in that file). `allow-dirty = ["ci"]` tells dist to
 # accept the modification instead of refusing every `plan` / `host` run.
+# To regenerate release.yml via `dist generate --mode=ci`, comment this line
+# out, run the regenerate, re-apply the HAND-EDITED block, then restore.
 allow-dirty = ["ci"]
