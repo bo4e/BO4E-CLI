@@ -101,6 +101,27 @@ The binary is removable in one step from every channel it shipped with:
 | Manual download               | delete the binary you copied out of the tarball                                                                 |
 | `cargo install` / `binstall`  | `cargo uninstall bo4e-cli`                                                                                      |
 
+## Shell completions
+
+**Shell completions are not installed automatically** by any of the install
+channels above (shell installer, MSI, PowerShell installer, manual tarball,
+`cargo install`, `cargo binstall`). After installing or upgrading `bo4e`, run:
+
+```bash
+bo4e completions install
+```
+
+to install (or refresh) completion for your current shell. The command auto-detects
+your shell from `$SHELL`; pass `--shell <SHELL>` to override, and
+`bo4e completions uninstall` to remove. Power users on system-managed paths can
+pipe the script directly:
+
+```bash
+bo4e completions show zsh > /usr/share/zsh/site-functions/_bo4e
+```
+
+Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`, `nushell`.
+
 ## Commands
 
 In the following I will describe some details on how to use the functionality provided by this CLI. Please keep in
@@ -149,6 +170,11 @@ bo4e pull -o ./bo4e_schemas_v202501 -t v202501.0.0  # a specific tag
 
 Other `pull` flags: `--no-update-refs` (keep online `$ref` URLs as-is) and
 `--no-clear-output` (skip wiping the output dir).
+
+> Tab completion on `-t / --version-tag` fetches BO4E version tags from
+> GitHub. Results are cached locally with a 60 s TTL and revalidated via
+> conditional GET — see the flag's long-help text (`bo4e pull --help`) for
+> details.
 
 ## `bo4e edit`
 
