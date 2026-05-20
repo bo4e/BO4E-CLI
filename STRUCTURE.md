@@ -114,13 +114,13 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
 - **Closure-based, object-safe `Visitable`** for schema tree traversal. Avoids `RefCell`-style runtime borrow checking; supports early termination via `ControlFlow`. Used by the `edit` transforms and by `diff` walkers.
 - **Console singleton with sentinel markup.** The CLI uses a `OnceLock<Console>` so every print site (including in libraries that the CLI calls into) renders through one highlighter. `--verbose` / `--quiet` filter by `Level`. Warnings/errors always go to stderr and are never suppressed (info goes to stdout).
 - **CHANGELOG by git-cliff + cargo-dist.** `cliff.toml` parses conventional-commit subjects into release sections, then `cargo-dist`'s release workflow embeds the matching `## X.Y.Z` section in GitHub Releases. Keep heading shape stable.
-- **Release pipeline = cargo-dist.** `workspace.metadata.dist` configures installers (shell, PowerShell, MSI) and cross-compile targets. `pr-run-mode = "plan"` means PRs only do a dry-run.
+- **Release pipeline = cargo-dist.** `workspace.metadata.dist` configures installers (shell, PowerShell, MSI, Homebrew) and cross-compile targets. The Homebrew formula is pushed to the `bo4e/homebrew-tap` repo (`tap = "bo4e/homebrew-tap"`, `publish-jobs = ["homebrew"]`), which requires a `HOMEBREW_TAP_TOKEN` repo secret on `BO4E-CLI` with write access to the tap. `pr-run-mode = "plan"` means PRs only do a dry-run.
 
 ## CI and release flow
 
 - `.github/workflows/ci.yml` — fmt, clippy, doc, and test on PRs + pushes to `main`. Tests fan out across macOS and Windows.
 - `.github/workflows/release-prepare.yml` — opens a PR that bumps the workspace version and prepends a new CHANGELOG section.
-- `.github/workflows/release.yml` — driven by cargo-dist; triggered by version tags. Builds binaries, generates installers, attaches them to the GitHub Release.
+- `.github/workflows/release.yml` — driven by cargo-dist; triggered by version tags. Builds binaries, generates installers, attaches them to the GitHub Release, and pushes the generated Homebrew formula to `bo4e/homebrew-tap`. The plan job carries a HAND-EDITED CHANGELOG pre-flight check (preserved through `allow-dirty = ["ci"]`); re-apply it after any `dist generate --mode=ci`.
 
 ## Where to start when adding a new feature
 
