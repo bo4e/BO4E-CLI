@@ -1,4 +1,12 @@
 
+## 1.1.1 - 2026-05-20
+
+### Added
+
+- **release**: Publish bo4e-cli to Homebrew via bo4e/homebrew-tap (#153)
+- **completion**: Add shell completion with install/uninstall/show + dynamic completers (#152)
+
+
 ## 1.1.0 - 2026-05-18
 
 ### Added
