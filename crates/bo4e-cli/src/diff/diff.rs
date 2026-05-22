@@ -10,11 +10,36 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 lazy_static! {
-    static ref REGEX_VERSION_IN_DESC: Regex = Regex::new(r"v\d{6}\.\d+\.\d+(?:-rc\d*)?").unwrap();
+    // Matches any BO4E version string that may appear inline in a description
+    // — clean release tags AND the dirty forms produced by hatch-vcs
+    // (`+g<commit>` and `.d<YYYYMMDD>` suffixes). Used to strip versions out
+    // of descriptions before comparing them, so a documentation URL like
+    // `.../v202401.6.0/...` matching `.../v202401.7.0+gabc.d20260522/...`
+    // doesn't show up as a real field-description change.
+    static ref REGEX_VERSION_IN_DESC: Regex = Regex::new(
+        r"v\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+g\w+)?(?:\.d\d{8})?"
+    ).unwrap();
 }
 
 const VERSION_DESC_PLACEHOLDER: &str = "{__gh_version__}";
 const VERSION_TITLE_MARKER: &str = " Version";
+
+/// Knobs that tune what `diff_schemas` considers a change.
+///
+/// `DiffOptions::default()` matches the historical (and recommended) behavior:
+/// any version-string difference inside a JSON-schema description is normalized
+/// away, and the `_version` field's default value is excluded from the
+/// `FieldDefaultChanged` check. That avoids dozens of spurious
+/// `FieldDescriptionChanged` / `FieldDefaultChanged` results that would
+/// otherwise show up on every version bump just because cross-link URLs and
+/// the `_version` default carry the version string.
+///
+/// Set `include_version_changes = true` to opt INTO seeing those differences
+/// — useful for callers that want a truly verbatim schema-to-schema diff.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DiffOptions {
+    pub include_version_changes: bool,
+}
 
 #[derive(Debug, Clone, Copy)]
 enum VariantKind {
@@ -22,10 +47,16 @@ enum VariantKind {
     AllOf,
 }
 
-/// Compare two `Schemas` collections and return the list of changes between them.
+/// Compare two `Schemas` collections and return the list of changes between
+/// them. Uses `DiffOptions::default()` — see [`diff_schemas_with`] to override.
 pub fn diff_schemas(old: &Schemas, new: &Schemas) -> Changes {
+    diff_schemas_with(old, new, &DiffOptions::default())
+}
+
+/// Same as [`diff_schemas`] but with caller-supplied options.
+pub fn diff_schemas_with(old: &Schemas, new: &Schemas, opts: &DiffOptions) -> Changes {
     let mut out: Vec<Change> = Vec::new();
-    diff_root_schemas(old, new, &mut out);
+    diff_root_schemas(old, new, opts, &mut out);
     Changes {
         old_schemas: old.clone(),
         new_schemas: new.clone(),
@@ -33,7 +64,7 @@ pub fn diff_schemas(old: &Schemas, new: &Schemas) -> Changes {
     }
 }
 
-fn diff_root_schemas(old: &Schemas, new: &Schemas, out: &mut Vec<Change>) {
+fn diff_root_schemas(old: &Schemas, new: &Schemas, opts: &DiffOptions, out: &mut Vec<Change>) {
     for s in new.module_difference(old) {
         let module = s.borrow().module().to_vec();
         let trace = format!("/{}", module.join("/"));
@@ -73,7 +104,7 @@ fn diff_root_schemas(old: &Schemas, new: &Schemas, out: &mut Vec<Change>) {
             Ok(r) => r.clone(),
             Err(_) => continue,
         };
-        diff_root_pair(&root_old, &root_new, &trace, &trace, &module, out);
+        diff_root_pair(&root_old, &root_new, &trace, &trace, &module, opts, out);
     }
 }
 
@@ -83,6 +114,7 @@ fn diff_root_pair(
     old_trace: &str,
     new_trace: &str,
     current_module: &[String],
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
     match (old, new) {
@@ -93,11 +125,12 @@ fn diff_root_pair(
                 old_trace,
                 new_trace,
                 current_module,
+                opts,
                 out,
             );
         }
         (SchemaRootType::StrEnum(o), SchemaRootType::StrEnum(n)) => {
-            diff_enum_schemas(&o.str_enum, &n.str_enum, old_trace, new_trace, out);
+            diff_enum_schemas(&o.str_enum, &n.str_enum, old_trace, new_trace, opts, out);
         }
         _ => {
             out.push(Change {
@@ -116,13 +149,18 @@ fn diff_type_base(
     new: &TypeBase,
     old_trace: &str,
     new_trace: &str,
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
     let desc_changed = match (&old.description, &new.description) {
         (Some(o), Some(n)) => {
-            let o_norm = REGEX_VERSION_IN_DESC.replace_all(o, VERSION_DESC_PLACEHOLDER);
-            let n_norm = REGEX_VERSION_IN_DESC.replace_all(n, VERSION_DESC_PLACEHOLDER);
-            o_norm != n_norm
+            if opts.include_version_changes {
+                o != n
+            } else {
+                let o_norm = REGEX_VERSION_IN_DESC.replace_all(o, VERSION_DESC_PLACEHOLDER);
+                let n_norm = REGEX_VERSION_IN_DESC.replace_all(n, VERSION_DESC_PLACEHOLDER);
+                o_norm != n_norm
+            }
         }
         (None, None) => false,
         _ => true,
@@ -149,7 +187,8 @@ fn diff_type_base(
 
     let is_version_field = old.title.as_deref() == Some(VERSION_TITLE_MARKER)
         || new.title.as_deref() == Some(VERSION_TITLE_MARKER);
-    if !is_version_field && old.default != new.default {
+    let compare_default = opts.include_version_changes || !is_version_field;
+    if compare_default && old.default != new.default {
         out.push(Change {
             r#type: ChangeType::FieldDefaultChanged,
             old: None,
@@ -166,9 +205,10 @@ fn diff_ref_schemas(
     old_trace: &str,
     new_trace: &str,
     current_module: &[String],
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
-    diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
+    diff_type_base(&old.base, &new.base, old_trace, new_trace, opts, out);
     if !refs_point_to_same_target(&old.r#ref, &new.r#ref, current_module) {
         out.push(Change {
             r#type: ChangeType::FieldReferenceChanged,
@@ -202,15 +242,17 @@ fn diff_array_schemas(
     old_trace: &str,
     new_trace: &str,
     current_module: &[String],
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
-    diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
+    diff_type_base(&old.base, &new.base, old_trace, new_trace, opts, out);
     diff_schema_type(
         &old.items,
         &new.items,
         &format!("{}/items", old_trace),
         &format!("{}/items", new_trace),
         current_module,
+        opts,
         out,
     );
 }
@@ -220,9 +262,10 @@ fn diff_string_schemas(
     new: &StringSchema,
     old_trace: &str,
     new_trace: &str,
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
-    diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
+    diff_type_base(&old.base, &new.base, old_trace, new_trace, opts, out);
     if old.format != new.format {
         out.push(Change {
             r#type: ChangeType::FieldStringFormatChanged,
@@ -246,9 +289,10 @@ fn diff_any_of_schemas(
     old_trace: &str,
     new_trace: &str,
     current_module: &[String],
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
-    diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
+    diff_type_base(&old.base, &new.base, old_trace, new_trace, opts, out);
     diff_variant_list(
         &old.any_of,
         &new.any_of,
@@ -256,6 +300,7 @@ fn diff_any_of_schemas(
         new_trace,
         VariantKind::AnyOf,
         current_module,
+        opts,
         out,
     );
 }
@@ -266,9 +311,10 @@ fn diff_all_of_schemas(
     old_trace: &str,
     new_trace: &str,
     current_module: &[String],
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
-    diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
+    diff_type_base(&old.base, &new.base, old_trace, new_trace, opts, out);
     diff_variant_list(
         &old.all_of,
         &new.all_of,
@@ -276,6 +322,7 @@ fn diff_all_of_schemas(
         new_trace,
         VariantKind::AllOf,
         current_module,
+        opts,
         out,
     );
 }
@@ -287,6 +334,7 @@ fn diff_variant_list(
     new_trace: &str,
     kind: VariantKind,
     current_module: &[String],
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
     let key = match kind {
@@ -312,7 +360,7 @@ fn diff_variant_list(
             }
             let nt = format!("{}/{}/{}", new_trace, key, ni);
             let mut sub: Vec<Change> = Vec::new();
-            diff_schema_type(ov, nv, &ot, &nt, current_module, &mut sub);
+            diff_schema_type(ov, nv, &ot, &nt, current_module, opts, &mut sub);
             if !has_critical(&sub) {
                 out.extend(sub);
                 new_matched[ni] = true;
@@ -378,24 +426,29 @@ fn diff_schema_type(
     old_trace: &str,
     new_trace: &str,
     current_module: &[String],
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
     use SchemaType::*;
     match (old, new) {
         (Object(o), Object(n)) => {
-            diff_object_schemas(o, n, old_trace, new_trace, current_module, out)
+            diff_object_schemas(o, n, old_trace, new_trace, current_module, opts, out)
         }
-        (StrEnum(o), StrEnum(n)) => diff_enum_schemas(o, n, old_trace, new_trace, out),
-        (Array(o), Array(n)) => diff_array_schemas(o, n, old_trace, new_trace, current_module, out),
+        (StrEnum(o), StrEnum(n)) => diff_enum_schemas(o, n, old_trace, new_trace, opts, out),
+        (Array(o), Array(n)) => {
+            diff_array_schemas(o, n, old_trace, new_trace, current_module, opts, out)
+        }
         (AnyOf(o), AnyOf(n)) => {
-            diff_any_of_schemas(o, n, old_trace, new_trace, current_module, out)
+            diff_any_of_schemas(o, n, old_trace, new_trace, current_module, opts, out)
         }
         (AllOf(o), AllOf(n)) => {
-            diff_all_of_schemas(o, n, old_trace, new_trace, current_module, out)
+            diff_all_of_schemas(o, n, old_trace, new_trace, current_module, opts, out)
         }
-        (StringSchema(o), StringSchema(n)) => diff_string_schemas(o, n, old_trace, new_trace, out),
+        (StringSchema(o), StringSchema(n)) => {
+            diff_string_schemas(o, n, old_trace, new_trace, opts, out)
+        }
         (ReferenceSchema(o), ReferenceSchema(n)) => {
-            diff_ref_schemas(o, n, old_trace, new_trace, current_module, out)
+            diff_ref_schemas(o, n, old_trace, new_trace, current_module, opts, out)
         }
         _ if std::mem::discriminant(old) == std::mem::discriminant(new) => {}
         _ => diff_schema_differing_types(old, new, old_trace, new_trace, out),
@@ -408,9 +461,10 @@ fn diff_object_schemas(
     old_trace: &str,
     new_trace: &str,
     current_module: &[String],
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
-    diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
+    diff_type_base(&old.base, &new.base, old_trace, new_trace, opts, out);
 
     for (name, schema_new) in &new.properties {
         if !old.properties.contains_key(name) {
@@ -444,6 +498,7 @@ fn diff_object_schemas(
                 &format!("{}/{}", old_trace, name),
                 &format!("{}/{}", new_trace, name),
                 current_module,
+                opts,
                 out,
             );
         }
@@ -455,9 +510,10 @@ fn diff_enum_schemas(
     new: &StrEnumSchema,
     old_trace: &str,
     new_trace: &str,
+    opts: &DiffOptions,
     out: &mut Vec<Change>,
 ) {
-    diff_type_base(&old.base, &new.base, old_trace, new_trace, out);
+    diff_type_base(&old.base, &new.base, old_trace, new_trace, opts, out);
 
     let old_set: std::collections::BTreeSet<&String> = old.enum_values.iter().collect();
     let new_set: std::collections::BTreeSet<&String> = new.enum_values.iter().collect();
@@ -575,6 +631,7 @@ mod tests {
             &base(Some("beta"), None),
             "/x",
             "/x",
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
@@ -589,6 +646,7 @@ mod tests {
             &base(Some("Schema for v202401.0.2"), None),
             "/x",
             "/x",
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 0);
@@ -602,6 +660,7 @@ mod tests {
             &base(None, Some("B")),
             "/x",
             "/x",
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
@@ -616,8 +675,64 @@ mod tests {
         a.default = Some(PrimitiveValue::String("v202401.0.1".into()));
         b.default = Some(PrimitiveValue::String("v202401.0.2".into()));
         let mut out = vec![];
-        diff_type_base(&a, &b, "/x", "/x", &mut out);
+        diff_type_base(&a, &b, "/x", "/x", &DiffOptions::default(), &mut out);
         assert_eq!(out.len(), 0);
+    }
+
+    #[test]
+    fn test_diff_type_base_ignores_dirty_version_only_description_change() {
+        // The dirty-form regex needs to strip `+g<sha>` and `.d<YYYYMMDD>`
+        // suffixes too, otherwise local-dev diffs against a tagged baseline
+        // emit FieldDescriptionChanged for every cross-link.
+        let mut out = vec![];
+        diff_type_base(
+            &base(Some("see v202501.0.0+ga1b2c3d4.d20260522"), None),
+            &base(Some("see v202501.0.1"), None),
+            "/x",
+            "/x",
+            &DiffOptions::default(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 0);
+    }
+
+    #[test]
+    fn test_diff_type_base_emits_version_description_change_when_flag_set() {
+        let mut out = vec![];
+        diff_type_base(
+            &base(Some("Schema for v202401.0.1"), None),
+            &base(Some("Schema for v202401.0.2"), None),
+            "/x",
+            "/x",
+            &DiffOptions {
+                include_version_changes: true,
+            },
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldDescriptionChanged);
+    }
+
+    #[test]
+    fn test_diff_type_base_emits_version_field_default_change_when_flag_set() {
+        use bo4e_schemas::models::json_schema::PrimitiveValue;
+        let mut a = base(None, Some(" Version"));
+        let mut b = base(None, Some(" Version"));
+        a.default = Some(PrimitiveValue::String("v202401.0.1".into()));
+        b.default = Some(PrimitiveValue::String("v202401.0.2".into()));
+        let mut out = vec![];
+        diff_type_base(
+            &a,
+            &b,
+            "/x",
+            "/x",
+            &DiffOptions {
+                include_version_changes: true,
+            },
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldDefaultChanged);
     }
 
     fn enum_schema(values: &[&str]) -> StrEnumSchema {
@@ -636,6 +751,7 @@ mod tests {
             &enum_schema(&["B", "C"]),
             "/x",
             "/x",
+            &DiffOptions::default(),
             &mut out,
         );
         let kinds: Vec<_> = out.iter().map(|c| c.r#type.clone()).collect();
@@ -657,7 +773,7 @@ mod tests {
         };
         let m = vec!["bo".to_string(), "Angebot".to_string()];
         let mut out = vec![];
-        diff_ref_schemas(&r1, &r2, "/x", "/x", &m, &mut out);
+        diff_ref_schemas(&r1, &r2, "/x", "/x", &m, &DiffOptions::default(), &mut out);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldReferenceChanged);
     }
@@ -678,7 +794,7 @@ mod tests {
         };
         let m = vec!["bo".to_string(), "Angebot".to_string()];
         let mut out = vec![];
-        diff_ref_schemas(&r_relative, &r_absolute, "/x", "/x", &m, &mut out);
+        diff_ref_schemas(&r_relative, &r_absolute, "/x", "/x", &m, &DiffOptions::default(), &mut out);
         assert!(out.is_empty(), "expected no change, got {:?}", out);
     }
 
@@ -690,7 +806,7 @@ mod tests {
         a.format = None;
         b.format = Some(StringSchemaFormat::DateTime);
         let mut out = vec![];
-        diff_string_schemas(&a, &b, "/x", "/x", &mut out);
+        diff_string_schemas(&a, &b, "/x", "/x", &DiffOptions::default(), &mut out);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldStringFormatChanged);
     }
@@ -724,7 +840,7 @@ mod tests {
             any_of: vec![string_schema_t(), ref_t("Foo.json#")],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
+        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
         let added: Vec<_> = out
             .iter()
             .filter(|c| c.r#type == ChangeType::FieldAnyOfTypeAdded)
@@ -744,7 +860,7 @@ mod tests {
             any_of: vec![string_schema_t()],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
+        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
         let removed: Vec<_> = out
             .iter()
             .filter(|c| c.r#type == ChangeType::FieldAnyOfTypeRemoved)
@@ -768,7 +884,7 @@ mod tests {
             any_of: vec![SchemaType::StringSchema(s_new)],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
+        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
         assert!(
             out.iter()
                 .all(|c| c.r#type != ChangeType::FieldAnyOfTypeAdded)
@@ -800,7 +916,7 @@ mod tests {
             )],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &mut out);
+        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
         assert!(out.is_empty(), "expected no changes, got {:?}", out);
     }
 
@@ -810,7 +926,7 @@ mod tests {
         let old = SchemaType::StringSchema(StringSchema::default());
         let new = SchemaType::NumberSchema(NumberSchema::default());
         let mut out = vec![];
-        diff_schema_type(&old, &new, "/x", "/x", &m(), &mut out);
+        diff_schema_type(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldTypeChanged);
     }
@@ -831,7 +947,7 @@ mod tests {
             items: Box::new(SchemaType::StringSchema(StringSchema::default())),
         });
         let mut out = vec![];
-        diff_schema_type(&obj, &arr, "/x", "/x", &m(), &mut out);
+        diff_schema_type(&obj, &arr, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldCardinalityChanged);
     }
@@ -855,7 +971,7 @@ mod tests {
         let a = obj(&[("foo", string_schema_t())]);
         let b = obj(&[("bar", string_schema_t())]);
         let mut out = vec![];
-        diff_object_schemas(&a, &b, "/x", "/x", &m(), &mut out);
+        diff_object_schemas(&a, &b, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
         let kinds: Vec<_> = out.iter().map(|c| c.r#type.clone()).collect();
         assert!(kinds.contains(&ChangeType::FieldAdded));
         assert!(kinds.contains(&ChangeType::FieldRemoved));
@@ -871,7 +987,7 @@ mod tests {
         let a = obj(&[("foo", SchemaType::StringSchema(s_old))]);
         let b = obj(&[("foo", SchemaType::StringSchema(s_new))]);
         let mut out = vec![];
-        diff_object_schemas(&a, &b, "/x", "/x", &m(), &mut out);
+        diff_object_schemas(&a, &b, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
         assert!(
             out.iter()
                 .any(|c| c.r#type == ChangeType::FieldDefaultChanged)
