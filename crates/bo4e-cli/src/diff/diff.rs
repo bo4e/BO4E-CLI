@@ -418,7 +418,16 @@ fn diff_schema_type(
             diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
         }
         (ConstantSchema(o), ConstantSchema(n)) => {
-            diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, out);
+            if o.constant != n.constant {
+                out.push(Change {
+                    r#type: ChangeType::FieldConstantChanged,
+                    old: Some(ChangeValue::String(o.constant.clone())),
+                    new: Some(ChangeValue::String(n.constant.clone())),
+                    old_trace: old_trace.to_string(),
+                    new_trace: new_trace.to_string(),
+                });
+            }
         }
         _ => diff_schema_differing_types(old, new, old_trace, new_trace, out),
     }
@@ -985,6 +994,44 @@ mod tests {
         );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldTitleChanged);
+    }
+
+    #[test]
+    fn test_constant_schema_value_change_emits_constant_changed() {
+        use bo4e_schemas::models::json_schema::{ConstantSchema, LiteralTypeString};
+        let a = ConstantSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "X".into(),
+        };
+        let b = ConstantSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "Y".into(),
+        };
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::ConstantSchema(a),
+            &SchemaType::ConstantSchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldConstantChanged);
+        assert_eq!(
+            out[0].old,
+            Some(ChangeValue::String("X".into())),
+            "old value should be carried"
+        );
+        assert_eq!(
+            out[0].new,
+            Some(ChangeValue::String("Y".into())),
+            "new value should be carried"
+        );
     }
 
     #[test]

@@ -6,6 +6,7 @@ pub fn is_change_critical(change: &Change) -> bool {
         change.r#type,
         ChangeType::FieldRemoved
             | ChangeType::FieldTypeChanged
+            | ChangeType::FieldConstantChanged
             | ChangeType::FieldCardinalityChanged
             | ChangeType::FieldReferenceChanged
             | ChangeType::FieldStringFormatChanged
@@ -59,6 +60,7 @@ mod tests {
             (ChangeType::ClassDescriptionChanged, false),
             (ChangeType::EnumValueAdded, false),
             (ChangeType::EnumValueRemoved, true),
+            (ChangeType::FieldConstantChanged, true),
         ];
         for (t, expected) in cases {
             assert_eq!(is_change_critical(&ch(t.clone())), *expected, "{:?}", t);
