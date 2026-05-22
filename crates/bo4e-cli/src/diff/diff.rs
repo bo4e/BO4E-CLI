@@ -418,7 +418,22 @@ fn diff_schema_type(
             diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
         }
         (ConstantSchema(o), ConstantSchema(n)) => {
-            diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, out);
+            if o.format != n.format {
+                out.push(Change {
+                    r#type: ChangeType::FieldStringFormatChanged,
+                    old: o
+                        .format
+                        .as_ref()
+                        .map(|f| ChangeValue::String(format!("{:?}", f))),
+                    new: n
+                        .format
+                        .as_ref()
+                        .map(|f| ChangeValue::String(format!("{:?}", f))),
+                    old_trace: old_trace.to_string(),
+                    new_trace: new_trace.to_string(),
+                });
+            }
         }
         _ => diff_schema_differing_types(old, new, old_trace, new_trace, out),
     }
@@ -985,6 +1000,42 @@ mod tests {
         );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldTitleChanged);
+    }
+
+    #[test]
+    fn test_constant_schema_format_change_emits_string_format_changed() {
+        use bo4e_schemas::models::json_schema::{
+            ConstantSchema, LiteralTypeString, StringSchemaFormat,
+        };
+        let a = ConstantSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "X".into(),
+        };
+        let b = ConstantSchema {
+            base: TypeBase::default(),
+            r#type: LiteralTypeString::String,
+            format: Some(StringSchemaFormat::DateTime),
+            constant: "X".into(),
+        };
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::ConstantSchema(a),
+            &SchemaType::ConstantSchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldStringFormatChanged);
+        assert_eq!(out[0].old, None, "no format on old side");
+        assert!(
+            matches!(&out[0].new, Some(ChangeValue::String(s)) if s.contains("DateTime")),
+            "new format string should mention DateTime, got {:?}",
+            out[0].new
+        );
     }
 
     #[test]
