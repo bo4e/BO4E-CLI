@@ -455,7 +455,31 @@ fn diff_schema_type(
         (ReferenceSchema(o), ReferenceSchema(n)) => {
             diff_ref_schemas(o, n, old_trace, new_trace, current_module, opts, out)
         }
-        _ if std::mem::discriminant(old) == std::mem::discriminant(new) => {}
+        // Leaf variants below need explicit same-variant arms: without them the
+        // pair would fall through to `diff_schema_differing_types` and emit a
+        // spurious `FieldTypeChanged` even when only the title / description /
+        // default actually differs.
+        (NumberSchema(o), NumberSchema(n)) => {
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
+        }
+        (IntegerSchema(o), IntegerSchema(n)) => {
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
+        }
+        (BooleanSchema(o), BooleanSchema(n)) => {
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
+        }
+        (NullSchema(o), NullSchema(n)) => {
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
+        }
+        (AnySchema(o), AnySchema(n)) => {
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
+        }
+        (DecimalSchema(o), DecimalSchema(n)) => {
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
+        }
+        (ConstantSchema(o), ConstantSchema(n)) => {
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
+        }
         _ => diff_schema_differing_types(old, new, old_trace, new_trace, out),
     }
 }
@@ -1053,5 +1077,191 @@ mod tests {
             out.iter()
                 .any(|c| c.r#type == ChangeType::FieldDefaultChanged)
         );
+    }
+
+    // ── Leaf SchemaType variant changes (regression: same-variant pairs of
+    //    IntegerSchema/NumberSchema/BooleanSchema/NullSchema/ConstantSchema/
+    //    AnySchema/DecimalSchema used to fall through the catch-all
+    //    `_ if discriminant(old) == discriminant(new) => {}` arm in
+    //    diff_schema_type and silently drop every change, including title /
+    //    description / default).
+
+    #[test]
+    fn test_integer_schema_title_change_emits_title_changed() {
+        use bo4e_schemas::models::json_schema::IntegerSchema;
+        let mut a = IntegerSchema::default();
+        let mut b = IntegerSchema::default();
+        a.base.title = Some("Old".into());
+        b.base.title = Some("New".into());
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::IntegerSchema(a),
+            &SchemaType::IntegerSchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldTitleChanged);
+    }
+
+    #[test]
+    fn test_number_schema_description_change_emits_description_changed() {
+        use bo4e_schemas::models::json_schema::NumberSchema;
+        let mut a = NumberSchema::default();
+        let mut b = NumberSchema::default();
+        a.base.description = Some("alpha".into());
+        b.base.description = Some("beta".into());
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::NumberSchema(a),
+            &SchemaType::NumberSchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldDescriptionChanged);
+    }
+
+    #[test]
+    fn test_boolean_schema_default_change_emits_default_changed() {
+        use bo4e_schemas::models::json_schema::{BooleanSchema, PrimitiveValue};
+        let mut a = BooleanSchema::default();
+        let mut b = BooleanSchema::default();
+        a.base.default = Some(PrimitiveValue::Bool(false));
+        b.base.default = Some(PrimitiveValue::Bool(true));
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::BooleanSchema(a),
+            &SchemaType::BooleanSchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldDefaultChanged);
+    }
+
+    #[test]
+    fn test_null_schema_title_change_emits_title_changed() {
+        use bo4e_schemas::models::json_schema::NullSchema;
+        let mut a = NullSchema::default();
+        let mut b = NullSchema::default();
+        a.base.title = Some("Old".into());
+        b.base.title = Some("New".into());
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::NullSchema(a),
+            &SchemaType::NullSchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldTitleChanged);
+    }
+
+    #[test]
+    fn test_constant_schema_title_change_emits_title_changed() {
+        use bo4e_schemas::models::json_schema::{ConstantSchema, LiteralTypeString};
+        let a = ConstantSchema {
+            base: TypeBase {
+                description: None,
+                title: Some("Old".into()),
+                default: None,
+            },
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "X".into(),
+        };
+        let b = ConstantSchema {
+            base: TypeBase {
+                description: None,
+                title: Some("New".into()),
+                default: None,
+            },
+            r#type: LiteralTypeString::String,
+            format: None,
+            constant: "X".into(),
+        };
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::ConstantSchema(a),
+            &SchemaType::ConstantSchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldTitleChanged);
+    }
+
+    #[test]
+    fn test_any_schema_title_change_emits_title_changed() {
+        use bo4e_schemas::models::json_schema::AnySchema;
+        let mut a = AnySchema::default();
+        let mut b = AnySchema::default();
+        a.base.title = Some("Old".into());
+        b.base.title = Some("New".into());
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::AnySchema(a),
+            &SchemaType::AnySchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldTitleChanged);
+    }
+
+    #[test]
+    fn test_decimal_schema_title_change_emits_title_changed() {
+        use bo4e_schemas::models::json_schema::{
+            DecimalSchema, LiteralFormatDecimal, LiteralTypeDecimal,
+        };
+        let a = DecimalSchema {
+            base: TypeBase {
+                description: None,
+                title: Some("Old".into()),
+                default: None,
+            },
+            r#type: LiteralTypeDecimal::Number,
+            format: LiteralFormatDecimal::Decimal,
+        };
+        let b = DecimalSchema {
+            base: TypeBase {
+                description: None,
+                title: Some("New".into()),
+                default: None,
+            },
+            r#type: LiteralTypeDecimal::Number,
+            format: LiteralFormatDecimal::Decimal,
+        };
+        let mut out = vec![];
+        diff_schema_type(
+            &SchemaType::DecimalSchema(a),
+            &SchemaType::DecimalSchema(b),
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldTitleChanged);
     }
 }
