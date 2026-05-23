@@ -1,7 +1,7 @@
 use crate::cli::base::Executable;
 use crate::console::console::{CONSOLE, Level};
 use crate::console::spinner;
-use crate::diff::diff::diff_schemas;
+use crate::diff::diff::{DiffOptions, diff_schemas_with};
 use crate::diff::matrix::{build_chain, create_compatibility_matrix};
 use crate::diff::version::check_version_bump;
 use crate::io::changes::{read_changes_from_diff_files, write_changes};
@@ -40,6 +40,21 @@ pub struct DiffSchemasArgs {
     /// The JSON-file to save the differences to.
     #[arg(short = 'o', long = "output", required = true, value_hint = ValueHint::FilePath)]
     pub output_file: PathBuf,
+    /// Include version-related field differences in the diff output.
+    ///
+    /// By default, two kinds of differences are suppressed:
+    ///   - description text that only differs in an inlined version string
+    ///     (e.g. a documentation URL pointing at a different release tag);
+    ///   - the default value of the `_version` field (which always carries
+    ///     the schema's own version).
+    ///
+    /// Pass this flag to surface those differences as
+    /// `FieldDescriptionChanged` / `FieldDefaultChanged` entries in the diff
+    /// JSON — useful for a truly verbatim schema-to-schema diff. Note that
+    /// `diff version-bump` consumes the diff JSON as-is, so opting in here
+    /// will cause those changes to influence the inferred bump type too.
+    #[arg(long = "include-version-changes", default_value_t = false)]
+    pub include_version_changes: bool,
 }
 
 /// Create a difference matrix from the diff-files created by the 'diff schemas' command.
@@ -117,7 +132,13 @@ fn run_schemas(a: &DiffSchemasArgs) -> Result<(), String> {
     let new = out_new.schemas;
     let changes = {
         let _spin = spinner::squish("Comparing JSON-schemas...");
-        diff_schemas(&old, &new)
+        diff_schemas_with(
+            &old,
+            &new,
+            &DiffOptions {
+                include_version_changes: a.include_version_changes,
+            },
+        )
     };
     cprint_normal!("Compared JSON-schemas.");
     write_changes(&changes, &a.output_file)?;
@@ -309,6 +330,7 @@ mod tests {
             input_dir_base: base,
             input_dir_comp: comp,
             output_file: diff_file.clone(),
+            include_version_changes: false,
         })
         .unwrap();
         assert!(diff_file.exists());
