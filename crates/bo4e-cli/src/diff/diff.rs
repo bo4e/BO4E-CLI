@@ -327,6 +327,11 @@ fn diff_all_of_schemas(
     );
 }
 
+// Eight arguments mirror the other diff walkers (old/new, paired traces,
+// kind, module context, opts, sink) — collapsing any pair into a struct
+// would make the call sites in diff_any_of_schemas / diff_all_of_schemas
+// less readable, not more.
+#[allow(clippy::too_many_arguments)]
 fn diff_variant_list(
     old: &[SchemaType],
     new: &[SchemaType],

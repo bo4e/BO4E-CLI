@@ -47,6 +47,8 @@ jobs:
           components: clippy
       - name: Run clippy action
         uses: clechasseur/rs-clippy-check@v5
+        with:
+          args: --workspace --all-targets -- -D warnings
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
   doc:
