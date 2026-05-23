@@ -460,23 +460,25 @@ fn diff_schema_type(
         // spurious `FieldTypeChanged` even when only the title / description /
         // default actually differs.
         (NumberSchema(o), NumberSchema(n)) => {
-            diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
         }
         (IntegerSchema(o), IntegerSchema(n)) => {
-            diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
         }
         (BooleanSchema(o), BooleanSchema(n)) => {
-            diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
         }
         (NullSchema(o), NullSchema(n)) => {
-            diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
         }
-        (AnySchema(o), AnySchema(n)) => diff_type_base(&o.base, &n.base, old_trace, new_trace, out),
+        (AnySchema(o), AnySchema(n)) => {
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
+        }
         (DecimalSchema(o), DecimalSchema(n)) => {
-            diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
         }
         (ConstantSchema(o), ConstantSchema(n)) => {
-            diff_type_base(&o.base, &n.base, old_trace, new_trace, out)
+            diff_type_base(&o.base, &n.base, old_trace, new_trace, opts, out)
         }
         _ => diff_schema_differing_types(old, new, old_trace, new_trace, out),
     }
@@ -1098,6 +1100,7 @@ mod tests {
             "/x",
             "/x",
             &m(),
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
@@ -1118,6 +1121,7 @@ mod tests {
             "/x",
             "/x",
             &m(),
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
@@ -1138,6 +1142,7 @@ mod tests {
             "/x",
             "/x",
             &m(),
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
@@ -1158,6 +1163,7 @@ mod tests {
             "/x",
             "/x",
             &m(),
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
@@ -1194,6 +1200,7 @@ mod tests {
             "/x",
             "/x",
             &m(),
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
@@ -1214,6 +1221,7 @@ mod tests {
             "/x",
             "/x",
             &m(),
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
@@ -1250,6 +1258,7 @@ mod tests {
             "/x",
             "/x",
             &m(),
+            &DiffOptions::default(),
             &mut out,
         );
         assert_eq!(out.len(), 1);
