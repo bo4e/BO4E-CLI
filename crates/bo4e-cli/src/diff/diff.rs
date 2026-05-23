@@ -794,7 +794,15 @@ mod tests {
         };
         let m = vec!["bo".to_string(), "Angebot".to_string()];
         let mut out = vec![];
-        diff_ref_schemas(&r_relative, &r_absolute, "/x", "/x", &m, &DiffOptions::default(), &mut out);
+        diff_ref_schemas(
+            &r_relative,
+            &r_absolute,
+            "/x",
+            "/x",
+            &m,
+            &DiffOptions::default(),
+            &mut out,
+        );
         assert!(out.is_empty(), "expected no change, got {:?}", out);
     }
 
@@ -840,7 +848,15 @@ mod tests {
             any_of: vec![string_schema_t(), ref_t("Foo.json#")],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
+        diff_any_of_schemas(
+            &old,
+            &new,
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
         let added: Vec<_> = out
             .iter()
             .filter(|c| c.r#type == ChangeType::FieldAnyOfTypeAdded)
@@ -860,7 +876,15 @@ mod tests {
             any_of: vec![string_schema_t()],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
+        diff_any_of_schemas(
+            &old,
+            &new,
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
         let removed: Vec<_> = out
             .iter()
             .filter(|c| c.r#type == ChangeType::FieldAnyOfTypeRemoved)
@@ -884,7 +908,15 @@ mod tests {
             any_of: vec![SchemaType::StringSchema(s_new)],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
+        diff_any_of_schemas(
+            &old,
+            &new,
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
         assert!(
             out.iter()
                 .all(|c| c.r#type != ChangeType::FieldAnyOfTypeAdded)
@@ -916,7 +948,15 @@ mod tests {
             )],
         };
         let mut out = vec![];
-        diff_any_of_schemas(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
+        diff_any_of_schemas(
+            &old,
+            &new,
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
         assert!(out.is_empty(), "expected no changes, got {:?}", out);
     }
 
@@ -926,7 +966,15 @@ mod tests {
         let old = SchemaType::StringSchema(StringSchema::default());
         let new = SchemaType::NumberSchema(NumberSchema::default());
         let mut out = vec![];
-        diff_schema_type(&old, &new, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
+        diff_schema_type(
+            &old,
+            &new,
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldTypeChanged);
     }
@@ -947,7 +995,15 @@ mod tests {
             items: Box::new(SchemaType::StringSchema(StringSchema::default())),
         });
         let mut out = vec![];
-        diff_schema_type(&obj, &arr, "/x", "/x", &m(), &DiffOptions::default(), &mut out);
+        diff_schema_type(
+            &obj,
+            &arr,
+            "/x",
+            "/x",
+            &m(),
+            &DiffOptions::default(),
+            &mut out,
+        );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].r#type, ChangeType::FieldCardinalityChanged);
     }
