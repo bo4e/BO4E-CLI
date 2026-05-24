@@ -1,4 +1,17 @@
 
+## 1.2.0 - 2026-05-24
+
+### Added
+
+- **diff**: Detect ConstantSchema.format changes (#157)
+- **diff**: Detect ConstantSchema.constant changes (FieldConstantChanged) (#156)
+- **diff**: --include-version-changes flag + dirty-version regex fix (#158)
+
+### Fixed
+
+- **diff**: Detect TypeBase changes on leaf SchemaType variants (#155)
+
+
 ## 1.1.1 - 2026-05-20
 
 ### Added
