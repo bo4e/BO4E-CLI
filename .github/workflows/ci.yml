@@ -94,11 +94,6 @@ jobs:
         run: cargo generate-lockfile
       - name: cargo test --locked
         run: cargo test --locked --all-features --all-targets
-        # Use the bundled rust-lld instead of MSVC link.exe on Windows MSVC
-        # targets; link.exe is the single slowest phase of the test job
-        # there. rust-lld ships with rustup so no extra install needed.
-        env:
-          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: rust-lld
   kroki:
     name: kroki-validation
     runs-on: ubuntu-latest
