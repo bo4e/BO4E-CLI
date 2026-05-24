@@ -82,14 +82,23 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      # Restore must run *before* `cargo test` — Swatinem/rust-cache restores
+      # at the position it appears in. Previously placed after `cargo test`,
+      # which meant the cache was saved on post-job but never restored,
+      # turning every run into a cold compile (≈3m wasted on Windows).
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
       # enable this ci template to run regardless of whether the lockfile is checked in or not
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: cargo test --locked
         run: cargo test --locked --all-features --all-targets
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
+        # Use the bundled rust-lld instead of MSVC link.exe on Windows MSVC
+        # targets; link.exe is the single slowest phase of the test job
+        # there. rust-lld ships with rustup so no extra install needed.
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: rust-lld
   kroki:
     name: kroki-validation
     runs-on: ubuntu-latest
