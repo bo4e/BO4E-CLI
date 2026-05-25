@@ -140,7 +140,7 @@ fn best_community_for(
         let s_tot = sum_tot.get(c).copied().unwrap_or(0.0);
         let gain = s_in / m - (k_i * s_tot) / (2.0 * m * m);
         if (gain - best_gain).abs() < 1e-12 {
-            if rng.r#gen::<bool>() {
+            if rng.random::<bool>() {
                 best = *c;
             }
         } else if gain > best_gain {
