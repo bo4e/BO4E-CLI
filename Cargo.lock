@@ -226,7 +226,7 @@ dependencies = [
  "lazy_static",
  "octocrab",
  "petgraph",
- "rand 0.8.6",
+ "rand 0.9.4",
  "regex",
  "reqwest",
  "serde",
