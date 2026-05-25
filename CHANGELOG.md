@@ -1,4 +1,11 @@
 
+## 1.2.1 - 2026-05-25
+
+### Fixed
+
+- **diff**: Use ∅ instead of - for NonExistent in matrix emote output (#168)
+
+
 ## 1.2.0 - 2026-05-24
 
 ### Added
