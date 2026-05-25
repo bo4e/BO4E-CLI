@@ -10,7 +10,7 @@ lazy_static! {
         (CompatibilitySymbol::ChangeNone,        "\u{1F7E2}".to_string()), // 🟢
         (CompatibilitySymbol::ChangeNonCritical, "\u{1F7E1}".to_string()), // 🟡
         (CompatibilitySymbol::ChangeCritical,    "\u{1F534}".to_string()), // 🔴
-        (CompatibilitySymbol::NonExistent,       "-".to_string()),
+        (CompatibilitySymbol::NonExistent,       "\u{2205}".to_string()), // ∅
         (CompatibilitySymbol::Added,             "\u{2795}".to_string()),  // ➕
         (CompatibilitySymbol::Removed,           "\u{2796}".to_string()),  // ➖
     ]);
