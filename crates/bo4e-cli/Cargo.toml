@@ -51,7 +51,7 @@ csv = "1"
 indexmap = { version = "2", features = ["serde"] }
 bo4e-schemas = { path = "../bo4e-schemas" }
 bo4e-codegen = { path = "../bo4e-codegen", default-features = false }
-petgraph = "0.6"
+petgraph = "0.8"
 globset = "0.4"
 rand = "0.9"
 thiserror = "2"
