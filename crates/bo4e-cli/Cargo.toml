@@ -44,7 +44,7 @@ serde_regex = "1.1.0"
 octocrab = "0.51.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 http = "1.4.0"
-indicatif = { version = "0.18.0", features = ["tokio"] }
+indicatif = { version = "0.18.4", features = ["tokio"] }
 console = { version = "0.16.3", features = ["windows-console-colors"] }
 walkdir = "2.5"
 csv = "1"
