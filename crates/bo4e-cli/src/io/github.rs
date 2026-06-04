@@ -12,7 +12,12 @@ use std::str::FromStr;
 use tokio::task::JoinSet;
 
 lazy_static! {
-    static ref REGEX_GITHUB_TOKEN: regex::Regex = regex::Regex::new(r"^(gh[pousr]_[A-Za-z0-9_]{36,251}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$").unwrap();
+    // The `gh*_` arm intentionally has no upper length bound. GitHub has
+    // grown Actions installation tokens (`ghs_…`) past 400 chars, and the
+    // previous {36,251} cap rejected them before we could even call the
+    // API. Anchoring with `^…$` plus the character class keeps the match
+    // tight; the real authority on token validity is GitHub itself.
+    static ref REGEX_GITHUB_TOKEN: regex::Regex = regex::Regex::new(r"^(gh[pousr]_[A-Za-z0-9_]{36,}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$").unwrap();
     static ref REGEX_GITHUB_SRC_PATH: regex::Regex = regex::Regex::new(r"^src/bo4e_schemas/(?P<module>.*)\.json$").unwrap();
 }
 
@@ -319,5 +324,39 @@ mod tests {
             release_exists(v, None)
         }
         let _ = _assert_signature; // silence unused
+    }
+
+    #[test]
+    fn classic_pat_is_valid() {
+        // Classic PATs are 40 chars total: `ghp_` + 36 body chars.
+        let token = format!("ghp_{}", "a".repeat(36));
+        assert!(is_valid_github_token(&token));
+    }
+
+    #[test]
+    fn fine_grained_pat_is_valid() {
+        // `github_pat_` + 22 chars + `_` + 59 chars.
+        let token = format!("github_pat_{}_{}", "a".repeat(22), "b".repeat(59));
+        assert!(is_valid_github_token(&token));
+    }
+
+    #[test]
+    fn long_actions_installation_token_is_valid() {
+        // Regression: GitHub Actions now issues `ghs_…` installation tokens
+        // well over 400 chars. The previous {36,251} cap rejected them, which
+        // broke `bo4e pull` when invoked from a GitHub Actions workflow with
+        // `GITHUB_TOKEN`.
+        let token = format!("ghs_{}", "A".repeat(422));
+        assert_eq!(token.len(), 426);
+        assert!(is_valid_github_token(&token));
+    }
+
+    #[test]
+    fn garbage_is_rejected() {
+        assert!(!is_valid_github_token(""));
+        assert!(!is_valid_github_token("not-a-token"));
+        assert!(!is_valid_github_token("ghp_short"));
+        // Wrong prefix letter (only p/o/u/s/r are accepted after `gh`).
+        assert!(!is_valid_github_token(&format!("ghx_{}", "a".repeat(36))));
     }
 }
