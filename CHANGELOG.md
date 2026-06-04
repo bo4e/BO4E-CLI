@@ -1,4 +1,11 @@
 
+## 1.2.2 - 2026-06-04
+
+### Fixed
+
+- **github**: Drop upper length cap on gh*_ token regex (#176)
+
+
 ## 1.2.1 - 2026-05-25
 
 ### Fixed
