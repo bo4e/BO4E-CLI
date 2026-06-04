@@ -1,7 +1,7 @@
 use crate::graph::extract::PetGraph;
 use petgraph::graph::NodeIndex;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use std::collections::HashMap;
 
 pub struct Communities {
