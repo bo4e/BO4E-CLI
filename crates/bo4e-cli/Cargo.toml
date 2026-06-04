@@ -23,14 +23,14 @@ name = "bo4e"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.5.45", features = ["derive", "env", "unicode", "wrap_help"] }
+clap = { version = "4.5.60", features = ["derive", "env", "unicode", "wrap_help"] }
 clap_complete = { version = "4.5", features = ["unstable-dynamic"] }
 clap_complete_nushell = "4.5"
 dirs = "5"
 color-eyre = "0.6.3"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 futures = "0.3.32"
-tokio = { version = "1.40.0", features = ["full"] }
+tokio = { version = "1.50.0", features = ["full"] }
 regex = "1.12.3"
 lazy_static = "1.5.0"
 chrono = { version = "0.4.44", features = ["serde"] }
@@ -44,14 +44,14 @@ serde_regex = "1.1.0"
 octocrab = "0.51.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 http = "1.4.0"
-indicatif = { version = "0.18.0", features = ["tokio"] }
+indicatif = { version = "0.18.4", features = ["tokio"] }
 console = { version = "0.16.3", features = ["windows-console-colors"] }
 walkdir = "2.5"
 csv = "1"
 indexmap = { version = "2", features = ["serde"] }
 bo4e-schemas = { path = "../bo4e-schemas" }
 bo4e-codegen = { path = "../bo4e-codegen", default-features = false }
-petgraph = "0.6"
+petgraph = "0.8"
 globset = "0.4"
 rand = "0.9"
 thiserror = "2"
