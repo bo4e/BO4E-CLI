@@ -1,4 +1,11 @@
 
+## 1.2.3 - 2026-06-05
+
+### Fixed
+
+- **github**: Accept JWT-style `ghs_…` Actions installation tokens (#178)
+
+
 ## 1.2.2 - 2026-06-04
 
 ### Fixed
