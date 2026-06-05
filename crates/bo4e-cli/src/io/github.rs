@@ -12,12 +12,14 @@ use std::str::FromStr;
 use tokio::task::JoinSet;
 
 lazy_static! {
-    // The `gh*_` arm intentionally has no upper length bound. GitHub has
-    // grown Actions installation tokens (`ghs_…`) past 400 chars, and the
-    // previous {36,251} cap rejected them before we could even call the
-    // API. Anchoring with `^…$` plus the character class keeps the match
-    // tight; the real authority on token validity is GitHub itself.
-    static ref REGEX_GITHUB_TOKEN: regex::Regex = regex::Regex::new(r"^(gh[pousr]_[A-Za-z0-9_]{36,}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$").unwrap();
+    // The `gh*_` arm intentionally has no upper length bound and accepts
+    // the full base64url alphabet plus `.`. GitHub now issues Actions
+    // installation tokens (`ghs_…`) as JWT-encoded blobs — three
+    // base64url segments joined by `.` — which the previous
+    // `[A-Za-z0-9_]` body charset rejected. Anchoring with `^…$` plus
+    // the character class still keeps the match tight; the real
+    // authority on token validity is GitHub itself.
+    static ref REGEX_GITHUB_TOKEN: regex::Regex = regex::Regex::new(r"^(gh[pousr]_[A-Za-z0-9_.\-]{36,}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$").unwrap();
     static ref REGEX_GITHUB_SRC_PATH: regex::Regex = regex::Regex::new(r"^src/bo4e_schemas/(?P<module>.*)\.json$").unwrap();
 }
 
@@ -348,6 +350,29 @@ mod tests {
         // `GITHUB_TOKEN`.
         let token = format!("ghs_{}", "A".repeat(422));
         assert_eq!(token.len(), 426);
+        assert!(is_valid_github_token(&token));
+    }
+
+    #[test]
+    fn jwt_style_installation_token_is_valid() {
+        // Regression: GitHub Actions installation tokens are now JWT-encoded
+        // (`header.payload.signature`, three base64url segments joined by
+        // `.`). Confirmed in BO4E-Python's docs CI on 2026-06-05 by sorting
+        // the body chars and finding two `.` near the start. The prior
+        // `[A-Za-z0-9_]` body charset rejected them.
+        let header = "A".repeat(140);
+        let payload = "B".repeat(140);
+        let signature = "C".repeat(140);
+        let token = format!("ghs_{header}.{payload}.{signature}");
+        assert_eq!(token.len(), 426);
+        assert!(is_valid_github_token(&token));
+    }
+
+    #[test]
+    fn base64url_dash_is_valid_in_body() {
+        // base64url uses `-` where base64 uses `+`. JWT signatures and
+        // payloads can contain `-`, so the body charset must accept it.
+        let token = format!("ghs_{}", "a-b_".repeat(40));
         assert!(is_valid_github_token(&token));
     }
 
