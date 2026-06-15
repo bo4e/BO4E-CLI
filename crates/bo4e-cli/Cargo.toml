@@ -41,7 +41,7 @@ url = { version = "2.5.8", features = ["serde"] }
 itertools = "0.14.0"
 bimap = { version = "0.6.3", features = ["serde"] }
 serde_regex = "1.1.0"
-octocrab = "0.51.0"
+octocrab = "0.53.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 http = "1.4.1"
 indicatif = { version = "0.18.4", features = ["tokio"] }
