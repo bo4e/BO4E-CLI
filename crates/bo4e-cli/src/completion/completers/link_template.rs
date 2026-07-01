@@ -3,8 +3,11 @@ use std::ffi::OsStr;
 
 const PLACEHOLDERS: &[&str] = &[
     "{pkg}",
+    "{pkg.lower}",
     "{module}",
+    "{module.lower}",
     "{class}",
+    "{class.lower}",
     "{version}",
     "{cwd}",
     "{output_dir}",

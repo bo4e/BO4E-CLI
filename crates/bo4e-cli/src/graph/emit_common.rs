@@ -84,25 +84,34 @@ fn resolve_placeholder(
     cwd: &Path,
     output_dir: &Path,
 ) -> Option<String> {
-    match name {
-        "pkg" => Some(pkg.to_string()),
-        "module" => Some(module.to_string()),
-        "class" => Some(class.to_string()),
-        "version" => Some(version.to_string()),
-        n if n == "cwd" || n.starts_with("cwd.") => apply_path_accessor(cwd, accessor_of(n, "cwd")),
-        n if n == "output_dir" || n.starts_with("output_dir.") => {
-            apply_path_accessor(output_dir, accessor_of(n, "output_dir"))
-        }
+    // Split `{base.accessor}` into its base name and optional accessor. The
+    // string placeholders (`pkg`/`module`/`class`/`version`) take case
+    // accessors (`.lower`/`.upper`); the path placeholders keep their existing
+    // accessors (`.rel`/`.uri`/…), defaulting to `.abs` when bare.
+    let (base, accessor) = match name.split_once('.') {
+        Some((b, a)) => (b, Some(a)),
+        None => (name, None),
+    };
+    match base {
+        "pkg" => apply_str_accessor(pkg, accessor),
+        "module" => apply_str_accessor(module, accessor),
+        "class" => apply_str_accessor(class, accessor),
+        "version" => apply_str_accessor(version, accessor),
+        "cwd" => apply_path_accessor(cwd, accessor.or(Some("abs"))),
+        "output_dir" => apply_path_accessor(output_dir, accessor.or(Some("abs"))),
         _ => None,
     }
 }
 
-fn accessor_of<'a>(name: &'a str, prefix: &str) -> Option<&'a str> {
-    let rest = name.strip_prefix(prefix)?;
-    if rest.is_empty() {
-        Some("abs")
-    } else {
-        rest.strip_prefix('.')
+/// Apply a case accessor to a string placeholder. No accessor yields the value
+/// verbatim; an unrecognised accessor yields `None`, so the literal `{…}`
+/// survives substitution (matching the unknown-placeholder behaviour).
+fn apply_str_accessor(value: &str, accessor: Option<&str>) -> Option<String> {
+    match accessor {
+        None => Some(value.to_string()),
+        Some("lower") => Some(value.to_lowercase()),
+        Some("upper") => Some(value.to_uppercase()),
+        _ => None,
     }
 }
 
@@ -295,6 +304,41 @@ mod tests {
             &outd(),
         );
         assert_eq!(r.unwrap(), "https://x/{unknown}/bo");
+    }
+
+    #[test]
+    fn class_lower_accessor_folds_case() {
+        // BO4E-python module files are the class name lowercased (e.g.
+        // `Angebotsteil` -> `angebotsteil.py`), so the Sphinx anchor needs
+        // `{class.lower}` to build `bo4e.<pkg>.<module>.<Class>`.
+        let r = render_link(
+            Some("api/bo4e.{pkg}.html#bo4e.{pkg}.{class.lower}.{class}"),
+            "com",
+            "com.Angebotsteil",
+            "Angebotsteil",
+            "v",
+            &cwd(),
+            &outd(),
+        );
+        assert_eq!(
+            r.unwrap(),
+            "api/bo4e.com.html#bo4e.com.angebotsteil.Angebotsteil"
+        );
+    }
+
+    #[test]
+    fn upper_accessor_and_unknown_accessor_behaviour() {
+        // `.upper` folds up; an unrecognised accessor leaves the token literal.
+        let r = render_link(
+            Some("{pkg.upper}/{class.bogus}"),
+            "com",
+            "com.Angebotsteil",
+            "Angebotsteil",
+            "v",
+            &cwd(),
+            &outd(),
+        );
+        assert_eq!(r.unwrap(), "COM/{class.bogus}");
     }
 
     #[test]
