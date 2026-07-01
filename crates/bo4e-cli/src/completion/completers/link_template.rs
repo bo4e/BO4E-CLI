@@ -1,13 +1,14 @@
 use clap_complete::CompletionCandidate;
 use std::ffi::OsStr;
 
+// Bare placeholder tokens only. The `.lower` / `.upper` case accessors and the
+// `{cwd}` / `{output_dir}` path accessors (`.rel` / `.uri` / …) are a documented
+// mini-syntax the user appends after the base token; enumerating the accessor
+// cross-product here would flood completion for little gain.
 const PLACEHOLDERS: &[&str] = &[
     "{pkg}",
-    "{pkg.lower}",
     "{module}",
-    "{module.lower}",
     "{class}",
-    "{class.lower}",
     "{version}",
     "{cwd}",
     "{output_dir}",
