@@ -1,8 +1,8 @@
 use crate::graph::emit_common::{
     dotted, format_cardinality, html_escape, pkg_color, pkg_color_darker, pkg_color_lighter,
-    render_link,
 };
 use crate::graph::extract::PetGraph;
+use crate::graph::link_template::{LinkContext, render_link};
 use crate::models::graph::GraphIR;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
@@ -114,12 +114,12 @@ pub fn emit(g: &PetGraph, ir: &GraphIR, opts: &EmitOptions) -> String {
         );
         let url = render_link(
             opts.link_template,
-            &pkg,
-            &module_dotted,
-            &class_name,
-            opts.version,
-            opts.cwd,
-            opts.output_dir,
+            &LinkContext {
+                module,
+                version: opts.version,
+                cwd: opts.cwd,
+                output_dir: opts.output_dir,
+            },
         );
         let url_attr = url.map(|u| format!(r#", URL="{}""#, u)).unwrap_or_default();
         out.push_str(&format!(

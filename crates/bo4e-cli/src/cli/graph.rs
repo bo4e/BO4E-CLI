@@ -135,19 +135,22 @@ const LINK_TEMPLATE_LONG_HELP_OVERVIEW: &str =
 becomes a hyperlink in the rendered diagram.
 
 Placeholders (expanded per node):
-  {pkg[.lower|.upper]}      BO4E package, e.g. `bo`
-  {module[.lower|.upper]}   dotted module path, e.g. `bo.Angebot`
-  {class[.lower|.upper]}    class name, e.g. `Angebot`
-  {version[.lower|.upper]}  BO4E version of the source schemas
+  {pkg[.lower|.upper]}       BO4E package, e.g. `bo`
+  {module[.lower|.upper]}    dotted module path, e.g. `bo.Angebot`
+  {class[.lower|.upper]}     class name, e.g. `Angebot`
+  {namespace[.lower|.upper]} Python package: `bo4e` prepended to the module's
+                             parent package, e.g. `bo4e.bo` (or plain `bo4e`
+                             for a root-level schema like `ZusatzAttribut`)
+  {version}                  BO4E version of the source schemas (no accessors)
   {cwd[.abs|.rel|.uri|.posix|.name]}         current working directory
   {output_dir[.abs|.rel|.uri|.posix|.name]}  parent directory of `-o`
 
 Examples:
-  # Link to the official BO4E-Python API docs. Sphinx groups modules into
-  # per-package pages (`bo4e.<pkg>.html`) and anchors each class at
-  # `bo4e.<pkg>.<module-file>.<Class>`, where the module file is the class
-  # name lowercased — hence `{class.lower}`:
-  --link-template \"https://bo4e.github.io/BO4E-python/{version}/api/bo4e.{pkg}.html#bo4e.{pkg}.{class.lower}.{class}\"
+  # Link to the official BO4E-Python API docs. Sphinx documents each class on
+  # its package page (`{namespace}.html`) under a module anchor; the module
+  # file is the class name lowercased. `{namespace}` collapses the root-schema
+  # case (`bo4e.html`) and the nested case (`bo4e.bo.html`) into one template:
+  --link-template \"https://bo4e.github.io/BO4E-python/{version}/api/{namespace}.html#module-{namespace}.{class.lower}\"
 
   # Link to a sibling SVG written next to the diagram:
   --link-template \"{pkg}/{class}.svg\"
@@ -308,10 +311,13 @@ const LINK_TEMPLATE_LONG_HELP_SINGLE: &str =
 becomes a hyperlink in the rendered diagram.
 
 Placeholders (expanded per node):
-  {pkg[.lower|.upper]}      BO4E package, e.g. `bo`
-  {module[.lower|.upper]}   dotted module path, e.g. `bo.Angebot`
-  {class[.lower|.upper]}    class name, e.g. `Angebot`
-  {version[.lower|.upper]}  BO4E version of the source schemas
+  {pkg[.lower|.upper]}       BO4E package, e.g. `bo`
+  {module[.lower|.upper]}    dotted module path, e.g. `bo.Angebot`
+  {class[.lower|.upper]}     class name, e.g. `Angebot`
+  {namespace[.lower|.upper]} Python package: `bo4e` prepended to the module's
+                             parent package, e.g. `bo4e.bo` (or plain `bo4e`
+                             for a root-level schema like `ZusatzAttribut`)
+  {version}                  BO4E version of the source schemas (no accessors)
   {cwd[.abs|.rel|.uri|.posix|.name]}         current working directory
   {output_dir[.abs|.rel|.uri|.posix|.name]}  `-o` (in `--class all` mode) \
 or its parent
@@ -320,9 +326,9 @@ Examples:
   # Cross-link every per-class SVG to its siblings:
   --link-template \"{class}.svg\"
 
-  # Link to the official BO4E-Python API docs (per-package Sphinx pages with a
-  # class anchor; the module file is the class name lowercased):
-  --link-template \"https://bo4e.github.io/BO4E-python/{version}/api/bo4e.{pkg}.html#bo4e.{pkg}.{class.lower}.{class}\"
+  # Link to the official BO4E-Python API docs (per-package Sphinx page +
+  # module anchor; the module file is the class name lowercased):
+  --link-template \"https://bo4e.github.io/BO4E-python/{version}/api/{namespace}.html#module-{namespace}.{class.lower}\"
 
   # Anchor into a single docs page:
   --link-template \"https://docs.example.com/bo4e#{class}\"
