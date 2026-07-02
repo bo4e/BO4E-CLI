@@ -12,6 +12,15 @@ use std::io::Read;
 use std::str::FromStr;
 use tar::Archive;
 
+// Bound every GitHub request so a stalled connection fails fast instead of
+// hanging `pull` indefinitely. `REQUEST_TIMEOUT` is the ceiling for a whole
+// request incl. body download; the schema tarball is tiny (~60 KB) so a
+// generous value still bails out long before a user would give up. This is
+// deliberately far higher than the 1.5 s used by the tab-completion client,
+// whose only job is to feel instant.
+const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 const GITHUB_API: &str = "https://api.github.com";
 const OWNER: &str = "bo4e";
 const REPO: &str = "BO4E-Schemas";
@@ -105,6 +114,8 @@ fn build_client(token: Option<&str>) -> Result<Client, String> {
     Client::builder()
         .user_agent(USER_AGENT)
         .default_headers(headers)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(|e| format!("failed to build HTTP client: {e}"))
 }
