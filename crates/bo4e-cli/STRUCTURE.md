@@ -28,7 +28,6 @@ src/
 │   ├── highlighter.rs # rule-based colouriser (schemas, versions, paths, BO4E, help text)
 │   ├── mark.rs        # MarkStyle + sentinel chars used by macros to wrap pre-styled spans
 │   ├── palette.rs     # the BO4E colour palette
-│   ├── progress_bar.rs# `new_progress_bar` / `finish_progress_bar` (indicatif wrapper)
 │   └── spinner.rs     # spinner helpers for long-running calls
 ├── edit.rs / edit/
 │   ├── add.rs         # add_field / add_model / add_enum_item transforms
