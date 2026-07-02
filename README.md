@@ -720,7 +720,7 @@ Flags:
 | `--overlap`                | Overlap-removal strategy: `prism` (default; needs GTS), `scale`, `scalexy`, `true`, `false`.                           |
 | `--node-margin`            | Extra margin (points) around each node, for non-`dot` layouts. Default `50`; pass `0` to fall back to Graphviz's `+4`. |
 | `--edge-labels`            | Re-enable `fieldname [cardinality]` labels on every edge (off by default to reduce clutter).                           |
-| `--link-template`          | URL template for clickable class nodes. Supports `{pkg}`, `{module}`, `{class}`, `{version}`, and the `{cwd[.…]}` / `{output_dir[.…]}` path variants. Run `bo4e graph overview --help` for the full reference. |
+| `--link-template`          | URL template for clickable class nodes. Supports `{pkg}`, `{module}`, `{class}`, `{namespace}` (each with an optional `.lower` / `.upper` case accessor), `{version}` (no accessors), and the `{cwd[.…]}` / `{output_dir[.…]}` path variants. Run `bo4e graph overview --help` for the full reference. |
 
 ## `bo4e graph single`
 

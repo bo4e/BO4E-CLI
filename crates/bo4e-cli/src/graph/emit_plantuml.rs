@@ -1,8 +1,7 @@
-use crate::graph::emit_common::{
-    COLOUR_BO, COLOUR_COM, COLOUR_ENUM, format_cardinality, render_link,
-};
+use crate::graph::emit_common::{COLOUR_BO, COLOUR_COM, COLOUR_ENUM, format_cardinality};
 use crate::graph::emit_dot::Detail;
 use crate::graph::extract::PetGraph;
+use crate::graph::link_template::{LinkContext, render_link};
 use crate::models::graph::GraphIR;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
@@ -46,6 +45,7 @@ pub fn emit(g: &PetGraph, ir: &GraphIR, opts: &EmitOptions) -> String {
         let cls = root_module.last().cloned().unwrap_or_default();
         out.push_str(&class_decl(
             node_by_module.get(&g[*nx]).copied(),
+            root_module,
             &cls,
             true,
             opts,
@@ -128,7 +128,13 @@ fn emit_namespace_blocks(
             let cls = g[nx].last().cloned().unwrap_or_default();
             out.push_str(&format!(
                 "    {}",
-                class_decl(node_by_module.get(&g[nx]).copied(), &cls, false, opts)
+                class_decl(
+                    node_by_module.get(&g[nx]).copied(),
+                    &g[nx],
+                    &cls,
+                    false,
+                    opts
+                )
             ));
             out.push('\n');
         }
@@ -161,7 +167,13 @@ fn emit_louvain_packages(
             let cls = g[nx].last().cloned().unwrap_or_default();
             out.push_str(&format!(
                 "    {}",
-                class_decl(node_by_module.get(&g[nx]).copied(), &cls, false, opts)
+                class_decl(
+                    node_by_module.get(&g[nx]).copied(),
+                    &g[nx],
+                    &cls,
+                    false,
+                    opts
+                )
             ));
             out.push('\n');
         }
@@ -184,6 +196,7 @@ fn emit_flat(
         let cls = g[nx].last().cloned().unwrap_or_default();
         out.push_str(&class_decl(
             node_by_module.get(&g[nx]).copied(),
+            &g[nx],
             &cls,
             false,
             opts,
@@ -194,22 +207,20 @@ fn emit_flat(
 
 fn class_decl(
     node: Option<&crate::models::graph::Node>,
+    module_path: &[String],
     class_name: &str,
     is_root: bool,
     opts: &EmitOptions,
 ) -> String {
-    let pkg = node
-        .and_then(|n| n.module.first().cloned())
-        .unwrap_or_default();
-    let module = node.map(|n| n.module.join(".")).unwrap_or_default();
+    let module = module_path.join(".");
     let url = render_link(
         opts.link_template,
-        &pkg,
-        &module,
-        class_name,
-        opts.version,
-        opts.cwd,
-        opts.output_dir,
+        &LinkContext {
+            module: module_path,
+            version: opts.version,
+            cwd: opts.cwd,
+            output_dir: opts.output_dir,
+        },
     );
     let header = match url {
         Some(u) => format!("class \"[[{u} {class_name}]]\\n<size:10>{module}\" as {class_name}",),
