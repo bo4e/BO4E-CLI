@@ -18,7 +18,12 @@ fn cache_path() -> PathBuf {
 pub fn complete(prefix: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
     let prefix = prefix.to_string_lossy().to_string();
     let token = resolve_token_silent(&extract_token_from_env());
-    let runtime = match tokio::runtime::Runtime::new() {
+    // A current-thread runtime is enough for a single blocking GET and keeps
+    // tokio's feature set slim (no `rt-multi-thread`).
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
         Ok(r) => r,
         Err(_) => return Vec::new(),
     };
@@ -48,7 +53,8 @@ async fn fetch(
     etag: Option<&str>,
     token: Option<&str>,
 ) -> Result<FetchResult<Vec<String>>, CacheError> {
-    // Use reqwest directly — octocrab doesn't expose ETag headers ergonomically.
+    // Direct reqwest call — this path needs ETag/`If-None-Match` handling for
+    // the completion cache, which is easiest to express against the raw API.
     let client = reqwest::Client::builder()
         .user_agent("bo4e-cli/version-completer")
         .timeout(std::time::Duration::from_millis(1500))
