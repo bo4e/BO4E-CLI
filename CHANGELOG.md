@@ -1,4 +1,11 @@
 
+## 1.2.4 - 2026-07-02
+
+### Added
+
+- **graph**: Add .lower/.upper case accessors to link-template placeholders (#196)
+
+
 ## 1.2.3 - 2026-06-05
 
 ### Fixed

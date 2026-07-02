@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "bo4e-cli"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "bimap",
  "bo4e-codegen",
