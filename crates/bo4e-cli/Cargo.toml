@@ -58,6 +58,11 @@ petgraph = "0.8"
 globset = "0.4"
 rand = "0.10"
 thiserror = "2"
+# Schema archive download: one `GET .../tarball/{ref}` yields a gzipped tar of
+# the whole repo at that ref, unpacked in-process. flate2's default (pure-Rust
+# miniz_oxide) backend keeps cross-compilation free of a C toolchain.
+flate2 = "1"
+tar = "0.4"
 
 [features]
 default = [
