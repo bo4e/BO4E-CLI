@@ -4,12 +4,12 @@ use bo4e_schemas::models::schema_meta::{Schema, Schemas};
 use bo4e_schemas::models::version::Version;
 use flate2::read::GzDecoder;
 use http::StatusCode;
-use lazy_static::lazy_static;
 use reqwest::Client;
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::Deserialize;
 use std::io::Read;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use tar::Archive;
 
 // Bound every GitHub request so a stalled connection fails fast instead of
@@ -27,20 +27,21 @@ const REPO: &str = "BO4E-Schemas";
 const USER_AGENT: &str = concat!("bo4e-cli/", env!("CARGO_PKG_VERSION"));
 const GH_API_VERSION: &str = "2022-11-28";
 
-lazy_static! {
-    // The `gh*_` arm intentionally has no upper length bound and accepts
-    // the full base64url alphabet plus `.`. GitHub now issues Actions
-    // installation tokens (`ghs_…`) as JWT-encoded blobs — three
-    // base64url segments joined by `.` — which the previous
-    // `[A-Za-z0-9_]` body charset rejected. Anchoring with `^…$` plus
-    // the character class still keeps the match tight; the real
-    // authority on token validity is GitHub itself.
-    static ref REGEX_GITHUB_TOKEN: regex::Regex = regex::Regex::new(r"^(gh[pousr]_[A-Za-z0-9_.\-]{36,}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$").unwrap();
-    // Matches a schema path *relative to the repo root* (the tarball's
-    // top-level `<owner>-<repo>-<sha>/` prefix is stripped first). The
-    // `module` capture keeps sub-directories (`bo/Foo`, `enum/Bar`).
-    static ref REGEX_GITHUB_SRC_PATH: regex::Regex = regex::Regex::new(r"^src/bo4e_schemas/(?P<module>.*)\.json$").unwrap();
-}
+// The `gh*_` arm intentionally has no upper length bound and accepts
+// the full base64url alphabet plus `.`. GitHub now issues Actions
+// installation tokens (`ghs_…`) as JWT-encoded blobs — three
+// base64url segments joined by `.` — which the previous
+// `[A-Za-z0-9_]` body charset rejected. Anchoring with `^…$` plus
+// the character class still keeps the match tight; the real
+// authority on token validity is GitHub itself.
+static REGEX_GITHUB_TOKEN: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"^(gh[pousr]_[A-Za-z0-9_.\-]{36,}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$").unwrap()
+});
+// Matches a schema path *relative to the repo root* (the tarball's
+// top-level `<owner>-<repo>-<sha>/` prefix is stripped first). The
+// `module` capture keeps sub-directories (`bo/Foo`, `enum/Bar`).
+static REGEX_GITHUB_SRC_PATH: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^src/bo4e_schemas/(?P<module>.*)\.json$").unwrap());
 
 pub fn is_valid_github_token(token: &str) -> bool {
     REGEX_GITHUB_TOKEN.is_match(token)

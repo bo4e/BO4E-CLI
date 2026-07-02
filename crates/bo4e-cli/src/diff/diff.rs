@@ -6,20 +6,17 @@ use bo4e_schemas::models::json_schema::{
     SchemaType, StrEnumSchema, StringSchema, TypeBase,
 };
 use bo4e_schemas::models::schema_meta::Schemas;
-use lazy_static::lazy_static;
 use regex::Regex;
+use std::sync::LazyLock;
 
-lazy_static! {
-    // Matches any BO4E version string that may appear inline in a description
-    // — clean release tags AND the dirty forms produced by hatch-vcs
-    // (`+g<commit>` and `.d<YYYYMMDD>` suffixes). Used to strip versions out
-    // of descriptions before comparing them, so a documentation URL like
-    // `.../v202401.6.0/...` matching `.../v202401.7.0+gabc.d20260522/...`
-    // doesn't show up as a real field-description change.
-    static ref REGEX_VERSION_IN_DESC: Regex = Regex::new(
-        r"v\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+g\w+)?(?:\.d\d{8})?"
-    ).unwrap();
-}
+// Matches any BO4E version string that may appear inline in a description
+// — clean release tags AND the dirty forms produced by hatch-vcs
+// (`+g<commit>` and `.d<YYYYMMDD>` suffixes). Used to strip versions out
+// of descriptions before comparing them, so a documentation URL like
+// `.../v202401.6.0/...` matching `.../v202401.7.0+gabc.d20260522/...`
+// doesn't show up as a real field-description change.
+static REGEX_VERSION_IN_DESC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"v\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+g\w+)?(?:\.d\d{8})?").unwrap());
 
 const VERSION_DESC_PLACEHOLDER: &str = "{__gh_version__}";
 const VERSION_TITLE_MARKER: &str = " Version";

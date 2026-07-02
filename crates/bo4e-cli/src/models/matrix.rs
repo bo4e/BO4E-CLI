@@ -1,29 +1,38 @@
 use bimap::BiMap;
 use bo4e_schemas::models::version::DirtyVersion;
 use indexmap::IndexMap;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
+use std::sync::LazyLock;
 
-lazy_static! {
-    pub static ref COMPATIBILITY_SYMBOLS: BiMap<CompatibilitySymbol, String> = BiMap::from_iter([
-        (CompatibilitySymbol::ChangeNone,        "\u{1F7E2}".to_string()), // 🟢
-        (CompatibilitySymbol::ChangeNonCritical, "\u{1F7E1}".to_string()), // 🟡
-        (CompatibilitySymbol::ChangeCritical,    "\u{1F534}".to_string()), // 🔴
-        (CompatibilitySymbol::NonExistent,       "\u{2205}".to_string()), // ∅
-        (CompatibilitySymbol::Added,             "\u{2795}".to_string()),  // ➕
-        (CompatibilitySymbol::Removed,           "\u{2796}".to_string()),  // ➖
-    ]);
+pub static COMPATIBILITY_SYMBOLS: LazyLock<BiMap<CompatibilitySymbol, String>> =
+    LazyLock::new(|| {
+        BiMap::from_iter([
+            (CompatibilitySymbol::ChangeNone, "\u{1F7E2}".to_string()), // 🟢
+            (
+                CompatibilitySymbol::ChangeNonCritical,
+                "\u{1F7E1}".to_string(),
+            ), // 🟡
+            (CompatibilitySymbol::ChangeCritical, "\u{1F534}".to_string()), // 🔴
+            (CompatibilitySymbol::NonExistent, "\u{2205}".to_string()), // ∅
+            (CompatibilitySymbol::Added, "\u{2795}".to_string()),       // ➕
+            (CompatibilitySymbol::Removed, "\u{2796}".to_string()),     // ➖
+        ])
+    });
 
-    pub static ref COMPATIBILITY_TEXTS: BiMap<CompatibilityText, String> = BiMap::from_iter([
-        (CompatibilityText::ChangeNone,        "none".to_string()),
-        (CompatibilityText::ChangeNonCritical, "non-critical".to_string()),
-        (CompatibilityText::ChangeCritical,    "critical".to_string()),
-        (CompatibilityText::NonExistent,       "non-existent".to_string()),
-        (CompatibilityText::Added,             "added".to_string()),
-        (CompatibilityText::Removed,           "removed".to_string()),
-    ]);
-}
+pub static COMPATIBILITY_TEXTS: LazyLock<BiMap<CompatibilityText, String>> = LazyLock::new(|| {
+    BiMap::from_iter([
+        (CompatibilityText::ChangeNone, "none".to_string()),
+        (
+            CompatibilityText::ChangeNonCritical,
+            "non-critical".to_string(),
+        ),
+        (CompatibilityText::ChangeCritical, "critical".to_string()),
+        (CompatibilityText::NonExistent, "non-existent".to_string()),
+        (CompatibilityText::Added, "added".to_string()),
+        (CompatibilityText::Removed, "removed".to_string()),
+    ])
+});
 
 /// Emoji rendering of a compatibility cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
