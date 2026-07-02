@@ -1,10 +1,6 @@
 
 ## 1.2.5 - 2026-07-02
 
-### Added
-
-- **pull**: Fetch schemas via one repo tarball instead of ~200 API calls (#199)
-
 ### Fixed
 
 - **pull**: Bound GitHub requests with connect + request timeouts (#201)
@@ -12,6 +8,7 @@
 ### Performance
 
 - **graph**: Vec-indexed Louvain instead of HashMap<NodeIndex> (#203)
+- **pull**: Fetch schemas via one repo tarball instead of ~200 API calls (#199)
 - Shrink release binary ~13MB→5.7MB (profile, deps, drop octocrab) (#198)
 
 
