@@ -1,18 +1,16 @@
-use crate::console::progress_bar::{
-    abandon_progress_bar_with_error, finish_progress_bar, new_progress_bar,
-};
 use crate::console::spinner;
 use crate::{cprint_normal, cprint_verbose};
 use bo4e_schemas::models::schema_meta::{Schema, Schemas};
 use bo4e_schemas::models::version::Version;
+use flate2::read::GzDecoder;
 use http::StatusCode;
 use lazy_static::lazy_static;
 use reqwest::Client;
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::Deserialize;
-use std::pin::Pin;
+use std::io::Read;
 use std::str::FromStr;
-use tokio::task::JoinSet;
+use tar::Archive;
 
 const GITHUB_API: &str = "https://api.github.com";
 const OWNER: &str = "bo4e";
@@ -29,6 +27,9 @@ lazy_static! {
     // the character class still keeps the match tight; the real
     // authority on token validity is GitHub itself.
     static ref REGEX_GITHUB_TOKEN: regex::Regex = regex::Regex::new(r"^(gh[pousr]_[A-Za-z0-9_.\-]{36,}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|v[0-9]\.[0-9a-f]{40})$").unwrap();
+    // Matches a schema path *relative to the repo root* (the tarball's
+    // top-level `<owner>-<repo>-<sha>/` prefix is stripped first). The
+    // `module` capture keeps sub-directories (`bo/Foo`, `enum/Bar`).
     static ref REGEX_GITHUB_SRC_PATH: regex::Regex = regex::Regex::new(r"^src/bo4e_schemas/(?P<module>.*)\.json$").unwrap();
 }
 
@@ -72,21 +73,11 @@ pub fn get_token_from_github_cli() -> Option<String> {
     Some(token_str.to_string())
 }
 
-/// GitHub content-listing entry (`GET /repos/{o}/{r}/contents/{path}`).
-#[derive(Deserialize)]
-struct ContentItem {
-    path: String,
-    #[serde(rename = "type")]
-    kind: String,
-}
-
 /// Subset of a GitHub Release we consume.
 #[derive(Deserialize)]
 struct Release {
     #[serde(default)]
     tag_name: String,
-    #[serde(default)]
-    target_commitish: String,
 }
 
 /// GitHub error bodies are `{ "message": "...", "documentation_url": "..." }`.
@@ -118,10 +109,6 @@ fn build_client(token: Option<&str>) -> Result<Client, String> {
         .map_err(|e| format!("failed to build HTTP client: {e}"))
 }
 
-fn contents_url(path: &str, commitish: &str) -> String {
-    format!("{GITHUB_API}/repos/{OWNER}/{REPO}/contents/{path}?ref={commitish}")
-}
-
 /// Turn a non-success GitHub response into an actionable end-user message.
 ///
 /// FORBIDDEN / TOO_MANY_REQUESTS almost always mean unauthenticated
@@ -147,170 +134,73 @@ async fn github_error(resp: reqwest::Response, context: &str) -> String {
     format!("GitHub returned {status} for the {context} request: {message}")
 }
 
-async fn list_dir(
-    client: &Client,
-    commitish: &str,
-    dir_path: &str,
-) -> Result<Vec<ContentItem>, String> {
-    let resp = client
-        .get(contents_url(dir_path, commitish))
-        .header(ACCEPT, "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| format!("schema directory listing request failed: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(github_error(resp, "schema directory listing").await);
-    }
-    resp.json::<Vec<ContentItem>>()
-        .await
-        .map_err(|e| format!("failed to parse schema directory listing: {e}"))
-}
-
-/// Fetch a single file's raw bytes via `Accept: application/vnd.github.raw`,
-/// which returns the content directly (no base64 wrapper to decode).
-async fn fetch_file_raw(
-    client: &Client,
-    commitish: &str,
-    file_path: &str,
-) -> Result<String, String> {
-    let resp = client
-        .get(contents_url(file_path, commitish))
-        .header(ACCEPT, "application/vnd.github.raw")
-        .send()
-        .await
-        .map_err(|e| format!("schema file fetch request failed: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(github_error(resp, "schema file fetch").await);
-    }
-    resp.text()
-        .await
-        .map_err(|e| format!("failed to read schema file content: {e}"))
-}
-
-type AsyncInvokeLater<T> = Pin<Box<dyn Future<Output = T>>>;
-
-async fn _get_schemas_from_github_recursive(
-    client: Client,
-    target_commitish: String,
-    dir_path: String,
-) -> Result<Vec<AsyncInvokeLater<Result<Schema, String>>>, String> {
-    let items = list_dir(&client, &target_commitish, &dir_path).await?;
-
-    let mut futures: Vec<AsyncInvokeLater<Result<Schema, String>>> = Vec::new();
-
-    for item in items {
-        match item.kind.as_str() {
-            "file" => {
-                if let Some(path_match) = REGEX_GITHUB_SRC_PATH.captures(&item.path) {
-                    let client = client.clone();
-                    let target_commitish = target_commitish.clone();
-                    let file_path = item.path.clone();
-                    let path_slice = path_match.name("module").unwrap().as_str().to_string();
-
-                    futures.push(Box::pin(async move {
-                        let file_content =
-                            fetch_file_raw(&client, &target_commitish, &file_path).await?;
-                        cprint_verbose!("Fetched schema {}", file_path);
-                        let mut schema =
-                            Schema::new(path_slice.split('/').map(String::from).collect(), None)?;
-                        schema.load_schema(file_content);
-                        Ok(schema)
-                    }));
-                }
-            }
-            "dir" => {
-                futures.append(
-                    &mut Box::pin(_get_schemas_from_github_recursive(
-                        client.clone(),
-                        target_commitish.clone(),
-                        item.path.clone(),
-                    ))
-                    .await?,
-                );
-            }
-            _ => {
-                // Ignore other types (e.g., symlinks, submodules)
-            }
-        }
-    }
-    Ok(futures)
-}
-
-async fn _execute_futures_with_progress_bar<T: 'static>(
-    futures: Vec<AsyncInvokeLater<T>>,
-) -> Result<Vec<T>, String> {
-    let total = futures.len();
-    let start_message = "Downloading schemas...";
-    let finish_message = "Downloaded schemas.   ";
-    let visible = crate::console::console::CONSOLE
-        .get()
-        .map(|c| c.would_emit(crate::console::console::Level::Normal))
-        .unwrap_or(true);
-    let pb = visible.then(|| new_progress_bar(total as u64, Some(start_message.to_string())));
-
-    let mut join_set: JoinSet<T> = JoinSet::new();
-    for future in futures {
-        join_set.spawn_local(future);
-    }
-
-    let mut output = Ok(Vec::new());
-    while let Some(res) = join_set.join_next().await {
-        if output.is_err() {
-            // Entering here means all tasks have been aborted due to a panic or error.
-            continue;
-        }
-        match res {
-            Ok(value) => output.as_mut().unwrap().push(value),
-            Err(err) if err.is_panic() => {
-                output = Err(format!("Panic occurred: {:?}", err));
-                join_set.abort_all();
-            }
-            Err(err) => {
-                output = Err(format!("Task joining failed: {:?}", err));
-                join_set.abort_all();
-            }
-        }
-        if let Some(ref pb) = pb {
-            pb.inc(1);
-        }
-    }
-
-    if let Some(ref pb) = pb {
-        if let Err(ref e) = output {
-            abandon_progress_bar_with_error(pb, format!("Error: {}", e));
-        } else {
-            finish_progress_bar(pb, Some(finish_message.to_string()));
-        }
-    }
-
-    output
-}
-
-async fn get_target_commitish_from_tag(
+/// Download the whole `bo4e/BO4E-Schemas` repo at `version_tag` as a single
+/// gzipped tarball (`GET .../tarball/{ref}`). One request instead of a tree
+/// walk + one fetch per file, and — for anonymous users — one hit against the
+/// 60/hour limit instead of ~200.
+async fn download_schema_tarball(
     client: &Client,
     version_tag: &Version,
-) -> Result<String, String> {
-    let _spin = spinner::earth("Querying GitHub tree");
-    let url = format!("{GITHUB_API}/repos/{OWNER}/{REPO}/releases/tags/{version_tag}");
+) -> Result<Vec<u8>, String> {
+    let _spin = spinner::earth("Downloading schema archive");
+    let url = format!("{GITHUB_API}/repos/{OWNER}/{REPO}/tarball/{version_tag}");
     let resp = client
         .get(url)
+        // The tarball endpoint 302s to codeload; reqwest follows by default.
         .header(ACCEPT, "application/vnd.github+json")
         .send()
         .await
-        .map_err(|e| format!("release lookup request failed: {e}"))?;
+        .map_err(|e| format!("schema archive download request failed: {e}"))?;
     if !resp.status().is_success() {
-        return Err(github_error(resp, "release lookup").await);
+        return Err(github_error(resp, "schema archive download").await);
     }
-    let release: Release = resp
-        .json()
+    let bytes = resp
+        .bytes()
         .await
-        .map_err(|e| format!("failed to parse release lookup response: {e}"))?;
-    cprint_verbose!(
-        "Resolved tag {} → commitish {}",
-        version_tag,
-        release.target_commitish
-    );
-    Ok(release.target_commitish)
+        .map_err(|e| format!("failed to read schema archive body: {e}"))?;
+    Ok(bytes.to_vec())
+}
+
+/// Unpack a GitHub repo tarball in-process and build a `Schema` for every
+/// `src/bo4e_schemas/**/*.json` entry. Pure CPU — no network, no temp files.
+///
+/// GitHub prefixes every entry with a `<owner>-<repo>-<sha>/` top-level
+/// directory; that first path component is stripped before matching.
+fn unpack_schemas(gz: &[u8]) -> Result<Vec<Schema>, String> {
+    let decoder = GzDecoder::new(gz);
+    let mut archive = Archive::new(decoder);
+    let entries = archive
+        .entries()
+        .map_err(|e| format!("failed to read schema archive: {e}"))?;
+
+    let mut schemas = Vec::new();
+    for entry in entries {
+        let mut entry = entry.map_err(|e| format!("corrupt entry in schema archive: {e}"))?;
+
+        // tar stores '/'-separated paths as raw bytes; normalise defensively
+        // and drop the top-level `<owner>-<repo>-<sha>/` component.
+        let raw = entry.path_bytes();
+        let full = String::from_utf8_lossy(&raw).replace('\\', "/");
+        let Some((_, relative)) = full.split_once('/') else {
+            continue;
+        };
+
+        let Some(path_match) = REGEX_GITHUB_SRC_PATH.captures(relative) else {
+            continue;
+        };
+        let module = path_match.name("module").unwrap().as_str().to_string();
+
+        let mut content = String::new();
+        entry
+            .read_to_string(&mut content)
+            .map_err(|e| format!("failed to read schema {relative} from archive: {e}"))?;
+
+        let mut schema = Schema::new(module.split('/').map(String::from).collect(), None)?;
+        schema.load_schema(content);
+        cprint_verbose!("Unpacked schema {}", relative);
+        schemas.push(schema);
+    }
+    Ok(schemas)
 }
 
 /// Query the GitHub API of `bo4e/BO4E-Schemas` for a specific version.
@@ -320,26 +210,10 @@ pub async fn get_schemas_from_github(
     token: Option<&str>,
 ) -> Result<Schemas, String> {
     let client = build_client(token)?;
-    let target_commitish = get_target_commitish_from_tag(&client, version_tag).await?;
-
-    // Scoped so the spinner drops before the download progress bar takes over.
-    let schema_downloads = {
-        let _spin = spinner::earth("Querying GitHub tree");
-        _get_schemas_from_github_recursive(client, target_commitish, "src/bo4e_schemas".to_string())
-            .await?
-    };
-    cprint_normal!(
-        "Queried GitHub tree. Found {} schemas.",
-        schema_downloads.len()
-    );
-    let local_set = tokio::task::LocalSet::new();
-    let schemas_vector = local_set
-        .run_until(_execute_futures_with_progress_bar(schema_downloads))
-        .await?
-        .into_iter()
-        .collect::<Result<Vec<Schema>, String>>()?;
+    let tarball = download_schema_tarball(&client, version_tag).await?;
+    let schemas_vector = unpack_schemas(&tarball)?;
+    cprint_normal!("Downloaded and unpacked {} schemas.", schemas_vector.len());
     let schemas = Schemas::try_from((schemas_vector, version_tag.into()))?;
-
     Ok(schemas)
 }
 
@@ -390,6 +264,9 @@ pub async fn release_exists(version: &Version, token: Option<&str>) -> Result<bo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::Compression;
+    use flate2::write::GzEncoder;
+    use std::io::Write;
 
     /// Compile-time check that `release_exists` has the expected signature.
     /// We can't make a live network call in unit tests.
@@ -401,6 +278,84 @@ mod tests {
             release_exists(v, None)
         }
         let _ = _assert_signature; // silence unused
+    }
+
+    /// Build a gzipped tar mimicking GitHub's tarball layout (top-level
+    /// `<owner>-<repo>-<sha>/` prefix on every entry).
+    fn make_tarball(files: &[(&str, &str)]) -> Vec<u8> {
+        let mut tar_bytes = Vec::new();
+        {
+            let mut builder = tar::Builder::new(&mut tar_bytes);
+            for (path, body) in files {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(body.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder
+                    .append_data(&mut header, path, body.as_bytes())
+                    .unwrap();
+            }
+            builder.finish().unwrap();
+        }
+        let mut gz = Vec::new();
+        let mut encoder = GzEncoder::new(&mut gz, Compression::default());
+        encoder.write_all(&tar_bytes).unwrap();
+        encoder.finish().unwrap();
+        gz
+    }
+
+    /// `unpack_schemas` emits `cprint_verbose!` per file, which requires the
+    /// global console to exist. Initialise it once (idempotent across tests).
+    fn ensure_console() {
+        use crate::console::console::{CONSOLE, Console, Level};
+        let _ = CONSOLE.set(Console::new(Level::Normal));
+    }
+
+    #[test]
+    fn unpack_selects_only_schema_jsons_and_strips_top_dir() {
+        ensure_console();
+        let gz = make_tarball(&[
+            (
+                "bo4e-BO4E-Schemas-abc1234/src/bo4e_schemas/bo/Angebot.json",
+                r#"{"title":"Angebot"}"#,
+            ),
+            (
+                "bo4e-BO4E-Schemas-abc1234/src/bo4e_schemas/enum/Typ.json",
+                r#"{"title":"Typ"}"#,
+            ),
+            // Not under src/bo4e_schemas — must be ignored.
+            ("bo4e-BO4E-Schemas-abc1234/README.md", "nope"),
+            ("bo4e-BO4E-Schemas-abc1234/package.json", "{}"),
+            (
+                "bo4e-BO4E-Schemas-abc1234/src/bo4e_schemas/index.txt",
+                "nope",
+            ),
+        ]);
+
+        let schemas = unpack_schemas(&gz).unwrap();
+        assert_eq!(
+            schemas.len(),
+            2,
+            "only the two schema JSONs should be picked up"
+        );
+
+        // Top-level `<owner>-<repo>-<sha>/` prefix stripped; module sub-paths kept.
+        let mut modules: Vec<Vec<String>> = schemas.iter().map(|s| s.module().to_vec()).collect();
+        modules.sort();
+        assert_eq!(
+            modules,
+            vec![
+                vec!["bo".to_string(), "Angebot".to_string()],
+                vec!["enum".to_string(), "Typ".to_string()],
+            ]
+        );
+    }
+
+    #[test]
+    fn unpack_empty_archive_yields_no_schemas() {
+        ensure_console();
+        let gz = make_tarball(&[("bo4e-BO4E-Schemas-abc1234/README.md", "nothing here")]);
+        assert!(unpack_schemas(&gz).unwrap().is_empty());
     }
 
     #[test]
