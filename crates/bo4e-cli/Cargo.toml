@@ -30,7 +30,11 @@ dirs = "6"
 color-eyre = "0.6.3"
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 futures = "0.3.32"
-tokio = { version = "1.50.0", features = ["full"] }
+# Only a current-thread runtime + JoinSet/LocalSet are used directly (see
+# utils/tokio.rs); `net` + `time` back `enable_all()`. reqwest pulls any
+# further tokio features it needs via feature unification, so "full" is
+# unnecessary bloat.
+tokio = { version = "1.50.0", features = ["rt", "net", "time"] }
 regex = "1.12.3"
 lazy_static = "1.5.0"
 chrono = { version = "0.4.45", features = ["serde"] }
@@ -41,7 +45,6 @@ url = { version = "2.5.8", features = ["serde"] }
 itertools = "0.15.0"
 bimap = { version = "0.6.3", features = ["serde"] }
 serde_regex = "1.1.0"
-octocrab = "0.53.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 http = "1.4.1"
 indicatif = { version = "0.18.4", features = ["tokio"] }

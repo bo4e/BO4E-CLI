@@ -5,11 +5,20 @@ use crate::console::spinner;
 use crate::{cprint_normal, cprint_verbose};
 use bo4e_schemas::models::schema_meta::{Schema, Schemas};
 use bo4e_schemas::models::version::Version;
+use http::StatusCode;
 use lazy_static::lazy_static;
-use octocrab::repos::RepoHandler;
+use reqwest::Client;
+use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue};
+use serde::Deserialize;
 use std::pin::Pin;
 use std::str::FromStr;
 use tokio::task::JoinSet;
+
+const GITHUB_API: &str = "https://api.github.com";
+const OWNER: &str = "bo4e";
+const REPO: &str = "BO4E-Schemas";
+const USER_AGENT: &str = concat!("bo4e-cli/", env!("CARGO_PKG_VERSION"));
+const GH_API_VERSION: &str = "2022-11-28";
 
 lazy_static! {
     // The `gh*_` arm intentionally has no upper length bound and accepts
@@ -63,71 +72,144 @@ pub fn get_token_from_github_cli() -> Option<String> {
     Some(token_str.to_string())
 }
 
-/// Format an `octocrab::Error` for end-user display.
+/// GitHub content-listing entry (`GET /repos/{o}/{r}/contents/{path}`).
+#[derive(Deserialize)]
+struct ContentItem {
+    path: String,
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+/// Subset of a GitHub Release we consume.
+#[derive(Deserialize)]
+struct Release {
+    #[serde(default)]
+    tag_name: String,
+    #[serde(default)]
+    target_commitish: String,
+}
+
+/// GitHub error bodies are `{ "message": "...", "documentation_url": "..." }`.
+#[derive(Deserialize)]
+struct GithubErrorBody {
+    message: Option<String>,
+}
+
+/// Build a reqwest client carrying the headers GitHub's REST API expects:
+/// a `User-Agent` (mandatory), the pinned API version, and — if a token is
+/// supplied — a bearer `Authorization` header marked sensitive so it is not
+/// logged or forwarded on redirect.
+fn build_client(token: Option<&str>) -> Result<Client, String> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "X-GitHub-Api-Version",
+        HeaderValue::from_static(GH_API_VERSION),
+    );
+    if let Some(token) = token {
+        let mut auth = HeaderValue::from_str(&format!("Bearer {token}"))
+            .map_err(|e| format!("invalid GitHub token for Authorization header: {e}"))?;
+        auth.set_sensitive(true);
+        headers.insert(AUTHORIZATION, auth);
+    }
+    Client::builder()
+        .user_agent(USER_AGENT)
+        .default_headers(headers)
+        .build()
+        .map_err(|e| format!("failed to build HTTP client: {e}"))
+}
+
+fn contents_url(path: &str, commitish: &str) -> String {
+    format!("{GITHUB_API}/repos/{OWNER}/{REPO}/contents/{path}?ref={commitish}")
+}
+
+/// Turn a non-success GitHub response into an actionable end-user message.
 ///
-/// FORBIDDEN responses almost always mean unauthenticated rate-limiting; surface
-/// an actionable hint rather than the bare "GitHub" debug string.
-fn format_octocrab_error(e: octocrab::Error, context: &str) -> String {
-    if let octocrab::Error::GitHub { source, .. } = &e {
-        if source.status_code == http::StatusCode::FORBIDDEN {
-            return format!(
-                "GitHub rate-limited the {context} request ({}). \
-                 Authenticate to lift the limit: pass --token, set GITHUB_ACCESS_TOKEN, \
-                 or run `gh auth login`.",
-                source.message
-            );
-        }
-        if source.status_code == http::StatusCode::NOT_FOUND {
-            return format!(
-                "GitHub returned 404 for the {context} request: {}",
-                source.message
-            );
-        }
+/// FORBIDDEN / TOO_MANY_REQUESTS almost always mean unauthenticated
+/// rate-limiting; surface a hint rather than the bare status.
+async fn github_error(resp: reqwest::Response, context: &str) -> String {
+    let status = resp.status();
+    let message = resp
+        .json::<GithubErrorBody>()
+        .await
+        .ok()
+        .and_then(|b| b.message)
+        .unwrap_or_else(|| status.to_string());
+    if status == StatusCode::FORBIDDEN || status == StatusCode::TOO_MANY_REQUESTS {
         return format!(
-            "GitHub returned {} for the {context} request: {}",
-            source.status_code, source.message
+            "GitHub rate-limited the {context} request ({message}). \
+             Authenticate to lift the limit: pass --token, set GITHUB_ACCESS_TOKEN, \
+             or run `gh auth login`."
         );
     }
-    format!("{context} failed: {e}")
+    if status == StatusCode::NOT_FOUND {
+        return format!("GitHub returned 404 for the {context} request: {message}");
+    }
+    format!("GitHub returned {status} for the {context} request: {message}")
+}
+
+async fn list_dir(
+    client: &Client,
+    commitish: &str,
+    dir_path: &str,
+) -> Result<Vec<ContentItem>, String> {
+    let resp = client
+        .get(contents_url(dir_path, commitish))
+        .header(ACCEPT, "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("schema directory listing request failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(github_error(resp, "schema directory listing").await);
+    }
+    resp.json::<Vec<ContentItem>>()
+        .await
+        .map_err(|e| format!("failed to parse schema directory listing: {e}"))
+}
+
+/// Fetch a single file's raw bytes via `Accept: application/vnd.github.raw`,
+/// which returns the content directly (no base64 wrapper to decode).
+async fn fetch_file_raw(
+    client: &Client,
+    commitish: &str,
+    file_path: &str,
+) -> Result<String, String> {
+    let resp = client
+        .get(contents_url(file_path, commitish))
+        .header(ACCEPT, "application/vnd.github.raw")
+        .send()
+        .await
+        .map_err(|e| format!("schema file fetch request failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(github_error(resp, "schema file fetch").await);
+    }
+    resp.text()
+        .await
+        .map_err(|e| format!("failed to read schema file content: {e}"))
 }
 
 type AsyncInvokeLater<T> = Pin<Box<dyn Future<Output = T>>>;
 
 async fn _get_schemas_from_github_recursive(
-    octocrab: octocrab::Octocrab,
+    client: Client,
     target_commitish: String,
     dir_path: String,
 ) -> Result<Vec<AsyncInvokeLater<Result<Schema, String>>>, String> {
-    let items = get_bo4e_schemas_repo_handler(&octocrab)
-        .get_content()
-        .r#ref(target_commitish.clone())
-        .path(dir_path)
-        .send()
-        .await
-        .map_err(|e| format_octocrab_error(e, "schema directory listing"))?;
+    let items = list_dir(&client, &target_commitish, &dir_path).await?;
 
     let mut futures: Vec<AsyncInvokeLater<Result<Schema, String>>> = Vec::new();
 
-    for item in items.items {
-        match item.r#type.as_str() {
+    for item in items {
+        match item.kind.as_str() {
             "file" => {
                 if let Some(path_match) = REGEX_GITHUB_SRC_PATH.captures(&item.path) {
-                    let octocrab = octocrab.clone();
+                    let client = client.clone();
                     let target_commitish = target_commitish.clone();
                     let file_path = item.path.clone();
                     let path_slice = path_match.name("module").unwrap().as_str().to_string();
 
                     futures.push(Box::pin(async move {
-                        let file_content = get_bo4e_schemas_repo_handler(&octocrab)
-                            .get_content()
-                            .r#ref(target_commitish)
-                            .path(file_path.clone())
-                            .send()
-                            .await
-                            .map_err(|e| format_octocrab_error(e, "schema file fetch"))?
-                            .items[0]
-                            .decoded_content()
-                            .ok_or("Failed to retrieve and decode file content".to_string())?;
+                        let file_content =
+                            fetch_file_raw(&client, &target_commitish, &file_path).await?;
                         cprint_verbose!("Fetched schema {}", file_path);
                         let mut schema =
                             Schema::new(path_slice.split('/').map(String::from).collect(), None)?;
@@ -139,7 +221,7 @@ async fn _get_schemas_from_github_recursive(
             "dir" => {
                 futures.append(
                     &mut Box::pin(_get_schemas_from_github_recursive(
-                        octocrab.clone(),
+                        client.clone(),
                         target_commitish.clone(),
                         item.path.clone(),
                     ))
@@ -204,62 +286,47 @@ async fn _execute_futures_with_progress_bar<T: 'static>(
     output
 }
 
-fn get_octocrab_instance(token: Option<&str>) -> Result<octocrab::Octocrab, String> {
-    if let Some(token) = token {
-        octocrab::Octocrab::builder()
-            .personal_token(token.to_string())
-            .build()
-            .map_err(|e| e.to_string())
-    } else {
-        octocrab::Octocrab::builder()
-            .build()
-            .map_err(|e| e.to_string())
-    }
-}
-
-fn get_bo4e_schemas_repo_handler(octocrab: &octocrab::Octocrab) -> RepoHandler<'_> {
-    octocrab.repos("bo4e", "BO4E-Schemas")
-}
-
 async fn get_target_commitish_from_tag(
-    repo_handler: &RepoHandler<'_>,
+    client: &Client,
     version_tag: &Version,
 ) -> Result<String, String> {
     let _spin = spinner::earth("Querying GitHub tree");
-    let reference = repo_handler
-        .releases()
-        .get_by_tag(&version_tag.to_string())
+    let url = format!("{GITHUB_API}/repos/{OWNER}/{REPO}/releases/tags/{version_tag}");
+    let resp = client
+        .get(url)
+        .header(ACCEPT, "application/vnd.github+json")
+        .send()
         .await
-        .map_err(|e| format_octocrab_error(e, "release lookup"))?;
+        .map_err(|e| format!("release lookup request failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(github_error(resp, "release lookup").await);
+    }
+    let release: Release = resp
+        .json()
+        .await
+        .map_err(|e| format!("failed to parse release lookup response: {e}"))?;
     cprint_verbose!(
         "Resolved tag {} → commitish {}",
         version_tag,
-        reference.target_commitish
+        release.target_commitish
     );
-    Ok(reference.target_commitish)
+    Ok(release.target_commitish)
 }
 
 /// Query the GitHub API of `bo4e/BO4E-Schemas` for a specific version.
 /// Returns metadata of all BO4E schemas.
-// Uses octocrab to interact with the GitHub API.
 pub async fn get_schemas_from_github(
     version_tag: &Version,
     token: Option<&str>,
 ) -> Result<Schemas, String> {
-    let octocrab = get_octocrab_instance(token)?;
-    let target_commitish =
-        get_target_commitish_from_tag(&get_bo4e_schemas_repo_handler(&octocrab), version_tag)
-            .await?;
+    let client = build_client(token)?;
+    let target_commitish = get_target_commitish_from_tag(&client, version_tag).await?;
 
     // Scoped so the spinner drops before the download progress bar takes over.
     let schema_downloads = {
         let _spin = spinner::earth("Querying GitHub tree");
-        _get_schemas_from_github_recursive(
-            octocrab,
-            target_commitish,
-            "src/bo4e_schemas".to_string(),
-        )
-        .await?
+        _get_schemas_from_github_recursive(client, target_commitish, "src/bo4e_schemas".to_string())
+            .await?
     };
     cprint_normal!(
         "Queried GitHub tree. Found {} schemas.",
@@ -279,13 +346,22 @@ pub async fn get_schemas_from_github(
 pub async fn resolve_latest_version(token: Option<&str>) -> Result<Version, String> {
     let version = {
         let _spin = spinner::earth("Querying GitHub for latest version");
-        let octocrab = get_octocrab_instance(token)?;
-        let latest_release = get_bo4e_schemas_repo_handler(&octocrab)
-            .releases()
-            .get_latest()
+        let client = build_client(token)?;
+        let url = format!("{GITHUB_API}/repos/{OWNER}/{REPO}/releases/latest");
+        let resp = client
+            .get(url)
+            .header(ACCEPT, "application/vnd.github+json")
+            .send()
             .await
-            .map_err(|e| format_octocrab_error(e, "latest-release lookup"))?;
-        Version::from_str(&latest_release.tag_name)?
+            .map_err(|e| format!("latest-release lookup request failed: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(github_error(resp, "latest-release lookup").await);
+        }
+        let release: Release = resp
+            .json()
+            .await
+            .map_err(|e| format!("failed to parse latest-release response: {e}"))?;
+        Version::from_str(&release.tag_name)?
     };
     cprint_normal!("Resolved latest release to {}", version);
     Ok(version)
@@ -294,21 +370,20 @@ pub async fn resolve_latest_version(token: Option<&str>) -> Result<Version, Stri
 /// Check if a GitHub *Release* exists in `bo4e/BO4E-Schemas` for the given version.
 ///
 /// Note: a Release is more than a pushed tag. A tag without an associated Release
-/// returns 404 from `releases().get_by_tag(...)` and is treated as `Ok(false)`.
+/// returns 404 from the `releases/tags/{tag}` endpoint and is treated as `Ok(false)`.
 pub async fn release_exists(version: &Version, token: Option<&str>) -> Result<bool, String> {
-    let octocrab = get_octocrab_instance(token)?;
-    match get_bo4e_schemas_repo_handler(&octocrab)
-        .releases()
-        .get_by_tag(&version.to_string())
+    let client = build_client(token)?;
+    let url = format!("{GITHUB_API}/repos/{OWNER}/{REPO}/releases/tags/{version}");
+    let resp = client
+        .get(url)
+        .header(ACCEPT, "application/vnd.github+json")
+        .send()
         .await
-    {
-        Ok(_) => Ok(true),
-        Err(octocrab::Error::GitHub { source, .. })
-            if source.status_code == http::StatusCode::NOT_FOUND =>
-        {
-            Ok(false)
-        }
-        Err(e) => Err(format_octocrab_error(e, "release validation")),
+        .map_err(|e| format!("release validation request failed: {e}"))?;
+    match resp.status() {
+        s if s.is_success() => Ok(true),
+        StatusCode::NOT_FOUND => Ok(false),
+        _ => Err(github_error(resp, "release validation").await),
     }
 }
 
