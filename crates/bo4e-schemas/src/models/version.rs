@@ -1,24 +1,26 @@
 use chrono::prelude::*;
-use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref REGEX_VERSION: Regex = Regex::new(
+static REGEX_VERSION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
         "^v(?P<major>\\d{6})\\.\
         (?P<functional>\\d+)\\.\
         (?P<technical>\\d+)\
         (?:-rc(?P<candidate>\\d*))?\
         $",
     )
-    .unwrap();
-    // The `+g<commit>` and `.d<YYYYMMDD>` suffixes are independent: `bo4e edit` brands
-    // the output with `.d<date>` even when there is no commit (the input came straight
-    // from a tagged release), so the date suffix must be parseable on its own.
-    static ref REGEX_DIRTY_VERSION: Regex = Regex::new(
+    .unwrap()
+});
+// The `+g<commit>` and `.d<YYYYMMDD>` suffixes are independent: `bo4e edit` brands
+// the output with `.d<date>` even when there is no commit (the input came straight
+// from a tagged release), so the date suffix must be parseable on its own.
+static REGEX_DIRTY_VERSION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
         "^v(?P<major>\\d{6})\\.\
         (?P<functional>\\d+)\\.\
         (?P<technical>\\d+)\
@@ -30,8 +32,8 @@ lazy_static! {
         (?P<dirty_workdir_date_day>\\d{2})\
         )?$",
     )
-    .unwrap();
-}
+    .unwrap()
+});
 
 /// A version of the BO4E-Schemas.
 #[derive(Serialize, Deserialize, Debug, Clone)]

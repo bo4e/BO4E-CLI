@@ -2,18 +2,18 @@ use crate::cprint_verbose;
 use bo4e_schemas::models::json_schema::ReferenceSchema;
 use bo4e_schemas::models::schema_meta::{Schema, Schemas};
 use bo4e_schemas::visitable::{Visitable, cntrl_to_result, result_to_cntrl};
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref REF_ONLINE_REGEX: regex::Regex = regex::Regex::new(
-        r"^https://raw\.githubusercontent\.com/(?:BO4E|bo4e|Bo4e|Hochfrequenz)/BO4E-Schemas/(?P<version>[^/]+)/src/bo4e_schemas/(?P<sub_path>(?:\w+/)*)(?P<model>\w+)\.json#?$"
+static REF_ONLINE_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(
+        r"^https://raw\.githubusercontent\.com/(?:BO4E|bo4e|Bo4e|Hochfrequenz)/BO4E-Schemas/(?P<version>[^/]+)/src/bo4e_schemas/(?P<sub_path>(?:\w+/)*)(?P<model>\w+)\.json#?$",
     )
-    .unwrap();
-    static ref REF_DEFS_REGEX: regex::Regex =
-        regex::Regex::new(r"^#/\$(?:defs|definitions)/(?P<model>\w+)$").unwrap();
-}
+    .unwrap()
+});
+static REF_DEFS_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^#/\$(?:defs|definitions)/(?P<model>\w+)$").unwrap());
 
 fn update_reference(
     reference: &mut ReferenceSchema,
