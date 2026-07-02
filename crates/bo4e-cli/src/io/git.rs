@@ -201,11 +201,42 @@ mod tests {
     use crate::test_lock::CWD_LOCK;
     use std::process::Command;
 
+    /// Holds the cwd lock and restores the process cwd on drop.
+    ///
+    /// Without this, each test left the process cwd pointing at its tempdir,
+    /// which was then deleted when the `TempDir` dropped. The *next* test's
+    /// first `git` spawn therefore ran while the process cwd was a since-deleted
+    /// directory — and on macOS `posix_spawn` fails that with a spurious
+    /// `ENOENT` ("git invocation failed"), the root of this suite's flakiness.
+    /// Linux keeps the directory alive via the open fd, so it never surfaced there.
+    struct CwdGuard {
+        restore_to: std::path::PathBuf,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for CwdGuard {
+        fn drop(&mut self) {
+            // Best-effort restore; runs before the caller's `TempDir` is removed
+            // (guard is the second tuple element, so it drops first), so the
+            // process never sits on a deleted cwd between tests.
+            let _ = std::env::set_current_dir(&self.restore_to);
+        }
+    }
+
     /// Initialize a git repo with 3 tagged commits, acquire the cwd lock, and set
-    /// the process cwd to the tempdir. Returns both so the caller holds them for the
-    /// test's full lifetime — dropping either ends the exclusive window.
-    fn make_git_repo() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()>) {
-        let guard = CWD_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    /// the process cwd to the tempdir. Returns the tempdir plus a [`CwdGuard`] that
+    /// keeps the exclusive window open and restores a valid cwd when dropped.
+    fn make_git_repo() -> (tempfile::TempDir, CwdGuard) {
+        let lock = CWD_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+
+        // Anchor the process cwd to the always-present crate directory before
+        // spawning anything: a prior cwd-mutating test may have left it on a
+        // since-deleted tempdir (see `CwdGuard`), and `chdir` to an absolute
+        // path works even when the current cwd is gone. This is also where the
+        // guard restores it on drop.
+        let anchor = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        std::env::set_current_dir(&anchor).unwrap();
+
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path();
         let run = |args: &[&str]| {
@@ -231,7 +262,13 @@ mod tests {
         run(&["tag", "v202401.1.0"]);
         run(&["tag", "not-a-version"]);
         std::env::set_current_dir(p).unwrap();
-        (dir, guard)
+        (
+            dir,
+            CwdGuard {
+                restore_to: anchor,
+                _lock: lock,
+            },
+        )
     }
 
     #[test]
