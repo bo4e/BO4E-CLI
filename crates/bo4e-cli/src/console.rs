@@ -3,7 +3,6 @@ pub mod console;
 pub mod highlighter;
 pub mod mark;
 pub mod palette;
-pub mod progress_bar;
 pub mod spinner;
 
 /// Print a formatted info message at an explicit `Level`. Goes to stdout.
