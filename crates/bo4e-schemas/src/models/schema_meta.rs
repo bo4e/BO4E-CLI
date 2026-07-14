@@ -152,7 +152,7 @@ impl Schemas {
         let module = schema.borrow().module().to_vec();
 
         if self._schemas_by_name.contains_key(&name) {
-            return Err(format!("Schema with name '{}' already exists.", &name));
+            return Err(format!("Schema with name '{name}' already exists."));
         }
         // We don't need to check for module uniqueness here,
         // as the schema's name is part of the module.

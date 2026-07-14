@@ -21,16 +21,16 @@ pub fn splice(original: &str, body: &str, comment_leader: &str) -> String {
         out.push_str(&original[block.end..]);
         out
     } else if original.is_empty() {
-        format!("{}\n{}\n{}\n", &open, body.trim_end(), &close)
+        format!("{}\n{}\n{}\n", open, body.trim_end(), close)
     } else {
         let prefix = if original.ends_with('\n') { "" } else { "\n" };
         format!(
             "{}{}{}\n{}\n{}\n",
             original,
             prefix,
-            &open,
+            open,
             body.trim_end(),
-            &close
+            close
         )
     }
 }

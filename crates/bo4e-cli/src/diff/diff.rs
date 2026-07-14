@@ -1,4 +1,4 @@
-use crate::diff::filters::has_critical;
+use crate::diff::filters::{filter_ignored_traces, has_critical};
 use crate::edit::update_refs::canonical_ref;
 use crate::models::changes::{Change, ChangeType, ChangeValue, Changes};
 use bo4e_schemas::models::json_schema::{
@@ -19,23 +19,56 @@ static REGEX_VERSION_IN_DESC: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"v\d{6}\.\d+\.\d+(?:-rc\d*)?(?:\+g\w+)?(?:\.d\d{8})?").unwrap());
 
 const VERSION_DESC_PLACEHOLDER: &str = "{__gh_version__}";
-const VERSION_TITLE_MARKER: &str = " Version";
+
+/// Built-in trace-ignore pattern applied (to both sides) unless
+/// `apply_default_ignores` is false. Matches the `_version` field of any class:
+/// traces are `/`-separated path segments (e.g. `/bo/Angebot/_version`), so the
+/// leading `/` anchors the match to a whole segment — `/foo/bar_version` is not
+/// matched — and `$` pins it to the end of the (single-line) trace.
+///
+/// This replaces the former brittle heuristic that identified the field by its
+/// human-readable JSON-schema title (`" Version"`): a pydantic upgrade in
+/// bo4e-python dropped the leading space (`"Version"`), silently defeating the
+/// suppression and surfacing dozens of spurious `FieldDefaultChanged` entries
+/// on every version bump.
+static DEFAULT_VERSION_TRACE_IGNORE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"/_version$").unwrap());
 
 /// Knobs that tune what `diff_schemas` considers a change.
 ///
 /// `DiffOptions::default()` matches the historical (and recommended) behavior:
-/// any version-string difference inside a JSON-schema description is normalized
-/// away, and the `_version` field's default value is excluded from the
-/// `FieldDefaultChanged` check. That avoids dozens of spurious
-/// `FieldDescriptionChanged` / `FieldDefaultChanged` results that would
-/// otherwise show up on every version bump just because cross-link URLs and
-/// the `_version` default carry the version string.
+/// the built-in default ignores are applied — any version-string difference
+/// inside a JSON-schema description is normalized away before comparing, and
+/// changes on the `_version` field (via [`DEFAULT_VERSION_TRACE_IGNORE`]) are
+/// dropped. That avoids dozens of spurious `FieldDescriptionChanged` /
+/// `FieldDefaultChanged` results that would otherwise show up on every version
+/// bump just because cross-link URLs and the `_version` default carry the
+/// version string.
 ///
-/// Set `include_version_changes = true` to opt INTO seeing those differences
-/// — useful for callers that want a truly verbatim schema-to-schema diff.
-#[derive(Debug, Clone, Copy, Default)]
+/// `ignore_old_trace` / `ignore_new_trace` hold caller-supplied regexes matched
+/// against each change's `old_trace` / `new_trace`; a change is dropped if any
+/// pattern matches its respective trace. These are always additive to the
+/// defaults.
+///
+/// Set `apply_default_ignores = false` for a truly verbatim schema-to-schema
+/// diff: description version strings are compared literally and the built-in
+/// `_version` ignore is not added.
+#[derive(Debug, Clone)]
 pub struct DiffOptions {
-    pub include_version_changes: bool,
+    pub ignore_old_trace: Vec<Regex>,
+    pub ignore_new_trace: Vec<Regex>,
+    pub apply_default_ignores: bool,
+}
+
+impl Default for DiffOptions {
+    /// The recommended defaults: built-in ignores on, no extra patterns.
+    fn default() -> Self {
+        Self {
+            ignore_old_trace: Vec::new(),
+            ignore_new_trace: Vec::new(),
+            apply_default_ignores: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -54,6 +87,15 @@ pub fn diff_schemas(old: &Schemas, new: &Schemas) -> Changes {
 pub fn diff_schemas_with(old: &Schemas, new: &Schemas, opts: &DiffOptions) -> Changes {
     let mut out: Vec<Change> = Vec::new();
     diff_root_schemas(old, new, opts, &mut out);
+
+    let mut old_pats: Vec<&Regex> = opts.ignore_old_trace.iter().collect();
+    let mut new_pats: Vec<&Regex> = opts.ignore_new_trace.iter().collect();
+    if opts.apply_default_ignores {
+        old_pats.push(&DEFAULT_VERSION_TRACE_IGNORE);
+        new_pats.push(&DEFAULT_VERSION_TRACE_IGNORE);
+    }
+    filter_ignored_traces(&mut out, &old_pats, &new_pats);
+
     Changes {
         old_schemas: old.clone(),
         new_schemas: new.clone(),
@@ -151,12 +193,12 @@ fn diff_type_base(
 ) {
     let desc_changed = match (&old.description, &new.description) {
         (Some(o), Some(n)) => {
-            if opts.include_version_changes {
-                o != n
-            } else {
+            if opts.apply_default_ignores {
                 let o_norm = REGEX_VERSION_IN_DESC.replace_all(o, VERSION_DESC_PLACEHOLDER);
                 let n_norm = REGEX_VERSION_IN_DESC.replace_all(n, VERSION_DESC_PLACEHOLDER);
                 o_norm != n_norm
+            } else {
+                o != n
             }
         }
         (None, None) => false,
@@ -182,10 +224,11 @@ fn diff_type_base(
         });
     }
 
-    let is_version_field = old.title.as_deref() == Some(VERSION_TITLE_MARKER)
-        || new.title.as_deref() == Some(VERSION_TITLE_MARKER);
-    let compare_default = opts.include_version_changes || !is_version_field;
-    if compare_default && old.default != new.default {
+    // The `_version` field default carries the schema's own version and would
+    // otherwise change on every bump; it is dropped afterwards by the default
+    // trace-ignore (see [`DEFAULT_VERSION_TRACE_IGNORE`]), so compare defaults
+    // unconditionally here.
+    if old.default != new.default {
         out.push(Change {
             r#type: ChangeType::FieldDefaultChanged,
             old: None,
@@ -718,15 +761,20 @@ mod tests {
     }
 
     #[test]
-    fn test_diff_type_base_skips_version_field_default_change() {
+    fn test_diff_type_base_emits_default_change_unconditionally() {
+        // diff_type_base no longer special-cases the `_version` field by its
+        // (drift-prone) title: it always emits a FieldDefaultChanged. The
+        // `_version` suppression is now a trace-level filter applied afterwards
+        // by diff_schemas_with — see the diff_schemas tests below.
         use bo4e_schemas::models::json_schema::PrimitiveValue;
-        let mut a = base(None, Some(" Version"));
-        let mut b = base(None, Some(" Version"));
-        a.default = Some(PrimitiveValue::String("v202401.0.1".into()));
-        b.default = Some(PrimitiveValue::String("v202401.0.2".into()));
+        let mut a = base(None, Some("Version"));
+        let mut b = base(None, Some("Version"));
+        a.default = Some(PrimitiveValue::String("v202601.0.0".into()));
+        b.default = Some(PrimitiveValue::String("v202607.0.0".into()));
         let mut out = vec![];
         diff_type_base(&a, &b, "/x", "/x", &DiffOptions::default(), &mut out);
-        assert_eq!(out.len(), 0);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].r#type, ChangeType::FieldDefaultChanged);
     }
 
     #[test]
@@ -747,7 +795,7 @@ mod tests {
     }
 
     #[test]
-    fn test_diff_type_base_emits_version_description_change_when_flag_set() {
+    fn test_diff_type_base_emits_version_description_change_without_default_ignores() {
         let mut out = vec![];
         diff_type_base(
             &base(Some("Schema for v202401.0.1"), None),
@@ -755,7 +803,8 @@ mod tests {
             "/x",
             "/x",
             &DiffOptions {
-                include_version_changes: true,
+                apply_default_ignores: false,
+                ..DiffOptions::default()
             },
             &mut out,
         );
@@ -763,26 +812,133 @@ mod tests {
         assert_eq!(out[0].r#type, ChangeType::FieldDescriptionChanged);
     }
 
-    #[test]
-    fn test_diff_type_base_emits_version_field_default_change_when_flag_set() {
-        use bo4e_schemas::models::json_schema::PrimitiveValue;
-        let mut a = base(None, Some(" Version"));
-        let mut b = base(None, Some(" Version"));
-        a.default = Some(PrimitiveValue::String("v202401.0.1".into()));
-        b.default = Some(PrimitiveValue::String("v202401.0.2".into()));
-        let mut out = vec![];
-        diff_type_base(
-            &a,
-            &b,
-            "/x",
-            "/x",
-            &DiffOptions {
-                include_version_changes: true,
+    /// Build a class with the given string fields, each carrying a `default`.
+    /// `title` mimics the pydantic-generated schema title (irrelevant to the
+    /// trace filter, but kept realistic).
+    fn class_with_string_defaults(
+        module: &[&str],
+        title: &str,
+        fields: &[(&str, &str)],
+    ) -> Rc<RefCell<Schema>> {
+        use bo4e_schemas::models::json_schema::{PrimitiveValue, StringSchema};
+        let mut props = BTreeMap::new();
+        for (name, default) in fields {
+            let mut f = StringSchema::default();
+            f.base.default = Some(PrimitiveValue::String((*default).into()));
+            props.insert(name.to_string(), SchemaType::StringSchema(f));
+        }
+        let root = SchemaRootType::Object(SchemaRootObject {
+            base: SchemaRootTypeBase::default(),
+            object: ObjectSchema {
+                base: TypeBase {
+                    description: None,
+                    title: Some(title.to_string()),
+                    default: None,
+                },
+                r#type: LiteralTypeObject::Object,
+                additional_properties: false,
+                properties: props,
+                required: vec![],
             },
-            &mut out,
+        });
+        schema_with(module, root)
+    }
+
+    #[test]
+    fn test_diff_schemas_default_ignores_version_field_default() {
+        // Reproduces the bo4e-python docs-build bug: two releases differ only
+        // in the `_version` default (title "Version", no leading space — the
+        // post-pydantic-upgrade form). With default ignores on, the diff must
+        // be empty.
+        let old = collection(
+            "v202601.0.0",
+            vec![class_with_string_defaults(
+                &["bo", "Angebot"],
+                "Version",
+                &[("_version", "202601.0.0")],
+            )],
         );
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0].r#type, ChangeType::FieldDefaultChanged);
+        let new = collection(
+            "v202607.0.0",
+            vec![class_with_string_defaults(
+                &["bo", "Angebot"],
+                "Version",
+                &[("_version", "202607.0.0")],
+            )],
+        );
+        let changes = diff_schemas(&old, &new);
+        assert!(
+            changes.changes.is_empty(),
+            "expected no changes, got {:?}",
+            changes.changes
+        );
+    }
+
+    #[test]
+    fn test_diff_schemas_no_default_ignore_surfaces_version_field_default() {
+        let old = collection(
+            "v202601.0.0",
+            vec![class_with_string_defaults(
+                &["bo", "Angebot"],
+                "Version",
+                &[("_version", "202601.0.0")],
+            )],
+        );
+        let new = collection(
+            "v202607.0.0",
+            vec![class_with_string_defaults(
+                &["bo", "Angebot"],
+                "Version",
+                &[("_version", "202607.0.0")],
+            )],
+        );
+        let opts = DiffOptions {
+            apply_default_ignores: false,
+            ..DiffOptions::default()
+        };
+        let changes = diff_schemas_with(&old, &new, &opts);
+        assert_eq!(changes.changes.len(), 1);
+        assert_eq!(changes.changes[0].r#type, ChangeType::FieldDefaultChanged);
+        assert_eq!(changes.changes[0].new_trace, "/bo/Angebot/_version");
+    }
+
+    #[test]
+    fn test_diff_schemas_user_pattern_is_additive_to_defaults() {
+        // `_version` and `preis` both differ. The built-in default ignore drops
+        // `_version`; a user `--ignore-new-trace /preis$` on top drops `preis`.
+        let old = collection(
+            "v202601.0.0",
+            vec![class_with_string_defaults(
+                &["bo", "Angebot"],
+                "Angebot",
+                &[("_version", "202601.0.0"), ("preis", "1.0")],
+            )],
+        );
+        let new = collection(
+            "v202607.0.0",
+            vec![class_with_string_defaults(
+                &["bo", "Angebot"],
+                "Angebot",
+                &[("_version", "202607.0.0"), ("preis", "2.0")],
+            )],
+        );
+
+        // defaults only: `_version` filtered, `preis` surfaces.
+        let changes = diff_schemas(&old, &new);
+        assert_eq!(changes.changes.len(), 1);
+        assert_eq!(changes.changes[0].new_trace, "/bo/Angebot/preis");
+
+        // user pattern is additive: now both are filtered.
+        let opts = DiffOptions {
+            ignore_new_trace: vec![Regex::new(r"/preis$").unwrap()],
+            ..DiffOptions::default()
+        };
+        let changes = diff_schemas_with(&old, &new, &opts);
+        assert!(
+            changes.changes.is_empty(),
+            "expected no changes, got {:?}",
+            changes.changes
+        );
     }
 
     fn enum_schema(values: &[&str]) -> StrEnumSchema {
