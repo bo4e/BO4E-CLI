@@ -9,6 +9,7 @@ use crate::io::matrix::{write_compatibility_matrix_csv, write_compatibility_matr
 use crate::{cerror, cprint_normal, cprint_verbose};
 use bo4e_schemas::io::schemas::read_schemas;
 use clap::{Args, Subcommand, ValueEnum, ValueHint};
+use regex::Regex;
 use std::path::PathBuf;
 
 /// Command group for comparing JSON-schemas of different BO4E versions.
@@ -40,21 +41,35 @@ pub struct DiffSchemasArgs {
     /// The JSON-file to save the differences to.
     #[arg(short = 'o', long = "output", required = true, value_hint = ValueHint::FilePath)]
     pub output_file: PathBuf,
-    /// Include version-related field differences in the diff output.
+    /// Regex(es) matched against each change's OLD trace (the base-side path,
+    /// e.g. `/bo/Angebot/_version`). A change is dropped from the diff when any
+    /// pattern matches. Repeatable. Matching is partial — anchor with `^`/`$`
+    /// for exact segments.
+    #[arg(long = "ignore-old-trace", value_name = "REGEX")]
+    pub ignore_old_trace: Vec<String>,
+    /// Regex(es) matched against each change's NEW trace (the comparison-side
+    /// path). A change is dropped when any pattern matches. Repeatable.
+    #[arg(long = "ignore-new-trace", value_name = "REGEX")]
+    pub ignore_new_trace: Vec<String>,
+    /// Regex(es) matched against BOTH traces: a change is dropped when the
+    /// pattern matches its old OR its new trace. Convenience for the common
+    /// case; equivalent to passing the same pattern to both
+    /// `--ignore-old-trace` and `--ignore-new-trace`. Repeatable.
+    #[arg(long = "ignore-trace", value_name = "REGEX")]
+    pub ignore_trace: Vec<String>,
+    /// Disable the built-in default ignores, producing a verbatim
+    /// schema-to-schema diff. By default two version-noise sources are
+    /// suppressed so they don't appear as spurious changes on every bump:
+    /// the `_version` field of every class (trace pattern `/_version$`), whose
+    /// default always carries the schema's own version; and version strings
+    /// inlined in field descriptions (e.g. a doc-URL pointing at a release
+    /// tag), which are normalized away before descriptions are compared.
     ///
-    /// By default, two kinds of differences are suppressed:
-    ///   - description text that only differs in an inlined version string
-    ///     (e.g. a documentation URL pointing at a different release tag);
-    ///   - the default value of the `_version` field (which always carries
-    ///     the schema's own version).
-    ///
-    /// Pass this flag to surface those differences as
-    /// `FieldDescriptionChanged` / `FieldDefaultChanged` entries in the diff
-    /// JSON — useful for a truly verbatim schema-to-schema diff. Note that
-    /// `diff version-bump` consumes the diff JSON as-is, so opting in here
-    /// will cause those changes to influence the inferred bump type too.
-    #[arg(long = "include-version-changes", default_value_t = false)]
-    pub include_version_changes: bool,
+    /// Passing this flag turns BOTH off. User `--ignore-*` patterns still
+    /// apply. Note `diff version-bump` consumes the diff JSON as-is, so a
+    /// verbatim diff also feeds the inferred bump type.
+    #[arg(long = "no-default-ignore", action = clap::ArgAction::SetFalse, default_value_t = true)]
+    pub apply_default_ignores: bool,
 }
 
 /// Create a difference matrix from the diff-files created by the 'diff schemas' command.
@@ -119,6 +134,13 @@ impl Executable for Diff {
     }
 }
 
+/// Compile each pattern string, prefixing a clear error on the offending regex.
+fn compile_patterns(flag: &str, pats: &[String]) -> Result<Vec<Regex>, String> {
+    pats.iter()
+        .map(|p| Regex::new(p).map_err(|e| format!("invalid {flag} pattern {p:?}: {e}")))
+        .collect()
+}
+
 fn run_schemas(a: &DiffSchemasArgs) -> Result<(), String> {
     let out_old = read_schemas(&a.input_dir_base)?;
     for w in &out_old.warnings {
@@ -130,13 +152,23 @@ fn run_schemas(a: &DiffSchemasArgs) -> Result<(), String> {
         crate::cwarn!("{w}");
     }
     let new = out_new.schemas;
+
+    // `--ignore-trace` applies to both sides, so fold it into each bucket.
+    let shared = compile_patterns("--ignore-trace", &a.ignore_trace)?;
+    let mut ignore_old_trace = compile_patterns("--ignore-old-trace", &a.ignore_old_trace)?;
+    let mut ignore_new_trace = compile_patterns("--ignore-new-trace", &a.ignore_new_trace)?;
+    ignore_old_trace.extend(shared.iter().cloned());
+    ignore_new_trace.extend(shared);
+
     let changes = {
         let _spin = spinner::squish("Comparing JSON-schemas...");
         diff_schemas_with(
             &old,
             &new,
             &DiffOptions {
-                include_version_changes: a.include_version_changes,
+                ignore_old_trace,
+                ignore_new_trace,
+                apply_default_ignores: a.apply_default_ignores,
             },
         )
     };
@@ -330,7 +362,10 @@ mod tests {
             input_dir_base: base,
             input_dir_comp: comp,
             output_file: diff_file.clone(),
-            include_version_changes: false,
+            ignore_old_trace: vec![],
+            ignore_new_trace: vec![],
+            ignore_trace: vec![],
+            apply_default_ignores: true,
         })
         .unwrap();
         assert!(diff_file.exists());
