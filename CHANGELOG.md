@@ -1,4 +1,11 @@
 
+## 1.3.0 - 2026-07-14
+
+### Added
+
+- **diff**: Replace version-title heuristic with regex trace-ignore filters (#214)
+
+
 ## 1.2.5 - 2026-07-02
 
 ### Fixed
