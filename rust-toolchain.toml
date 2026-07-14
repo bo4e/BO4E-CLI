@@ -1,0 +1,10 @@
+[toolchain]
+# Pin the toolchain so local dev and CI use the same compiler and, crucially,
+# the same clippy lint set. CI installs Rust via `dtolnay/rust-toolchain@stable`
+# (which only runs `rustup default stable`); rustup's directory-override
+# precedence means this file wins at every `cargo`/`clippy`/`fmt` invocation.
+# Without the pin, `@stable` floats to whatever stable is latest at run time, so
+# a new release enabling a lint by default can turn CI red on unchanged code.
+# Bump this deliberately (and fix any newly-surfaced lints in the same PR).
+channel = "1.97.0"
+components = ["clippy", "rustfmt"]
