@@ -405,11 +405,10 @@ fn allowed_default_kinds(schema: &SchemaType) -> std::collections::BTreeSet<Prim
         SchemaType::IntegerSchema(_) => {
             out.insert(PrimitiveKind::Integer);
         }
-        SchemaType::NumberSchema(_) => {
-            out.insert(PrimitiveKind::Integer);
-            out.insert(PrimitiveKind::Float);
-        }
-        SchemaType::DecimalSchema(_) => {
+        // `number` is generated as a decimal (see `rust::types::map_rust`), so
+        // it accepts the same default kinds as the explicitly-marked spelling —
+        // including a string, which is the lossless way to write one.
+        SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_) => {
             out.insert(PrimitiveKind::Integer);
             out.insert(PrimitiveKind::Float);
             out.insert(PrimitiveKind::String);

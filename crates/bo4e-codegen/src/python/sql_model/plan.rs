@@ -781,9 +781,9 @@ fn scalar_array_inners(inner: &SchemaType) -> (String, &'static str) {
     match inner {
         SchemaType::StringSchema(_) => ("str".into(), "String"),
         SchemaType::IntegerSchema(_) => ("int".into(), "Integer"),
-        SchemaType::NumberSchema(_) => ("float".into(), "Float"),
         SchemaType::BooleanSchema(_) => ("bool".into(), "Boolean"),
-        SchemaType::DecimalSchema(_) => ("Decimal".into(), "Numeric"),
+        // `number` is a decimal in BO4E — see `python::types::map_pydantic`.
+        SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_) => ("Decimal".into(), "Numeric"),
         _ => unreachable!("scalar_array_inners called with non-scalar inner"),
     }
 }

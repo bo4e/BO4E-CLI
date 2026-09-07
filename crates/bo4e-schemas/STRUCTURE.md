@@ -89,6 +89,12 @@ The macros in `models/macros.rs` keep `Visitable` impls one-liners:
 - New schema variants:
   1. Add a struct/enum in `models/json_schema.rs`.
   2. Add it to whichever `SchemaRootType` / `SchemaType` / `SchemaClassType` union covers it.
+     These unions are `#[serde(untagged)]`, so **variant order is behaviour**: serde tries
+     variants top-down and takes the first that parses. A variant whose JSON is a superset of
+     another's must come *after* it, or the more permissive one shadows the stricter one and
+     silently drops the discriminating key (the structs flatten `TypeBase`, which ignores
+     unknown fields). Hence `ConstantSchema` precedes `StringSchema`, and `DecimalSchema`
+     precedes `NumberSchema`. Pin the intended dispatch with a test.
   3. Use the `visitable_*` macros to implement `Visitable` so traversal stays exhaustive.
   4. Update the `diff` walker in `bo4e-cli/src/diff/diff.rs` to compare the new shape.
 
