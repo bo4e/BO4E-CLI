@@ -108,26 +108,27 @@ fn render_typed_default(schema: &SchemaType, prim: &PrimitiveValue) -> String {
         (SchemaType::BooleanSchema(_), PrimitiveValue::Bool(true)) => "True".into(),
         (SchemaType::BooleanSchema(_), PrimitiveValue::Bool(false)) => "False".into(),
         (SchemaType::IntegerSchema(_), PrimitiveValue::Integer(i)) => i.to_string(),
-        (SchemaType::NumberSchema(_), PrimitiveValue::Integer(i)) => format!("{i}.0"),
-        (SchemaType::NumberSchema(_), PrimitiveValue::Float(f)) => f.to_string(),
 
         // ── Decimal: always string form for precision. All values
         // pass through `python_string_literal` so a quote / backslash
         // in the original (validator already proved parseable) can't
         // produce invalid Python source. ──────────────────────────
-        (SchemaType::DecimalSchema(_), PrimitiveValue::Integer(i)) => {
+        (
+            SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_),
+            PrimitiveValue::Integer(i),
+        ) => {
             format!(
                 "Decimal({})",
                 crate::python::python_string_literal(&i.to_string())
             )
         }
-        (SchemaType::DecimalSchema(_), PrimitiveValue::Float(f)) => {
+        (SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_), PrimitiveValue::Float(f)) => {
             format!(
                 "Decimal({})",
                 crate::python::python_string_literal(&f.to_string())
             )
         }
-        (SchemaType::DecimalSchema(_), PrimitiveValue::String(s)) => {
+        (SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_), PrimitiveValue::String(s)) => {
             format!("Decimal({})", crate::python::python_string_literal(s))
         }
 
@@ -271,11 +272,17 @@ pub fn map_pydantic(schema_type: &SchemaType) -> Result<MappedType, UnsupportedS
             Some(_) => simple("str"),
         },
         SchemaType::IntegerSchema(_) => simple("int"),
-        SchemaType::NumberSchema(_) => simple("float"),
         SchemaType::BooleanSchema(_) => simple("bool"),
 
-        // ── Decimal (BO4E extension: type=number|string + format=decimal) ────
-        SchemaType::DecimalSchema(_) => with_import("Decimal", "decimal", "Decimal"),
+        // ── Decimal (plain `number`, and the BO4E extension
+        //    `type=number|string + format=decimal`) ─────────────────────────
+        // BO4E models every non-integer numeric as a decimal — the reference
+        // model (BO4E-python) has 30 `Decimal` fields and no `float` — so a
+        // bare `number` maps here too. `float` both loses a decimal's scale
+        // and fails to reproduce BO4E-python's own annotations.
+        SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_) => {
+            with_import("Decimal", "decimal", "Decimal")
+        }
 
         // ── Null ─────────────────────────────────────────────────────────────
         // Pure `type: null` outside an `anyOf` branch has no use in BO4E.
@@ -429,13 +436,34 @@ mod tests {
         assert!(result.imports.is_empty());
     }
 
-    // ── Case 3: number (float) ────────────────────────────────────────────────
+    // ── Case 3: number → Decimal ──────────────────────────────────────────────
+    /// BO4E has no float fields — `type: number` is `Decimal` in the reference
+    /// model (BO4E-python: 30 `Decimal`, 9 `int`, 0 `float`). Emitting `float`
+    /// meant generated Python did not reproduce BO4E-python's own types.
     #[test]
-    fn map_number() {
+    fn map_number_maps_to_decimal() {
         let schema = SchemaType::NumberSchema(NumberSchema::default());
         let result = map_pydantic(&schema).unwrap();
-        assert_eq!(result.rendered, "float");
-        assert!(result.imports.is_empty());
+        assert_eq!(result.rendered, "Decimal");
+        assert!(result.imports.contains(&Import::Named {
+            module: "decimal".to_string(),
+            name: "Decimal".to_string(),
+        }));
+    }
+
+    /// A `number` default must render as `Decimal("…")`, matching the
+    /// explicitly-marked decimal spelling.
+    #[test]
+    fn number_defaults_render_as_decimal() {
+        let n = SchemaType::NumberSchema(NumberSchema::default());
+        assert_eq!(
+            render_typed_default(&n, &PrimitiveValue::Float(1.23)),
+            "Decimal(\"1.23\")"
+        );
+        assert_eq!(
+            render_typed_default(&n, &PrimitiveValue::Integer(7)),
+            "Decimal(\"7\")"
+        );
     }
 
     // ── Case 4: boolean ───────────────────────────────────────────────────────

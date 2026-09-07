@@ -67,9 +67,14 @@ pub fn map_rust(schema_type: &SchemaType) -> Result<MappedType, UnsupportedShape
             Some(_) => simple("String"),
         },
         SchemaType::IntegerSchema(_) => simple("i64"),
-        SchemaType::NumberSchema(_) => simple("f64"),
         SchemaType::BooleanSchema(_) => simple("bool"),
-        SchemaType::DecimalSchema(_) => with_import("Decimal", "rust_decimal", "Decimal"),
+        // `number` and `number|string + format: decimal` both map to `Decimal`.
+        // BO4E models every non-integer numeric as a decimal (BO4E-python has
+        // 30 `Decimal` fields and no `float`), and `f64` cannot round-trip a
+        // decimal's scale: `35.3030` comes back as `35.303`.
+        SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_) => {
+            with_import("Decimal", "rust_decimal", "Decimal")
+        }
         SchemaType::NullSchema(_) => simple("()"),
         SchemaType::AnySchema(_) => with_import("Value", "serde_json", "Value"),
 
@@ -209,15 +214,14 @@ fn render_typed_default(schema: &SchemaType, prim: &PrimitiveValue) -> String {
         // ── Bool / number / decimal primitives. ───────────────────
         (SchemaType::BooleanSchema(_), PrimitiveValue::Bool(b)) => b.to_string(),
         (SchemaType::IntegerSchema(_), PrimitiveValue::Integer(i)) => format!("{i}i64"),
-        (SchemaType::NumberSchema(_), PrimitiveValue::Integer(i)) => format!("{i}_f64"),
-        (SchemaType::NumberSchema(_), PrimitiveValue::Float(f)) => format!("{f}_f64"),
-        (SchemaType::DecimalSchema(_), PrimitiveValue::Integer(i)) => {
-            format!("rust_decimal_macros::dec!({i})")
-        }
-        (SchemaType::DecimalSchema(_), PrimitiveValue::Float(f)) => {
+        (
+            SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_),
+            PrimitiveValue::Integer(i),
+        ) => format!("rust_decimal_macros::dec!({i})"),
+        (SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_), PrimitiveValue::Float(f)) => {
             format!("rust_decimal_macros::dec!({f})")
         }
-        (SchemaType::DecimalSchema(_), PrimitiveValue::String(s)) => {
+        (SchemaType::NumberSchema(_) | SchemaType::DecimalSchema(_), PrimitiveValue::String(s)) => {
             format!("rust_decimal_macros::dec!({s})")
         }
 
@@ -357,10 +361,34 @@ mod tests {
         assert_eq!(m.rendered, "i64");
     }
 
+    /// BO4E has no float fields: every `type: number` in the schemas is a
+    /// `Decimal` in the reference model (BO4E-python: 30 `Decimal`, 9 `int`,
+    /// 0 `float`). `f64` would silently drop a decimal's scale — `35.3030`
+    /// round-trips as `35.303` — so `number` maps to `Decimal` like the
+    /// explicitly-marked `format: decimal` spelling.
     #[test]
-    fn map_number_f64() {
+    fn map_number_maps_to_decimal() {
         let m = map_rust(&SchemaType::NumberSchema(NumberSchema::default())).unwrap();
-        assert_eq!(m.rendered, "f64");
+        assert_eq!(m.rendered, "Decimal");
+        assert!(m.imports.contains(&Import::Named {
+            module: "rust_decimal".into(),
+            name: "Decimal".into(),
+        }));
+    }
+
+    /// A `number` default must render as a `Decimal` constructor, not an
+    /// `f64` literal — otherwise the generated crate would not compile.
+    #[test]
+    fn number_defaults_render_as_decimal() {
+        let n = SchemaType::NumberSchema(NumberSchema::default());
+        assert_eq!(
+            render_typed_default(&n, &PrimitiveValue::Float(1.23)),
+            "rust_decimal_macros::dec!(1.23)"
+        );
+        assert_eq!(
+            render_typed_default(&n, &PrimitiveValue::Integer(7)),
+            "rust_decimal_macros::dec!(7)"
+        );
     }
 
     #[test]

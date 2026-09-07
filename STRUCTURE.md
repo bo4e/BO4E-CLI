@@ -70,7 +70,7 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
   - *required + default declared* — the default is unreachable because the JSON key is always present.
   - *optional + no default* — the JSON key may be absent and the runtime has no fallback; the generator refuses to invent one.
 
-- **Strict default-rendering matrix.** "Nullable" means the schema type is `null` or `anyOf:[…, null]`. The rendered type follows the schema's nullability **only** (no auto-`Option<T>` / `| None` widening for optional non-nullable fields). The default expression comes from the schema's `default` literal, **type-precisely** rendered: typed-format string defaults (`date`, `date-time`, `time`, `uuid`) and `Decimal` defaults emit typed constructors on both sides, not raw strings.
+- **Strict default-rendering matrix.** "Nullable" means the schema type is `null` or `anyOf:[…, null]`. The rendered type follows the schema's nullability **only** (no auto-`Option<T>` / `| None` widening for optional non-nullable fields). The default expression comes from the schema's `default` literal, **type-precisely** rendered: typed-format string defaults (`date`, `date-time`, `time`, `uuid`) and decimal defaults emit typed constructors on both sides, not raw strings. Note `number` **is** a decimal here: BO4E models every non-integer numeric as one (the reference model has no `float` field), so `type: number` maps to `rust_decimal::Decimal` / `decimal.Decimal` rather than `f64` / `float`, which would drop a decimal's scale (`35.3030` -> `35.303`).
 
   | `required` | `nullable` | `default`  | Rust type   | Rust serde attrs                                       | Python type  | Python default              |
   | ---------- | ---------- | ---------- | ----------- | ------------------------------------------------------ | ------------ | --------------------------- |
@@ -103,7 +103,7 @@ Every CLI command implements the `cli::base::Executable` trait. `main.rs` is a t
   Enforced invariants, each violation surfacing as `Error::InconsistentSchema { schema, property, reason }`:
   1. Every name in `required` is also declared in `properties`.
   2. Every property is in `required` iff it has *no* schema-declared default (the strict required/default matrix).
-  3. Every property's default value's primitive kind is compatible with its declared schema type (a `string` property accepts only `String`; `integer` only `Integer`; `decimal` accepts `Integer`/`Float`/`String` and parses the string as a decimal; `boolean` only `Bool`; `Any`/`Object` only `Null`; `Array` accepts no default at all; an `anyOf:[T, null]` property accepts `T`'s kinds plus `Null`).
+  3. Every property's default value's primitive kind is compatible with its declared schema type (a `string` property accepts only `String`; `integer` only `Integer`; `number` and `decimal` both accept `Integer`/`Float`/`String` and parse the string as a decimal; `boolean` only `Bool`; `Any`/`Object` only `Null`; `Array` accepts no default at all; an `anyOf:[T, null]` property accepts `T`'s kinds plus `Null`).
   4. Typed-format string defaults (`date`, `date-time`, `time`, `uuid`) parse as that format at generate time.
   5. `$ref` defaults: `null` is universally accepted; non-null defaults are only valid when the target resolves (through `Schemas`) to a `StrEnum` and the string is one of the enum's declared members.
   6. Inline `ConstantSchema` / `StrEnum` defaults match their declared values (the const value, or one of the enum members).
