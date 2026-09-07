@@ -269,8 +269,16 @@ pub enum SchemaType {
     // correct for those.
     ConstantSchema(ConstantSchema),
     StringSchema(StringSchema),
-    NumberSchema(NumberSchema),
+    // `DecimalSchema` must precede `NumberSchema` for the same reason
+    // `ConstantSchema` precedes `StringSchema`: both carry `type: "number"`,
+    // and only `DecimalSchema` requires `format: "decimal"`. `NumberSchema`
+    // flattens `TypeBase`, which ignores unknown keys, so with the opposite
+    // ordering serde's untagged dispatch matches `NumberSchema` first and
+    // silently drops the `format` marker — making `DecimalSchema` unreachable
+    // for the number spelling and stripping `format: "decimal"` when the
+    // schema is written back out by `bo4e edit`.
     DecimalSchema(DecimalSchema),
+    NumberSchema(NumberSchema),
     IntegerSchema(IntegerSchema),
     BooleanSchema(BooleanSchema),
     NullSchema(NullSchema),
@@ -618,6 +626,57 @@ mod tests {
         assert_eq!(
             refs,
             HashSet::from(["../bo/Geschaeftspartner.json".to_string()])
+        );
+    }
+}
+
+#[cfg(test)]
+mod decimal_dispatch_tests {
+    use super::*;
+
+    /// `{type: number, format: decimal}` must parse as `DecimalSchema`.
+    ///
+    /// `NumberSchema` precedes `DecimalSchema` in the `#[serde(untagged)]`
+    /// `SchemaType` enum and its flattened `TypeBase` ignores the unknown
+    /// `format` key, so serde's in-order dispatch matches `NumberSchema`
+    /// first and `DecimalSchema` is never reached for `type: number`.
+    #[test]
+    fn number_typed_decimal_parses_as_decimal() {
+        let parsed: SchemaType =
+            serde_json::from_str(r#"{"type":"number","format":"decimal"}"#).unwrap();
+        assert!(
+            matches!(parsed, SchemaType::DecimalSchema(_)),
+            "expected DecimalSchema, got {parsed:?}"
+        );
+    }
+
+    /// `format: "decimal"` must survive a parse -> serialize cycle.
+    ///
+    /// `bo4e edit` reads schemas into this model and writes them back out, so
+    /// a variant that silently drops `format` corrupts the edited schemas on
+    /// disk — not just the generated types.
+    #[test]
+    fn number_typed_decimal_survives_reserialization() {
+        let src = r#"{"type":"number","format":"decimal"}"#;
+        let parsed: SchemaType = serde_json::from_str(src).unwrap();
+        let back = serde_json::to_value(&parsed).unwrap();
+        assert_eq!(
+            back,
+            serde_json::json!({"type": "number", "format": "decimal"}),
+            "format marker must not be dropped on write-back"
+        );
+    }
+
+    /// The string-typed spelling is not shadowed: `StringSchema::format` is a
+    /// typed enum with no `decimal` variant, so that branch fails and dispatch
+    /// falls through. Pinned to show the two spellings behave differently.
+    #[test]
+    fn string_typed_decimal_parses_as_decimal() {
+        let parsed: SchemaType =
+            serde_json::from_str(r#"{"type":"string","format":"decimal"}"#).unwrap();
+        assert!(
+            matches!(parsed, SchemaType::DecimalSchema(_)),
+            "expected DecimalSchema, got {parsed:?}"
         );
     }
 }
