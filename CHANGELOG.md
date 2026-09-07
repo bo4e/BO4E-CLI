@@ -1,4 +1,11 @@
 
+## 1.4.0 - 2026-09-07
+
+### Fixed
+
+- **codegen**: Generate `type: number` as Decimal, not f64/float (#237)
+
+
 ## 1.3.0 - 2026-07-14
 
 ### Added
